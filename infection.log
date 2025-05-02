@@ -1,0 +1,23 @@
+Escaped mutants:
+================
+
+Timed Out mutants:
+==================
+
+Skipped mutants:
+================
+
+Not Covered mutants:
+====================
+
+1) /Users/robert.vansteen/Developer/abacus/modules/abacus/src/Types/StringType.php:21    [M] TrueValue
+
+@@ @@
+ {
+     public function transform(mixed $value): Result
+     {
+-        return match (true) {
++        return match (false) {
+             is_string($value) => new Ok(match (true) {
+                 $value === 'null' => None(),
+                 strlen($value) === 0 => None(),

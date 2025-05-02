@@ -1,0 +1,50 @@
+{
+    "name": "superscript/abacus",
+    "type": "library",
+    "require-dev": {
+        "infection/infection": "^0.29.14",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0",
+        "robiningelbrecht/phpunit-coverage-tools": "^1.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Superscript\\Abacus\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Superscript\\Abacus\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Robert van Steen",
+            "email": "hi@robertvansteen.nl"
+        }
+    ],
+    "require": {
+        "brick/math": "^0.13.0",
+        "gosuperscript/monads": "dev-main",
+        "illuminate/container": "^12.2",
+        "illuminate/support": "^12.2"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "infection/extension-installer": true
+        }
+    },
+    "scripts": {
+        "test:types": "phpstan analyse",
+        "test:unit": "phpunit --config phpunit.xml --coverage-clover=path/to/clover.xml -d --min-coverage=100",
+        "test:infection": "infection --threads=max --show-mutations --verbose",
+        "test": [
+            "@test:types",
+            "@test:unit",
+            "@test:infection"
+        ]
+    },
+    "prefer-stable": true,
+    "minimum-stability": "dev"
+}
