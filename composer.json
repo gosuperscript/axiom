@@ -25,7 +25,7 @@
     ],
     "require": {
         "azjezz/psl": "^3.2",
-        "brick/math": "^0.13.0",
+        "brick/math": "^0.12.0 || ^0.13.0",
         "gosuperscript/monads": "dev-main",
         "illuminate/container": "^12.2",
         "illuminate/support": "^12.2",
