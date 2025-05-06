@@ -1,25 +1,19 @@
 <?php
 
-namespace KitchenSink;
+namespace Superscript\Abacus\Tests\KitchenSink;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Superscript\Abacus\Lookups\EqualsQuery;
-use Superscript\Abacus\Lookups\LookupAggregate;
 use Superscript\Abacus\Resolvers\DelegatingResolver;
 use Superscript\Abacus\Resolvers\InfixResolver;
-use Superscript\Abacus\Lookups\LookupResolver;
-use Superscript\Abacus\Lookups\StaticLookup;
 use Superscript\Abacus\Resolvers\StaticResolver;
 use Superscript\Abacus\Resolvers\SymbolResolver;
 use Superscript\Abacus\Resolvers\ValueResolver;
 use Superscript\Abacus\Sources\InfixExpression;
-use Superscript\Abacus\Lookups\LookupSource;
 use Superscript\Abacus\Sources\StaticSource;
 use Superscript\Abacus\Sources\SymbolSource;
 use Superscript\Abacus\Sources\ValueDefinition;
-use Superscript\Abacus\Lookups\LookupRegistry;
 use Superscript\Abacus\SymbolRegistry;
 use Superscript\Abacus\Types\NumberType;
 

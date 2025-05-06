@@ -1,13 +1,16 @@
 <?php
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Abacus\Operators\BinaryOverloader;
 use Superscript\Abacus\Operators\DefaultOverloader;
 use Superscript\Abacus\Operators\OverloaderManager;
+use Superscript\Abacus\Resolvers\InfixResolver;
+use Superscript\Abacus\Resolvers\StaticResolver;
 use Superscript\Abacus\Sources\InfixExpression;
 use Superscript\Abacus\Sources\StaticSource;
 
@@ -17,13 +20,19 @@ use Superscript\Abacus\Sources\StaticSource;
 #[UsesClass(StaticSource::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(OverloaderManager::class)]
+#[UsesClass(BinaryOverloader::class)]
 class InfixResolverTest extends TestCase
 {
     #[Test]
     public function it_can_resolve_an_infix_expression()
     {
         $resolver = new InfixResolver(new StaticResolver());
-        $result = $resolver->resolve(new InfixExpression(new StaticSource(1), '+', new StaticSource(2)));
-        $this->assertEquals(3, $result->unwrap()->unwrap());
+        $source = new InfixExpression(
+            left: new StaticSource(1),
+            operator: '+',
+            right: new StaticSource(2)
+        );
+        $this->assertTrue($resolver::supports($source));
+        $this->assertEquals(3, $resolver->resolve($source)->unwrap()->unwrap());
     }
 }

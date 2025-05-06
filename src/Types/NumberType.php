@@ -14,7 +14,7 @@ use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
 
 /**
- * @implements Type<string>
+ * @implements Type<integer|float>
  */
 class NumberType implements Type
 {

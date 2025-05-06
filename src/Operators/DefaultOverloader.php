@@ -3,32 +3,47 @@
 namespace Superscript\Abacus\Operators;
 
 use UnhandledMatchError;
+use function Psl\Type\mixed_dict;
+use function Psl\Type\mixed_vec;
+use function Psl\Type\scalar;
+use function Psl\Type\union;
 
 final readonly class DefaultOverloader implements OperatorOverloader
 {
+    /**
+     * @var list<OperatorOverloader>
+     */
+    private array $overloaders;
+
+    public function __construct()
+    {
+        $this->overloaders = [
+            new BinaryOverloader(),
+            new ComparisonOverloader(),
+            new HasOverloader(),
+            new InOverloader(),
+        ];
+    }
+
     public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
     {
-        return ! is_object($left) && ! is_object($right) && in_array($operator, ['+', '-', '*', '/', '>', '>=', '<', '<=', '=', '==', '!=', '===', '!==', 'in', 'has']);
+        foreach ($this->overloaders as $overloader) {
+            if ($overloader->supportsOverloading($left, $right, $operator)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function evaluate(mixed $left, mixed $right, string $operator): mixed
     {
-        return match ($operator) {
-            '+' => $left + $right,
-            '-' => $left - $right,
-            '*' => $left * $right,
-            '/' => $left / $right,
-            '>' => $left > $right,
-            '>=' => $left >= $right,
-            '<' => $left < $right,
-            '<=' => $left <= $right,
-            '=', '==' => $left == $right,
-            '!=' => $left != $right,
-            '===' => $left === $right,
-            '!==' => $left !== $right,
-            'in' => is_array($left) ? array_intersect($left, $right) === $left : in_array($left, $right ?? []),
-            'has' => is_array($right) ? array_intersect($right, $left) === $right : in_array($right, $left ?? []),
-            default => throw new UnhandledMatchError("Operator [$operator] is not supported."),
-        };
+        foreach ($this->overloaders as $overloader) {
+            if ($overloader->supportsOverloading($left, $right, $operator)) {
+                return $overloader->evaluate($left, $right, $operator);
+            }
+        }
+
+        throw new UnhandledMatchError("Operator [$operator] is not supported.");
     }
 }

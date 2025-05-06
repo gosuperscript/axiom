@@ -11,7 +11,12 @@
   "minCoveredMsi": 100,
   "minMsi": 93.75,
   "mutators": {
-    "@default": true
+    "@default": true,
+    "TrueValue": {
+      "ignoreSourceCodeByRegex": [
+        ".*match\\s*\\(true\\).*",
+      ],
+    },
   },
   "logs": {
     "text": "infection.log",

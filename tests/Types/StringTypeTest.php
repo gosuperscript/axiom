@@ -16,10 +16,13 @@ use function Superscript\Monads\Option\None;
 class StringTypeTest extends TestCase
 {
     #[DataProvider('transformProvider')]
-    public function testCanTransformValue(mixed $value, ?string $expected)
+    #[Test]
+    public function it_can_transform_value(mixed $value, ?string $expected)
     {
         $type = new StringType();
-        $this->assertSame($expected, $type->transform($value)->unwrapOr(None())->unwrapOr(null));
+        $result = $type->transform($value);
+        $this->assertTrue($result->isOk());
+        $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
 
     public static function transformProvider(): array
@@ -50,7 +53,8 @@ class StringTypeTest extends TestCase
     }
 
     #[DataProvider('compareProvider')]
-    public function testCanCompareTwoValues(string $a, string $b, bool $expected)
+    #[Test]
+    public function it_can_compare_two_values(string $a, string $b, bool $expected)
     {
         $type = new StringType();
         $this->assertSame($expected, $type->compare($a, $b));
@@ -65,7 +69,8 @@ class StringTypeTest extends TestCase
     }
 
     #[DataProvider('formatProvider')]
-    public function testCanFormatValue(string $value, string $expected)
+    #[Test]
+    public function it_can_format_the_value(string $value, string $expected)
     {
         $type = new StringType();
         $this->assertSame($expected, $type->format($value));

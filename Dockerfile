@@ -1,13 +1,10 @@
-FROM php:8.4-cli
+FROM serversideup/php:8.4-cli-alpine
 
-RUN apt-get update && apt-get install -y \
-    git \
-    zip
-RUN pecl install xdebug && docker-php-ext-enable xdebug
+USER root
+RUN install-php-extensions intl bcmath xdebug
+USER www-data
 ENV XDEBUG_MODE=coverage
+ENV PHP_OPCACHE_ENABLE=0
 ENV PHP_MEMORY_LIMIT=1G
-
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app

@@ -24,10 +24,12 @@
         }
     ],
     "require": {
+        "azjezz/psl": "^3.2",
         "brick/math": "^0.13.0",
         "gosuperscript/monads": "dev-main",
         "illuminate/container": "^12.2",
-        "illuminate/support": "^12.2"
+        "illuminate/support": "^12.2",
+        "ext-intl": "*"
     },
     "config": {
         "sort-packages": true,
@@ -37,7 +39,7 @@
     },
     "scripts": {
         "test:types": "phpstan analyse",
-        "test:unit": "phpunit --config phpunit.xml --coverage-clover=path/to/clover.xml -d --min-coverage=100",
+        "test:unit": "phpunit --config phpunit.xml --coverage-clover=.phpunit/coverage.xml -d --min-coverage=100",
         "test:infection": "infection --threads=max --show-mutations --verbose",
         "test": [
             "@test:types",

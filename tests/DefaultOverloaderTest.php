@@ -1,6 +1,6 @@
 <?php
 
-namespace Superscript\Abacus\Operators;
+namespace Superscript\Abacus\Tests;
 
 use Generator;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -8,8 +8,17 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Superscript\Abacus\Operators\BinaryOverloader;
+use Superscript\Abacus\Operators\ComparisonOverloader;
+use Superscript\Abacus\Operators\DefaultOverloader;
+use Superscript\Abacus\Operators\HasOverloader;
+use Superscript\Abacus\Operators\InOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
+#[CoversClass(BinaryOverloader::class)]
+#[CoversClass(ComparisonOverloader::class)]
+#[CoversClass(HasOverloader::class)]
+#[CoversClass(InOverloader::class)]
 class DefaultOverloaderTest extends TestCase
 {
     #[Test]

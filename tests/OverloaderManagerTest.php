@@ -1,16 +1,20 @@
 <?php
 
-namespace Superscript\Abacus\Operators;
+namespace Superscript\Abacus\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Superscript\Abacus\Operators\BinaryOverloader;
+use Superscript\Abacus\Operators\DefaultOverloader;
+use Superscript\Abacus\Operators\OverloaderManager;
 use Webmozart\Assert\InvalidArgumentException;
 
 #[CoversClass(OverloaderManager::class)]
 #[UsesClass(DefaultOverloader::class)]
+#[UsesClass(BinaryOverloader::class)]
 class OverloaderManagerTest extends TestCase
 {
     #[Test]
@@ -28,7 +32,7 @@ class OverloaderManagerTest extends TestCase
         ]);
 
         $this->assertTrue($manager->supportsOverloading(1, 1, '+'));
-        $this->assertEquals(2, $manager->supportsOverloading(1, 1, '+'));
+        $this->assertEquals(2, $manager->evaluate(1, 1, '+'));
     }
 
     #[Test]

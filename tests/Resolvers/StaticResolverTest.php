@@ -1,10 +1,11 @@
 <?php
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Abacus\Resolvers\StaticResolver;
 use Superscript\Abacus\Sources\StaticSource;
 
 #[CoversClass(StaticResolver::class)]
@@ -16,8 +17,7 @@ class StaticResolverTest extends TestCase
     {
         $resolver = new StaticResolver();
         $source = new StaticSource('Hello world!');
-        $result = $resolver->resolve($source);
-
-        $this->assertEquals('Hello world!', $result->unwrap()->unwrap());
+        $this->assertTrue($resolver::supports($source));
+        $this->assertEquals('Hello world!', $resolver->resolve($source)->unwrap()->unwrap());
     }
 }

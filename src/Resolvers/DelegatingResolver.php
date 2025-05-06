@@ -2,7 +2,6 @@
 
 namespace Superscript\Abacus\Resolvers;
 
-use Closure;
 use Illuminate\Container\Container;
 use RuntimeException;
 use Superscript\Abacus\Source;
@@ -14,22 +13,13 @@ final readonly class DelegatingResolver implements Resolver
 {
     protected Container $container;
 
-    public function __construct(
-        /** @var array<class-string<Resolver> */
-        public array $resolvers = [],
-    )
+    /**
+     * @param list<class-string<Resolver>> $resolvers
+     */
+    public function __construct(public array $resolvers = [])
     {
         $this->container = new Container();
         $this->instance(Resolver::class, $this);
-    }
-
-    /**
-     * @param class-string $key
-     * @param Closure(): mixed $concrete
-     */
-    public function bind(string $key, Closure $concrete): void
-    {
-        $this->container->bind($key, $concrete);
     }
 
     /**
@@ -41,26 +31,12 @@ final readonly class DelegatingResolver implements Resolver
     }
 
     /**
-     * @template T
-     * @param class-string<T> $abstract
-     * @phpstan-return T
-     */
-    public function make(string $abstract): mixed
-    {
-        return $this->container->make($abstract);
-    }
-
-    public function call(callable $callable): mixed
-    {
-        return $this->container->call($callable);
-    }
-
-    /**
      * @return Result<Option<mixed>, Throwable>
      */
     public function resolve(Source $source): Result
     {
         foreach ($this->resolvers as $resolver) {
+            // Not sure about this yet.
             if ($resolver::supports($source)) {
                 return $this->container->make($resolver)->resolve($source);
             }

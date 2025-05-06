@@ -3,3 +3,5 @@ parameters:
         - src/
 
     level: max
+
+    treatPhpDocTypesAsCertain: false

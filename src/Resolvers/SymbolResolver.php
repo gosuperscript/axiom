@@ -15,6 +15,9 @@ final readonly class SymbolResolver implements Resolver
     ) {
     }
 
+    /**
+     * @param SymbolSource $source
+     */
     public function resolve(Source $source): Result
     {
         return $this->symbolRegistry->get($source->name)
