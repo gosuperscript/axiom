@@ -1,6 +1,7 @@
 {
     "name": "gosuperscript/schema",
     "type": "library",
+    "license": "UNLICENSED",
     "require-dev": {
         "infection/infection": "^0.29.14",
         "phpstan/phpstan": "^2.1",
@@ -17,12 +18,6 @@
             "Superscript\\Abacus\\Tests\\": "tests/"
         }
     },
-    "authors": [
-        {
-            "name": "Robert van Steen",
-            "email": "hi@robertvansteen.nl"
-        }
-    ],
     "require": {
         "azjezz/psl": "^3.2",
         "brick/math": "^0.12.0 || ^0.13.0",
