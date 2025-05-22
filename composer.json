@@ -35,7 +35,7 @@
     "scripts": {
         "test:types": "phpstan analyse",
         "test:unit": "phpunit --config phpunit.xml --coverage-clover=.phpunit/coverage.xml -d --min-coverage=100",
-        "test:infection": "infection --threads=max --show-mutations --verbosej",
+        "test:infection": "infection --threads=max --show-mutations",
         "test": [
             "@test:types",
             "@test:unit",
