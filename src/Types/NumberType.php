@@ -1,34 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Types;
 
-use Brick\Math\BigNumber;
-use Illuminate\Support\Str;
 use NumberFormatter;
 use Superscript\Abacus\Exceptions\TransformValueException;
 use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Err;
-use Superscript\Monads\Result\Ok;
 use Superscript\Monads\Result\Result;
 
-use Webmozart\Assert\Assert;
+use function Psl\Str\before;
+use function Psl\Type\num;
+use function Psl\Type\numeric_string;
+use function Psl\Type\string;
+use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<integer|float>
+ * @implements Type<int|float>
  */
 class NumberType implements Type
 {
     public function transform(mixed $value): Result
     {
         return (match (true) {
-            is_int($value), is_float($value) => new Ok($value),
-            $value instanceof BigNumber => new Ok($value->toFloat()),
-            is_string($value) && Str::isMatch('/\d+(\.\d+)?\s*%/i', $value) => (function () use ($value) {
-                Assert::numeric($value = Str::before($value, '%'));
-                return new Ok($value / 100);
-            })(),
-            !is_numeric($value) => new Err(new TransformValueException(type: 'numeric', value: $value)),
-            default => new Ok($value + 0),
+            numeric_string()->matches($value) || num()->matches($value) => Ok(num()->coerce($value)),
+            is_string($value) && numeric_string()->matches(before($value, '%')) => Ok(num()->coerce(before($value, '%')) / 100),
+            default => new Err(new TransformValueException(type: 'numeric', value: $value)),
         })->map(fn(int|float $value) => new Some($value));
     }
 
@@ -43,7 +41,7 @@ class NumberType implements Type
     public function format(mixed $value): string
     {
         $formatter = new NumberFormatter('en_GB', NumberFormatter::DECIMAL);
-        return $formatter->format($value) ?: (string)$value;
 
+        return string()->assert($formatter->format($value));
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\KitchenSink;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
@@ -42,8 +44,8 @@ class KitchenSinkTest extends TestCase
                 operator: '*',
                 right: new ValueDefinition(
                     type: new NumberType(),
-                    source: new StaticSource('3')
-                )
+                    source: new StaticSource('3'),
+                ),
             ),
         );
 

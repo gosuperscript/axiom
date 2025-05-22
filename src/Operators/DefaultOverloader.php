@@ -1,12 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Operators;
 
 use UnhandledMatchError;
-use function Psl\Type\mixed_dict;
-use function Psl\Type\mixed_vec;
-use function Psl\Type\scalar;
-use function Psl\Type\union;
 
 final readonly class DefaultOverloader implements OperatorOverloader
 {

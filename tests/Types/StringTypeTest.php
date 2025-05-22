@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Types;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -9,6 +11,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Superscript\Abacus\Types\StringType;
 use Superscript\Abacus\Exceptions\TransformValueException;
 use Stringable;
+
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(StringType::class)]
@@ -33,7 +36,7 @@ class StringTypeTest extends TestCase
             [1.1, '1.1'],
             ['', null],
             ['null', null],
-            [new class () implements Stringable {
+            [new class implements Stringable {
                 public function __toString(): string
                 {
                     return 'hello';

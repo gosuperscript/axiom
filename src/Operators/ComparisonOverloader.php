@@ -1,24 +1,21 @@
 <?php
 
-namespace Superscript\Abacus\Operators;
+declare(strict_types=1);
 
-use UnhandledMatchError;
-use function Psl\Type\float;
-use function Psl\Type\i64;
-use function Psl\Type\mixed_dict;
-use function Psl\Type\mixed_vec;
-use function Psl\Type\num;
-use function Psl\Type\scalar;
-use function Psl\Type\union;
-use function Psl\Type\vec;
+namespace Superscript\Abacus\Operators;
 
 final readonly class ComparisonOverloader implements OperatorOverloader
 {
+    private const operators = ['=', '==', '===', '!=', '!==', '<', '<=', '>', '>='];
+
     public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
     {
-        return in_array($operator, ['=', '==', '===', '!=', '!==', '<', '<=', '>', '>=']);
+        return in_array($operator, self::operators);
     }
 
+    /**
+     * @param value-of<self::operators> $operator
+     */
     public function evaluate(mixed $left, mixed $right, string $operator): mixed
     {
         return match ($operator) {
@@ -30,7 +27,6 @@ final readonly class ComparisonOverloader implements OperatorOverloader
             '<=' => $left <= $right,
             '>' => $left > $right,
             '>=' => $left >= $right,
-            default => throw new UnhandledMatchError("Operator [$operator] is not supported."),
         };
     }
 }

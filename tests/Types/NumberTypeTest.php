@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Types;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -7,9 +9,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Superscript\Abacus\Types\NumberType;
-use Superscript\Abacus\Types\StringType;
 use Superscript\Abacus\Exceptions\TransformValueException;
-use Stringable;
+
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(NumberType::class)]
