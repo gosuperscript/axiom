@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Abacus\Resolvers\Resolver;
 use Superscript\Abacus\Source;
 use Superscript\Abacus\Sources\ValueDefinition;
+use Superscript\Abacus\Types\NumberType;
 use Superscript\Abacus\Types\StringType;
 use Superscript\Abacus\Resolvers\ValueResolver;
 use Superscript\Monads\Result\Result;
@@ -43,5 +44,12 @@ class ValueResolverTest extends TestCase
         $result = $resolver->resolve($source);
         $this->assertInstanceOf(Result::class, $result);
         $this->assertEquals('Hello, World!', $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_supports_only_value_definitions(): void
+    {
+        $this->assertTrue(ValueResolver::supports(new ValueDefinition(new NumberType(), new class implements Source {})));
+        $this->assertFalse(ValueResolver::supports(new class implements Source {}));
     }
 }

@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Abacus\Resolvers\StaticResolver;
 use Superscript\Abacus\Resolvers\SymbolResolver;
+use Superscript\Abacus\Source;
 use Superscript\Abacus\Sources\StaticSource;
 use Superscript\Abacus\Sources\SymbolSource;
 use Superscript\Abacus\SymbolRegistry;
@@ -23,7 +24,7 @@ use Superscript\Monads\Result\Result;
 class SymbolResolverTest extends TestCase
 {
     #[Test]
-    public function it_can_resolve_a_value()
+    public function it_can_resolve_a_value(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
             'A' => new StaticSource(2),
@@ -33,5 +34,12 @@ class SymbolResolverTest extends TestCase
         $result = $resolver->resolve($source);
         $this->assertInstanceOf(Result::class, $result);
         $this->assertEquals(2, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_supports_only_symbol_sources(): void
+    {
+        $this->assertTrue(SymbolResolver::supports(new SymbolSource('A')));
+        $this->assertFalse(SymbolResolver::supports(new class implements Source {}));
     }
 }

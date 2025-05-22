@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace Superscript\Abacus;
 
 use Superscript\Monads\Option\Option;
-use Webmozart\Assert\Assert;
 
-class SymbolRegistry
+use function Psl\Type\dict;
+use function Psl\Type\instance_of;
+use function Psl\Type\string;
+
+final readonly class SymbolRegistry
 {
     public function __construct(
-        /**
-         * @var array<string, Source>
-         */
+        /** @var array<string, Source> */
         public array $symbols = [],
     ) {
-        Assert::allString(array_keys($this->symbols));
-        Assert::allIsInstanceOf($this->symbols, Source::class);
+        dict(string(), instance_of(Source::class))->assert($this->symbols);
     }
 
     /**

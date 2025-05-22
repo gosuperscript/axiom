@@ -10,11 +10,19 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Abacus\Resolvers\DelegatingResolver;
 use Superscript\Abacus\Resolvers\StaticResolver;
+use Superscript\Abacus\Resolvers\ValueResolver;
 use Superscript\Abacus\Sources\StaticSource;
+use Superscript\Abacus\Sources\ValueDefinition;
+use Superscript\Abacus\Tests\Resolvers\Fixtures\Dependency;
+use Superscript\Abacus\Tests\Resolvers\Fixtures\ResolverWithDependency;
+use Superscript\Abacus\Types\NumberType;
 
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(StaticResolver::class)]
+#[UsesClass(ValueResolver::class)]
+#[UsesClass(ValueDefinition::class)]
+#[UsesClass(NumberType::class)]
 class DelegatingResolverTest extends TestCase
 {
     #[Test]
@@ -23,8 +31,33 @@ class DelegatingResolverTest extends TestCase
         $resolver = new DelegatingResolver([
             StaticResolver::class,
         ]);
+
         $result = $resolver->resolve(new StaticSource('Hello world!'));
         $this->assertEquals('Hello world!', $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_supports_resolvers_depending_on_other_resolvers(): void
+    {
+        $resolver = new DelegatingResolver([
+            StaticResolver::class,
+            ValueResolver::class,
+        ]);
+
+        $result = $resolver->resolve(new ValueDefinition(new NumberType(), new StaticSource('42')));
+        $this->assertEquals(42, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_supports_resolvers_with_dependencies(): void
+    {
+        $resolver = new DelegatingResolver([
+            ResolverWithDependency::class,
+        ]);
+
+        $resolver->instance(Dependency::class, new Dependency('hello'));
+
+        $this->assertEquals('hello', $resolver->resolve(new StaticSource(42))->unwrap()->unwrap());
     }
 
     #[Test]
@@ -35,5 +68,11 @@ class DelegatingResolverTest extends TestCase
 
         $resolver = new DelegatingResolver([]);
         $resolver->resolve(new StaticSource('Hello world!'));
+    }
+
+    #[Test]
+    public function it_supports_any_source(): void
+    {
+        $this->assertTrue(DelegatingResolver::supports(new StaticSource(42)));
     }
 }

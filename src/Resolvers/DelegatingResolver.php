@@ -21,7 +21,11 @@ final readonly class DelegatingResolver implements Resolver
     public function __construct(public array $resolvers = [])
     {
         $this->container = new Container();
-        $this->instance(Resolver::class, $this);
+        $this->container->instance(Resolver::class, $this);
+
+        foreach ($this->resolvers as $resolver) {
+            $this->container->bind($resolver, $resolver);
+        }
     }
 
     /**
@@ -39,7 +43,7 @@ final readonly class DelegatingResolver implements Resolver
     {
         foreach ($this->resolvers as $resolver) {
             // Not sure about this yet.
-            if ($resolver::supports($source)) {
+            if ($resolver::supports($source) && $this->container->has($resolver)) {
                 return $this->container->make($resolver)->resolve($source);
             }
 
