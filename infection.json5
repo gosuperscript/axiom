@@ -9,7 +9,7 @@
     ]
   },
   "minCoveredMsi": 100,
-  "minMsi": 93.75,
+  "minMsi": 100,
   "mutators": {
     "@default": true,
     "TrueValue": {
@@ -19,6 +19,6 @@
     },
   },
   "logs": {
-    "text": "infection.log",
+    "text": "build/infection.log",
   }
 }

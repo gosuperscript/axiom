@@ -1,7 +1,16 @@
 {
     "name": "gosuperscript/schema",
     "type": "library",
-    "license": "UNLICENSED",
+    "licsense": "proprietary",
+    "require": {
+        "php": "^8.4",
+        "ext-intl": "*",
+        "azjezz/psl": "^3.2",
+        "brick/math": "^0.12.0 || ^0.13.0",
+        "gosuperscript/monads": "dev-main",
+        "illuminate/container": "^11.0 || ^12.2",
+        "illuminate/support": "^11.0 || ^12.2"
+    },
     "require-dev": {
         "infection/infection": "^0.29.14",
         "phpstan/phpstan": "^2.1",
@@ -18,13 +27,15 @@
             "Superscript\\Abacus\\Tests\\": "tests/"
         }
     },
-    "require": {
-        "azjezz/psl": "^3.2",
-        "brick/math": "^0.12.0 || ^0.13.0",
-        "gosuperscript/monads": "dev-main",
-        "illuminate/container": "^11.0 || ^12.2",
-        "illuminate/support": "^11.0 || ^12.2",
-        "ext-intl": "*"
+    "scripts": {
+        "test:types": "vendor/bin/phpstan analyse",
+        "test:unit": "vendor/bin/phpunit -d --min-coverage=100",
+        "test:infection": "vendor/bin/infection --threads=max --show-mutations",
+        "test": [
+            "@test:types",
+            "@test:unit",
+            "@test:infection"
+        ]
     },
     "config": {
         "sort-packages": true,
@@ -32,16 +43,6 @@
             "infection/extension-installer": true
         }
     },
-    "scripts": {
-        "test:types": "phpstan analyse",
-        "test:unit": "phpunit --config phpunit.xml --coverage-clover=.phpunit/coverage.xml -d --min-coverage=100",
-        "test:infection": "infection --threads=max --show-mutations",
-        "test": [
-            "@test:types",
-            "@test:unit",
-            "@test:infection"
-        ]
-    },
-    "prefer-stable": true,
-    "minimum-stability": "dev"
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
