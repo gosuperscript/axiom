@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -29,7 +31,7 @@ class DelegatingResolverTest extends TestCase
     public function it_throws_an_exception_if_no_resolver_can_handle_the_source(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No resolver found for source of type '.StaticSource::class);
+        $this->expectExceptionMessage('No resolver found for source of type ' . StaticSource::class);
 
         $resolver = new DelegatingResolver([]);
         $resolver->resolve(new StaticSource('Hello world!'));

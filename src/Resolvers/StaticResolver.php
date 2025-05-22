@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Resolvers;
 
 use Superscript\Abacus\Source;
 use Superscript\Abacus\Sources\StaticSource;
 use Superscript\Monads\Result\Result;
+
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;

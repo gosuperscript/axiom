@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -12,6 +14,7 @@ use Superscript\Abacus\Sources\ValueDefinition;
 use Superscript\Abacus\Types\StringType;
 use Superscript\Abacus\Resolvers\ValueResolver;
 use Superscript\Monads\Result\Result;
+
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 

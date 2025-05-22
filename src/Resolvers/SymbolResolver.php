@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Resolvers;
 
 use Superscript\Abacus\Source;
@@ -12,8 +14,7 @@ final readonly class SymbolResolver implements Resolver
     public function __construct(
         public Resolver $resolver,
         public SymbolRegistry $symbolRegistry,
-    ) {
-    }
+    ) {}
 
     /**
      * @param SymbolSource $source

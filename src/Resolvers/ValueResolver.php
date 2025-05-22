@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Resolvers;
 
 use Superscript\Abacus\Source;
@@ -13,9 +15,8 @@ use Superscript\Monads\Result\Result;
 final readonly class ValueResolver implements Resolver
 {
     public function __construct(
-        private Resolver $resolver
-    ) {
-    }
+        private Resolver $resolver,
+    ) {}
 
     /**
      * @return Result<Option<mixed>, mixed>
@@ -23,9 +24,10 @@ final readonly class ValueResolver implements Resolver
     public function resolve(Source $source): Result
     {
         return $this->resolver->resolve($source->source)
-            ->andThen(fn (Option $option) => $option
-                ->andThen(fn (mixed $result) => $source->type->transform($result)->transpose())
-                ->transpose()
+            ->andThen(
+                fn(Option $option) => $option
+                ->andThen(fn(mixed $result) => $source->type->transform($result)->transpose())
+                ->transpose(),
             );
     }
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Types;
 
 use Brick\Math\BigNumber;
@@ -10,7 +12,6 @@ use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Ok;
 use Superscript\Monads\Result\Result;
-
 use Webmozart\Assert\Assert;
 
 /**
@@ -43,7 +44,7 @@ class NumberType implements Type
     public function format(mixed $value): string
     {
         $formatter = new NumberFormatter('en_GB', NumberFormatter::DECIMAL);
-        return $formatter->format($value) ?: (string)$value;
+        return $formatter->format($value) ?: (string) $value;
 
     }
 }

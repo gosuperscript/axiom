@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Resolvers;
 
 use Superscript\Abacus\Operators\DefaultOverloader;
@@ -17,8 +19,7 @@ final readonly class InfixResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
-    ) {
-    }
+    ) {}
 
     public function resolve(Source $source): Result
     {

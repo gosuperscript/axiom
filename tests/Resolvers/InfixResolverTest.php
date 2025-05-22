@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -30,7 +32,7 @@ class InfixResolverTest extends TestCase
         $source = new InfixExpression(
             left: new StaticSource(1),
             operator: '+',
-            right: new StaticSource(2)
+            right: new StaticSource(2),
         );
         $this->assertTrue($resolver::supports($source));
         $this->assertEquals(3, $resolver->resolve($source)->unwrap()->unwrap());

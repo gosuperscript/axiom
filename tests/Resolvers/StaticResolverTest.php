@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;

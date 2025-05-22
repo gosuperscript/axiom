@@ -1,16 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Abacus\Operators;
 
-use UnhandledMatchError;
-use function Psl\Type\float;
-use function Psl\Type\i64;
-use function Psl\Type\mixed_dict;
 use function Psl\Type\mixed_vec;
-use function Psl\Type\num;
-use function Psl\Type\scalar;
-use function Psl\Type\union;
-use function Psl\Type\vec;
 
 final readonly class HasOverloader implements OperatorOverloader
 {
