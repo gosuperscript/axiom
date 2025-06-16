@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Exceptions;
+namespace Superscript\Schema\Exceptions;
 
 use RuntimeException;
 use SebastianBergmann\Exporter\Exporter;

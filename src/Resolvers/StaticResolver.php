@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Schema\Resolvers;
 
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Sources\StaticSource;
+use Superscript\Schema\Source;
+use Superscript\Schema\Sources\StaticSource;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\None;

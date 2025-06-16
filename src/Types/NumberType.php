@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Types;
+namespace Superscript\Schema\Types;
 
 use NumberFormatter;
-use Superscript\Abacus\Exceptions\TransformValueException;
+use Superscript\Schema\Exceptions\TransformValueException;
 use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Resolvers\Fixtures;
+namespace Superscript\Schema\Tests\Resolvers\Fixtures;
 
-use Superscript\Abacus\Resolvers\Resolver;
-use Superscript\Abacus\Source;
+use Superscript\Schema\Resolvers\Resolver;
+use Superscript\Schema\Source;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;

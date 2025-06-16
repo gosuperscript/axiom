@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Types;
+namespace Superscript\Schema\Tests\Types;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Superscript\Abacus\Types\StringType;
-use Superscript\Abacus\Exceptions\TransformValueException;
+use Superscript\Schema\Types\StringType;
+use Superscript\Schema\Exceptions\TransformValueException;
 use Stringable;
 
 use function Superscript\Monads\Option\None;

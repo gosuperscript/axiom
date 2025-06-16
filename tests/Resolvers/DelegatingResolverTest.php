@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Resolvers;
+namespace Superscript\Schema\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Abacus\Resolvers\DelegatingResolver;
-use Superscript\Abacus\Resolvers\StaticResolver;
-use Superscript\Abacus\Resolvers\ValueResolver;
-use Superscript\Abacus\Sources\StaticSource;
-use Superscript\Abacus\Sources\ValueDefinition;
-use Superscript\Abacus\Tests\Resolvers\Fixtures\Dependency;
-use Superscript\Abacus\Tests\Resolvers\Fixtures\ResolverWithDependency;
-use Superscript\Abacus\Types\NumberType;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\StaticResolver;
+use Superscript\Schema\Resolvers\ValueResolver;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\ValueDefinition;
+use Superscript\Schema\Tests\Resolvers\Fixtures\Dependency;
+use Superscript\Schema\Tests\Resolvers\Fixtures\ResolverWithDependency;
+use Superscript\Schema\Types\NumberType;
 
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]

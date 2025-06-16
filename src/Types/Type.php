@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Types;
+namespace Superscript\Schema\Types;
 
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;

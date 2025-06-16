@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests;
+namespace Superscript\Schema\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use Psl\Type\Exception\AssertException;
-use Superscript\Abacus\SymbolRegistry;
+use Superscript\Schema\SymbolRegistry;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SymbolRegistry::class)]

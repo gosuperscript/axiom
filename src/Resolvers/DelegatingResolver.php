@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Schema\Resolvers;
 
 use Illuminate\Container\Container;
 use RuntimeException;
-use Superscript\Abacus\Source;
+use Superscript\Schema\Source;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;

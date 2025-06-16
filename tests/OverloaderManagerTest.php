@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests;
+namespace Superscript\Schema\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Superscript\Abacus\Operators\BinaryOverloader;
-use Superscript\Abacus\Operators\DefaultOverloader;
-use Superscript\Abacus\Operators\OverloaderManager;
+use Superscript\Schema\Operators\BinaryOverloader;
+use Superscript\Schema\Operators\DefaultOverloader;
+use Superscript\Schema\Operators\OverloaderManager;
 use Webmozart\Assert\InvalidArgumentException;
 
 #[CoversClass(OverloaderManager::class)]

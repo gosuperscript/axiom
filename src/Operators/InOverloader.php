@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Operators;
+namespace Superscript\Schema\Operators;
 
 class InOverloader implements OperatorOverloader
 {

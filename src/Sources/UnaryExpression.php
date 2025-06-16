@@ -1,8 +1,8 @@
 <?php
 
-namespace Superscript\Abacus\Sources;
+namespace Superscript\Schema\Sources;
 
-use Superscript\Abacus\Source;
+use Superscript\Schema\Source;
 
 final readonly class UnaryExpression implements Source
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests;
+namespace Superscript\Schema\Tests;
 
 use Generator;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -10,11 +10,11 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Superscript\Abacus\Operators\BinaryOverloader;
-use Superscript\Abacus\Operators\ComparisonOverloader;
-use Superscript\Abacus\Operators\DefaultOverloader;
-use Superscript\Abacus\Operators\HasOverloader;
-use Superscript\Abacus\Operators\InOverloader;
+use Superscript\Schema\Operators\BinaryOverloader;
+use Superscript\Schema\Operators\ComparisonOverloader;
+use Superscript\Schema\Operators\DefaultOverloader;
+use Superscript\Schema\Operators\HasOverloader;
+use Superscript\Schema\Operators\InOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
 #[CoversClass(BinaryOverloader::class)]
