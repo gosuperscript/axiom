@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Resolvers;
+namespace Superscript\Schema\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Abacus\Resolvers\StaticResolver;
-use Superscript\Abacus\Resolvers\SymbolResolver;
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Sources\StaticSource;
-use Superscript\Abacus\Sources\SymbolSource;
-use Superscript\Abacus\SymbolRegistry;
+use Superscript\Schema\Resolvers\StaticResolver;
+use Superscript\Schema\Resolvers\SymbolResolver;
+use Superscript\Schema\Source;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\SymbolSource;
+use Superscript\Schema\SymbolRegistry;
 use Superscript\Monads\Result\Result;
 
 #[CoversClass(SymbolResolver::class)]

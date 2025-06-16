@@ -1,6 +1,6 @@
 services:
   php:
-    image: superscript/abacus
+    image: superscript/Schema
     build:
       context: .
     volumes:

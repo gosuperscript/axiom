@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Schema\Resolvers;
 
-use Superscript\Abacus\Operators\DefaultOverloader;
-use Superscript\Abacus\Operators\OperatorOverloader;
-use Superscript\Abacus\Operators\OverloaderManager;
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Sources\InfixExpression;
+use Superscript\Schema\Operators\DefaultOverloader;
+use Superscript\Schema\Operators\OperatorOverloader;
+use Superscript\Schema\Operators\OverloaderManager;
+use Superscript\Schema\Source;
+use Superscript\Schema\Sources\InfixExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Resolvers;
+namespace Superscript\Schema\Resolvers;
 
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Sources\SymbolSource;
-use Superscript\Abacus\SymbolRegistry;
+use Superscript\Schema\Source;
+use Superscript\Schema\Sources\SymbolSource;
+use Superscript\Schema\SymbolRegistry;
 use Superscript\Monads\Result\Result;
 
 final readonly class SymbolResolver implements Resolver

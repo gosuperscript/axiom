@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Sources;
+namespace Superscript\Schema\Sources;
 
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Types\Type;
+use Superscript\Schema\Source;
+use Superscript\Schema\Types\Type;
 
 final readonly class ValueDefinition implements Source
 {

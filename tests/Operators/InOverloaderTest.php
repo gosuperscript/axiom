@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Operators;
+namespace Superscript\Schema\Tests\Operators;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Superscript\Abacus\Operators\InOverloader;
+use Superscript\Schema\Operators\InOverloader;
 
 #[CoversClass(InOverloader::class)]
 final class InOverloaderTest extends TestCase

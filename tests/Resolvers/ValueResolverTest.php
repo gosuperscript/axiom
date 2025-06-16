@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Abacus\Tests\Resolvers;
+namespace Superscript\Schema\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Abacus\Resolvers\Resolver;
-use Superscript\Abacus\Source;
-use Superscript\Abacus\Sources\ValueDefinition;
-use Superscript\Abacus\Types\NumberType;
-use Superscript\Abacus\Types\StringType;
-use Superscript\Abacus\Resolvers\ValueResolver;
+use Superscript\Schema\Resolvers\Resolver;
+use Superscript\Schema\Source;
+use Superscript\Schema\Sources\ValueDefinition;
+use Superscript\Schema\Types\NumberType;
+use Superscript\Schema\Types\StringType;
+use Superscript\Schema\Resolvers\ValueResolver;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;

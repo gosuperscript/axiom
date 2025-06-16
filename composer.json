@@ -20,12 +20,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Superscript\\Abacus\\": "src/"
+            "Superscript\\Schema\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Superscript\\Abacus\\Tests\\": "tests/"
+            "Superscript\\Schema\\Tests\\": "tests/"
         }
     },
     "scripts": {
