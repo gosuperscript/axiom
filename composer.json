@@ -1,7 +1,7 @@
 {
     "name": "gosuperscript/schema",
     "type": "library",
-    "licsense": "proprietary",
+    "license": "proprietary",
     "require": {
         "php": "^8.4",
         "ext-intl": "*",

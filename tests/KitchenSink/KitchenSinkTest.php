@@ -52,4 +52,21 @@ class KitchenSinkTest extends TestCase
         $result = $resolver->resolve($source);
         $this->assertEquals(7, $result->unwrap()->unwrap());
     }
+
+    #[Test]
+    public function transforming_a_value(): void
+    {
+        $resolver = new DelegatingResolver([
+            StaticResolver::class,
+            ValueResolver::class,
+        ]);
+
+        $source = new ValueDefinition(
+            type: new NumberType(),
+            source: new StaticSource('5'),
+        );
+
+        $result = $resolver->resolve($source);
+        $this->assertEquals(5, $result->unwrap()->unwrap());
+    }
 }
