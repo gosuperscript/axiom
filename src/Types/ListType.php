@@ -26,7 +26,7 @@ class ListType implements Type
 
     public function transform(mixed $value): Result
     {
-        if (is_string($value) && json_validate($value) && $decoded = \Safe\json_decode($value)) {
+        if (is_string($value) && json_validate($value) && $decoded = \Psl\Json\decode($value)) {
             $value = $decoded;
         }
 
