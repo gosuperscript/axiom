@@ -36,6 +36,11 @@ final readonly class DelegatingResolver implements Resolver
         $this->container->instance($key, $concrete);
     }
 
+    public function bind(string $key, \Closure $concrete): void
+    {
+        $this->container->bind($key, $concrete);
+    }
+
     /**
      * @return Result<Option<mixed>, Throwable>
      */
