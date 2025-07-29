@@ -10,7 +10,7 @@
         "gosuperscript/monads": "dev-main",
         "illuminate/container": "^11.0 || ^12.0",
         "illuminate/support": "^11.0 || ^12.0",
-        "sebastian/exporter": "^7.0"
+        "sebastian/exporter": "^6.0 || ^7.0"
     },
     "require-dev": {
         "infection/infection": "^0.29.14",
