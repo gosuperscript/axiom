@@ -1,18 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Operators\BinaryOverloader;
-use Superscript\Schema\Operators\DefaultOverloader;
-use Superscript\Schema\Operators\OverloaderManager;
-use Superscript\Schema\Resolvers\InfixResolver;
 use Superscript\Schema\Resolvers\StaticResolver;
 use Superscript\Schema\Resolvers\UnaryResolver;
-use Superscript\Schema\Sources\InfixExpression;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\UnaryExpression;
 
@@ -28,7 +25,7 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '!',
-            operand: new StaticSource(true)
+            operand: new StaticSource(true),
         );
 
         $this->assertTrue($resolver::supports($source));
@@ -41,7 +38,7 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '-',
-            operand: new StaticSource(42)
+            operand: new StaticSource(42),
         );
 
         $this->assertTrue($resolver::supports($source));
@@ -54,7 +51,7 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '+',
-            operand: new StaticSource(42)
+            operand: new StaticSource(42),
         );
 
         $this->assertTrue($resolver::supports($source));

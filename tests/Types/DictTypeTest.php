@@ -14,9 +14,8 @@ use Superscript\Schema\Types\ListType;
 use Superscript\Schema\Types\NumberType;
 use Superscript\Schema\Types\StringType;
 use Superscript\Schema\Exceptions\TransformValueException;
-use Stringable;
-
 use Superscript\Schema\Types\Type;
+
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(DictType::class)]
@@ -28,10 +27,10 @@ class DictTypeTest extends TestCase
 {
     #[DataProvider('transformProvider')]
     #[Test]
-    public function it_can_transform_value(Type $type, mixed $value, array $expected)
+    public function it_can_coerce_value(Type $type, mixed $value, array $expected): void
     {
         $type = new DictType($type);
-        $result = $type->transform($value);
+        $result = $type->coerce($value);
         $this->assertTrue($result->isOk());
         $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
@@ -46,18 +45,40 @@ class DictTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    #[DataProvider('errorProvider')]
+    public function it_returns_err_if_it_fails_to_coerce(DictType $type, mixed $value, \Throwable $err): void
+    {
+        $result = $type->coerce($value);
+        $this->assertEquals($err, $result->unwrapErr());
+        $this->assertEquals($err->getMessage(), $result->unwrapErr()->getMessage());
+    }
+
+    public static function errorProvider(): array
+    {
+        return [
+            [new DictType(new NumberType()), ['a' => 'foo', 'b' => 'bar'], new TransformValueException(type: 'number', value: 'foo')],
+        ];
+    }
+
+    public function it_can_assert_a_value(): void
     {
         $type = new DictType(new NumberType());
-        $result = $type->transform($value = new \stdClass());
-        $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'dict', value: $value));
-        $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [dict] from [stdClass Object ()]');
+        $this->assertSame(['a' => 1, 'b' => 2], $type->assert(['a' => 1, 'b' => 2])->unwrapOr(None())->unwrapOr(null));
+        $this->assertSame(['a' => 1.1, 'b' => 2.2], $type->assert(['a' => 1.1, 'b' => 2.2])->unwrapOr(None())->unwrapOr(null));
+        $this->assertNull($type->assert(null)->unwrapOr(None())->unwrapOr(null));
+    }
 
+    public function it_returns_err_if_it_fails_to_assert(): void
+    {
+        $type = new DictType(new NumberType());
+        $result = $type->assert($value = '123');
+        $this->assertEquals(new TransformValueException(type: 'dict', value: $value), $result->unwrapErr());
+        $this->assertEquals('Unable to assert [dict] from [\'123\']', $result->unwrapErr()->getMessage());
     }
 
     #[DataProvider('compareProvider')]
     #[Test]
-    public function it_can_compare_two_values(array $a, array $b, bool $expected)
+    public function it_can_compare_two_values(array $a, array $b, bool $expected): void
     {
         $type = new DictType(new NumberType());
         $this->assertSame($expected, $type->compare($a, $b));
@@ -69,28 +90,6 @@ class DictTypeTest extends TestCase
             [['a' => 1, 'b' => 2], ['a' => 1, 'b' => 2], true],
             [['a' => 1, 'b' => 2], ['a' => '1', 'b' => '2'], false],
             [['a' => 1, 'b' => 2], ['a' => 1, 'c' => 2], false],
-        ];
-    }
-
-    #[DataProvider('formatProvider')]
-    #[Test]
-    public function it_can_format_the_value(array $value, string $expected)
-    {
-        $type = new DictType(new NumberType());
-        $this->assertSame($expected, $type->format($value));
-    }
-
-    public static function formatProvider(): array
-    {
-        return [
-            [
-                ['a' => 1, 'b' => 2, 'c' => 3],
-                'a: 1, b: 2, c: 3',
-            ],
-            [
-                ['x' => 10, 'y' => 20],
-                'x: 10, y: 20',
-            ],
         ];
     }
 }

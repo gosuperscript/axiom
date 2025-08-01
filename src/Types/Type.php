@@ -17,7 +17,13 @@ interface Type
      * @param mixed $value
      * @return Result<Option<T>, Throwable>
      */
-    public function transform(mixed $value): Result;
+    public function coerce(mixed $value): Result;
+
+    /**
+     * @param mixed $value
+     * @return Result<Option<T>, Throwable>
+     */
+    public function assert(mixed $value): Result;
 
     /**
      * @param T $a
@@ -25,10 +31,4 @@ interface Type
      * @return bool
      */
     public function compare(mixed $a, mixed $b): bool;
-
-    /**
-     * @param T $value
-     * @return string
-     */
-    public function format(mixed $value): string;
 }

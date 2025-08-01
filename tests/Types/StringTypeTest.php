@@ -20,10 +20,10 @@ class StringTypeTest extends TestCase
 {
     #[DataProvider('transformProvider')]
     #[Test]
-    public function it_can_transform_value(mixed $value, ?string $expected)
+    public function it_can_coerce_value(mixed $value, ?string $expected): void
     {
         $type = new StringType();
-        $result = $type->transform($value);
+        $result = $type->coerce($value);
         $this->assertTrue($result->isOk());
         $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
@@ -46,13 +46,29 @@ class StringTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_returns_err_if_it_fails_to_coerce(): void
     {
         $type = new StringType();
-        $result = $type->transform($value = new \stdClass());
+        $result = $type->coerce($value = new \stdClass());
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'string', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [string] from [stdClass Object ()]');
+    }
 
+    #[Test]
+    public function it_can_assert_value(): void
+    {
+        $type = new StringType();
+        $result = $type->assert('hello');
+        $this->assertTrue($result->isOk());
+        $this->assertSame('hello', $result->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public function it_returns_err_if_it_fails_to_assert(): void
+    {
+        $type = new StringType();
+        $result = $type->assert(123);
+        $this->assertTrue($result->isErr());
+        $this->assertEquals(new TransformValueException(type: 'string', value: 123), $result->unwrapErr());
     }
 
     #[DataProvider('compareProvider')]
@@ -68,23 +84,6 @@ class StringTypeTest extends TestCase
         return [
             ['hello', 'hello', true],
             ['hello', 'world', false],
-        ];
-    }
-
-    #[DataProvider('formatProvider')]
-    #[Test]
-    public function it_can_format_the_value(string $value, string $expected)
-    {
-        $type = new StringType();
-        $this->assertSame($expected, $type->format($value));
-    }
-
-    public static function formatProvider(): array
-    {
-        return [
-            ['hello', 'hello'],
-            ['world', 'world'],
-            ['', ''],
         ];
     }
 }

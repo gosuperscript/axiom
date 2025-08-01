@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Schema\Tests\Exceptions;
 
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -21,7 +23,7 @@ class TransformValueExceptionTest extends TestCase
     #[Test]
     public function it_can_format_a_value_that_implements_stringable(): void
     {
-        $value = new class() implements \Stringable {
+        $value = new class implements \Stringable {
             public function __toString(): string
             {
                 return 'stringable value';

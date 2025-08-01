@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Superscript\Schema\Exceptions\AssertException;
 use Superscript\Schema\Types\NumberType;
 use Superscript\Schema\Exceptions\TransformValueException;
 
@@ -15,14 +16,15 @@ use function Superscript\Monads\Option\None;
 
 #[CoversClass(NumberType::class)]
 #[CoversClass(TransformValueException::class)]
+#[CoversClass(AssertException::class)]
 class NumberTypeTest extends TestCase
 {
     #[DataProvider('transformProvider')]
     #[Test]
-    public function it_can_transform_a_value(mixed $value, int|float|null $expected)
+    public function it_can_coerce_a_value(mixed $value, int|float|null $expected): void
     {
         $type = new NumberType();
-        $this->assertSame($expected, $type->transform($value)->unwrapOr(None())->unwrapOr(null));
+        $this->assertSame($expected, $type->coerce($value)->unwrapOr(None())->unwrapOr(null));
     }
 
     public static function transformProvider(): array
@@ -39,13 +41,30 @@ class NumberTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_returns_err_if_it_fails_to_coerce(): void
     {
         $type = new NumberType();
-        $result = $type->transform($value = 'foobar');
-        $this->assertEquals(new TransformValueException(type: 'numeric', value: $value), $result->unwrapErr());
-        $this->assertEquals('Unable to transform into [numeric] from [\'foobar\']', $result->unwrapErr()->getMessage());
+        $result = $type->coerce($value = 'foobar');
+        $this->assertEquals(new TransformValueException(type: 'number', value: $value), $result->unwrapErr());
+        $this->assertEquals('Unable to transform into [number] from [\'foobar\']', $result->unwrapErr()->getMessage());
+    }
 
+    #[Test]
+    public function it_can_assert_value(): void
+    {
+        $type = new NumberType();
+        $this->assertSame(1, $type->assert(1)->unwrapOr(None())->unwrapOr(null));
+        $this->assertSame(1.1, $type->assert(1.1)->unwrapOr(None())->unwrapOr(null));
+        $this->assertNull($type->assert(null)->unwrapOr(None())->unwrapOr(null));
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert(): void
+    {
+        $type = new NumberType();
+        $result = $type->assert($value = '123');
+        $this->assertEquals(new AssertException(type: 'number', value: $value), $result->unwrapErr());
+        $this->assertEquals('Expected [number], got [\'123\']', $result->unwrapErr()->getMessage());
     }
 
     #[DataProvider('compareProvider')]
@@ -63,23 +82,6 @@ class NumberTypeTest extends TestCase
             [1.1, 1.1, true],
             [1, 1.1, false],
             [1, 2, false],
-        ];
-    }
-
-    #[DataProvider('formatProvider')]
-    #[Test]
-    public function it_can_format_value(int|float $value, string $expected)
-    {
-        $type = new NumberType();
-        $this->assertSame($expected, $type->format($value));
-    }
-
-    public static function formatProvider(): array
-    {
-        return [
-            [1, '1'],
-            [1.1, '1.1'],
-            [10000, '10,000'],
         ];
     }
 }

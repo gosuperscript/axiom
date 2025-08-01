@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Superscript\Schema\Resolvers;
 
 use InvalidArgumentException;
@@ -7,6 +9,7 @@ use Superscript\Schema\Source;
 use Superscript\Schema\Sources\UnaryExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
+
 use function Psl\Type\num;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
@@ -18,8 +21,7 @@ final readonly class UnaryResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
-    ) {
-    }
+    ) {}
 
     public function resolve(Source $source): Result
     {

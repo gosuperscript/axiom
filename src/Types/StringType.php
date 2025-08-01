@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Schema\Types;
 
 use Stringable;
+use Superscript\Schema\Exceptions\AssertException;
 use Superscript\Schema\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Ok;
@@ -12,13 +13,14 @@ use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
+use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Type<string>
  */
 class StringType implements Type
 {
-    public function transform(mixed $value): Result
+    public function coerce(mixed $value): Result
     {
         return match (true) {
             is_string($value) => new Ok(match (true) {
@@ -32,13 +34,17 @@ class StringType implements Type
         };
     }
 
+    public function assert(mixed $value): Result
+    {
+        return match (true) {
+            is_null($value) => Ok(None()),
+            is_string($value) => Ok(Some($value)),
+            default => new Err(new AssertException(type: 'string', value: $value)),
+        };
+    }
+
     public function compare(mixed $a, mixed $b): bool
     {
         return $a === $b;
-    }
-
-    public function format(mixed $value): string
-    {
-        return strval($value);
     }
 }

@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Schema\Exceptions\TransformValueException;
 use Superscript\Schema\Types\BooleanType;
-use Superscript\Schema\Types\StringType;
 
 use function Superscript\Monads\Option\None;
 
@@ -20,10 +19,10 @@ final class BooleanTypeTest extends TestCase
 {
     #[DataProvider('transformProvider')]
     #[Test]
-    public function it_can_transform_value(mixed $value, ?bool $expected): void
+    public function it_can_coerce_value(mixed $value, ?bool $expected): void
     {
-        $type = new BooleanType;
-        $result = $type->transform($value);
+        $type = new BooleanType();
+        $result = $type->coerce($value);
 
         $this->assertTrue($result->isOk());
         $this->assertEquals($expected, $result->unwrapOr(None())->unwrapOr(null));
@@ -49,10 +48,10 @@ final class BooleanTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_returns_err_if_it_fails_to_coerce(): void
     {
-        $type = new BooleanType;
-        $result = $type->transform($value = 'foobar');
+        $type = new BooleanType();
+        $result = $type->coerce($value = 'foobar');
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'boolean', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
 
@@ -62,7 +61,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function test_can_compare_two_values(bool $a, bool $b, bool $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $this->assertSame($expected, $type->compare($a, $b));
     }
 
@@ -78,7 +77,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function test_can_format_value(bool $value, string $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $this->assertSame($expected, $type->format($value));
     }
 
