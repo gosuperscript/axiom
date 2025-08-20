@@ -15,12 +15,14 @@ use Superscript\Schema\Operators\ComparisonOverloader;
 use Superscript\Schema\Operators\DefaultOverloader;
 use Superscript\Schema\Operators\HasOverloader;
 use Superscript\Schema\Operators\InOverloader;
+use Superscript\Schema\Operators\LogicalOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
 #[CoversClass(BinaryOverloader::class)]
 #[CoversClass(ComparisonOverloader::class)]
 #[CoversClass(HasOverloader::class)]
 #[CoversClass(InOverloader::class)]
+#[CoversClass(LogicalOverloader::class)]
 class DefaultOverloaderTest extends TestCase
 {
     #[Test]
@@ -79,6 +81,17 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'c'], 'in', ['a', 'b', 'c'], true];
         yield [['a', 'b', 'c'], 'in', ['a', 'c'], false];
         yield [['a', 'b', 'd'], 'in', ['a', 'b', 'c'], false];
+
+        yield [true, '&&', true, true];
+        yield [true, '&&', false, false];
+        yield [false, '&&', true, false];
+        yield [false, '&&', false, false];
+        yield [true, '||', true, true];
+        yield [true, '||', false, true];
+        yield [false, '||', true, true];
+        yield [false, '||', false, false];
+        yield [true, 'xor', true, false];
+        yield [true, 'xor', false, true];
     }
 
     #[Test]
