@@ -20,6 +20,7 @@ final readonly class DefaultOverloader implements OperatorOverloader
             new ComparisonOverloader(),
             new HasOverloader(),
             new InOverloader(),
+            new LogicalOverloader(),
         ];
     }
 
