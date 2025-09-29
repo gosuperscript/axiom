@@ -21,6 +21,7 @@ final readonly class DefaultOverloader implements OperatorOverloader
             new HasOverloader(),
             new InOverloader(),
             new LogicalOverloader(),
+            new IntersectsOverloader(),
         ];
     }
 
