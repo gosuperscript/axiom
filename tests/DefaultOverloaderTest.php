@@ -16,6 +16,7 @@ use Superscript\Schema\Operators\DefaultOverloader;
 use Superscript\Schema\Operators\HasOverloader;
 use Superscript\Schema\Operators\InOverloader;
 use Superscript\Schema\Operators\LogicalOverloader;
+use Superscript\Schema\Operators\IntersectsOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
 #[CoversClass(BinaryOverloader::class)]
@@ -23,6 +24,7 @@ use Superscript\Schema\Operators\LogicalOverloader;
 #[CoversClass(HasOverloader::class)]
 #[CoversClass(InOverloader::class)]
 #[CoversClass(LogicalOverloader::class)]
+#[CoversClass(IntersectsOverloader::class)]
 class DefaultOverloaderTest extends TestCase
 {
     #[Test]
@@ -92,6 +94,15 @@ class DefaultOverloaderTest extends TestCase
         yield [false, '||', false, false];
         yield [true, 'xor', true, false];
         yield [true, 'xor', false, true];
+
+        yield ['a', 'intersects', ['a', 'b'], true];
+        yield ['c', 'intersects', ['a', 'b'], false];
+        yield [['a', 'b'], 'intersects', ['a'], true];
+        yield [['a', 'b'], 'intersects', ['c'], false];
+        yield [['a', 'b'], 'intersects', ['a', 'c'], true];
+        yield [['a', 'b'], 'intersects', ['c', 'd'], false];
+        yield ['a', 'intersects', 'a', true];
+        yield ['a', 'intersects', 'b', false];
     }
 
     #[Test]
