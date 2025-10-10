@@ -12,7 +12,6 @@ use Superscript\Monads\Result\Result;
 
 use function Psl\Vec\map;
 use function Superscript\Monads\Option\Some;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Type<List<mixed>>
