@@ -13,7 +13,7 @@ use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 
 /**
- * @implements Type<string>
+ * @implements Type<bool>
  */
 final class BooleanType implements Type
 {

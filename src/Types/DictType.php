@@ -15,8 +15,6 @@ use Superscript\Monads\Result\Result;
 use function Psl\Vec\map;
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
-use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Type<array<array-key, mixed>>
@@ -42,8 +40,8 @@ class DictType implements Type
 
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('Dict item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
+                default: new Err(new InvalidArgumentException('Dict item can not be a None')),
+                f: fn(mixed $value) => new Ok($value),
             ));
         }))->map(fn(array $items) => Some(array_combine(array_keys($value), $items)));
     }
@@ -67,8 +65,8 @@ class DictType implements Type
 
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('Dict item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
+                default: new Err(new InvalidArgumentException('Dict item can not be a None')),
+                f: fn(mixed $value) => new Ok($value),
             ));
         }))->map(fn(array $items) => Some(array_combine(array_keys($value), $items)));
     }
