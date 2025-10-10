@@ -14,10 +14,18 @@ use Throwable;
 interface Type
 {
     /**
+     * Assert that a value is of type T and return it wrapped in Option
+     * @param T $value
+     * @return Result<Option<T>, Throwable>
+     */
+    public function assert(mixed $value): Result;
+
+    /**
+     * Try to coerce a mixed value into type T
      * @param mixed $value
      * @return Result<Option<T>, Throwable>
      */
-    public function transform(mixed $value): Result;
+    public function coerce(mixed $value): Result;
 
     /**
      * @param T $a

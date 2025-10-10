@@ -18,18 +18,18 @@ use function Superscript\Monads\Option\None;
 #[CoversClass(TransformValueException::class)]
 final class BooleanTypeTest extends TestCase
 {
-    #[DataProvider('transformProvider')]
+    #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_transform_value(mixed $value, ?bool $expected): void
+    public function it_can_coerce_value(mixed $value, ?bool $expected): void
     {
         $type = new BooleanType;
-        $result = $type->transform($value);
+        $result = $type->coerce($value);
 
         $this->assertTrue($result->isOk());
         $this->assertEquals($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
 
-    public static function transformProvider(): array
+    public static function coerceProvider(): array
     {
         return [
             [true, true],
@@ -48,14 +48,41 @@ final class BooleanTypeTest extends TestCase
         ];
     }
 
+    #[DataProvider('assertProvider')]
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_can_assert_value(bool $value, bool $expected): void
     {
         $type = new BooleanType;
-        $result = $type->transform($value = 'foobar');
+        $result = $type->assert($value);
+
+        $this->assertTrue($result->isOk());
+        $this->assertEquals($expected, $result->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public static function assertProvider(): array
+    {
+        return [
+            [true, true],
+            [false, false],
+        ];
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_coerce()
+    {
+        $type = new BooleanType;
+        $result = $type->coerce($value = 'foobar');
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'boolean', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
+    }
 
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert()
+    {
+        $type = new BooleanType;
+        $result = $type->assert($value = 'foobar');
+        $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'boolean', value: $value));
+        $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
     }
 
     #[DataProvider('compareProvider')]

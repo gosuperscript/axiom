@@ -21,7 +21,16 @@ use function Superscript\Monads\Result\Ok;
  */
 class NumberType implements Type
 {
-    public function transform(mixed $value): Result
+    public function assert(mixed $value): Result
+    {
+        if (!num()->matches($value)) {
+            return new Err(new TransformValueException(type: 'numeric', value: $value));
+        }
+
+        return Ok(Some($value));
+    }
+
+    public function coerce(mixed $value): Result
     {
         return (match (true) {
             numeric_string()->matches($value) || num()->matches($value) => Ok(num()->coerce($value)),

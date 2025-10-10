@@ -17,15 +17,15 @@ use function Superscript\Monads\Option\None;
 #[CoversClass(TransformValueException::class)]
 class NumberTypeTest extends TestCase
 {
-    #[DataProvider('transformProvider')]
+    #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_transform_a_value(mixed $value, int|float|null $expected)
+    public function it_can_coerce_a_value(mixed $value, int|float|null $expected)
     {
         $type = new NumberType();
-        $this->assertSame($expected, $type->transform($value)->unwrapOr(None())->unwrapOr(null));
+        $this->assertSame($expected, $type->coerce($value)->unwrapOr(None())->unwrapOr(null));
     }
 
-    public static function transformProvider(): array
+    public static function coerceProvider(): array
     {
         return [
             [1, 1],
@@ -38,14 +38,39 @@ class NumberTypeTest extends TestCase
         ];
     }
 
+    #[DataProvider('assertProvider')]
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_can_assert_a_value(int|float $value, int|float $expected)
     {
         $type = new NumberType();
-        $result = $type->transform($value = 'foobar');
+        $this->assertSame($expected, $type->assert($value)->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public static function assertProvider(): array
+    {
+        return [
+            [1, 1],
+            [1.1, 1.1],
+            [42, 42],
+        ];
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_coerce()
+    {
+        $type = new NumberType();
+        $result = $type->coerce($value = 'foobar');
         $this->assertEquals(new TransformValueException(type: 'numeric', value: $value), $result->unwrapErr());
         $this->assertEquals('Unable to transform into [numeric] from [\'foobar\']', $result->unwrapErr()->getMessage());
+    }
 
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert()
+    {
+        $type = new NumberType();
+        $result = $type->assert($value = 'foobar');
+        $this->assertEquals(new TransformValueException(type: 'numeric', value: $value), $result->unwrapErr());
+        $this->assertEquals('Unable to transform into [numeric] from [\'foobar\']', $result->unwrapErr()->getMessage());
     }
 
     #[DataProvider('compareProvider')]
