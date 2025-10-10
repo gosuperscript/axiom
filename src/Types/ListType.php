@@ -12,6 +12,8 @@ use Superscript\Monads\Result\Result;
 
 use function Psl\Vec\map;
 use function Superscript\Monads\Option\Some;
+use function Superscript\Monads\Result\Err;
+use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Type<List<mixed>>
@@ -33,8 +35,8 @@ class ListType implements Type
 
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: new Err(new InvalidArgumentException('List item can not be a None')),
-                f: fn(mixed $value) => new Ok($value),
+                default: Err(new InvalidArgumentException('List item can not be a None')),
+                f: fn(mixed $value) => Ok($value),
             ));
         }))->map(fn(array $items) => Some($items));
     }
@@ -54,8 +56,8 @@ class ListType implements Type
 
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: new Err(new InvalidArgumentException('List item can not be a None')),
-                f: fn(mixed $value) => new Ok($value),
+                default: Err(new InvalidArgumentException('List item can not be a None')),
+                f: fn(mixed $value) => Ok($value),
             ));
         }))->map(fn(array $items) => Some($items));
     }
