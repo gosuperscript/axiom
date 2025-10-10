@@ -16,6 +16,7 @@ use function Psl\Type\numeric_string;
 use function Psl\Type\string;
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
+use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Type<int|float>
@@ -28,18 +29,18 @@ class NumberType implements Type
             return new Err(new TransformValueException(type: 'numeric', value: $value));
         }
 
-        return new Ok(Some($value));
+        return Ok(Some($value));
     }
 
     public function coerce(mixed $value): Result
     {
         if (is_string($value) && ($value === '' || $value === 'null')) {
-            return new Ok(None());
+            return Ok(None());
         }
         
         return (match (true) {
-            numeric_string()->matches($value) || num()->matches($value) => new Ok(num()->coerce($value)),
-            is_string($value) && numeric_string()->matches(before($value, '%')) => new Ok(num()->coerce(before($value, '%')) / 100),
+            numeric_string()->matches($value) || num()->matches($value) => Ok(num()->coerce($value)),
+            is_string($value) && numeric_string()->matches(before($value, '%')) => Ok(num()->coerce(before($value, '%')) / 100),
             default => new Err(new TransformValueException(type: 'numeric', value: $value)),
         })->map(fn(int|float $value) => Some($value));
     }
