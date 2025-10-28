@@ -172,6 +172,53 @@ This library follows the PSL pattern where:
 3. Both operations are explicit about their intent and return comprehensive error information
 4. The type system distinguishes between "no value" (`None`) and "error" (`Err`) states
 
+### Validation Boundaries vs Operations
+
+The Type interface separates concerns into two categories:
+
+**Validation Boundaries** (`assert` and `coerce`):
+- These are your **input boundaries** where untrusted data enters your system
+- They return `Result<Option<T>>` to force explicit error handling
+- Use these when receiving data from external sources (user input, APIs, databases, etc.)
+
+**Operations on Validated Data** (`compare` and `format`):
+- These assume you're working with **already validated data** of type T
+- They return simple types (`bool` for `compare`, `string` for `format`)
+- Use these after you've validated data with `assert` or `coerce`
+
+This design follows the principle: **validate once at boundaries, operate safely thereafter**.
+
+### Usage Pattern
+
+```php
+use Superscript\Schema\Types\NumberType;
+use function Superscript\Monads\Option\None;
+
+$numberType = new NumberType();
+
+// Step 1: Validate at the boundary
+$result = $numberType->coerce($userInput);
+
+if ($result->isOk()) {
+    $value = $result->unwrapOr(None())->unwrapOr(0);
+    
+    // Step 2: Operate on validated data (no Result handling needed)
+    $formatted = $numberType->format($value);        // Returns string directly
+    $isEqual = $numberType->compare($value, 42);     // Returns bool directly
+    
+    echo "Value: $formatted, Equal to 42: " . ($isEqual ? 'yes' : 'no');
+}
+```
+
+**Why not return `Result` from `compare` and `format`?**
+
+1. **Cleaner API**: After validation, you shouldn't need to handle `Result` twice
+2. **Ergonomics**: Most operations happen after validation, making the common case simpler
+3. **Type Safety**: PHPDoc `@param T` combined with PHPStan at max level catches misuse at development time
+4. **PSL Consistency**: This matches the pattern established by the PSL library
+
+If you need runtime type checking for `compare` or `format`, you can wrap calls in try-catch blocks, but the expectation is that you've already validated your data before using these operations.
+
 ## Migration from Previous API
 
 If you were using the previous `transform` method, here's how to migrate:
