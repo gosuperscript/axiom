@@ -21,9 +21,4 @@ final readonly class StaticResolver implements Resolver
     {
         return Ok(is_null($source->value) ? None() : Some($source->value));
     }
-
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof StaticSource;
-    }
 }

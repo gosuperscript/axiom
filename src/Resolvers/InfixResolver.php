@@ -39,9 +39,4 @@ final readonly class InfixResolver implements Resolver
             new DefaultOverloader(),
         ]);
     }
-
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof InfixExpression;
-    }
 }

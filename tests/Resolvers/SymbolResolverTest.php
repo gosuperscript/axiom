@@ -30,16 +30,8 @@ class SymbolResolverTest extends TestCase
             'A' => new StaticSource(2),
         ]));
         $source = new SymbolSource('A');
-        $this->assertTrue($resolver::supports($source));
         $result = $resolver->resolve($source);
         $this->assertInstanceOf(Result::class, $result);
         $this->assertEquals(2, $result->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function it_supports_only_symbol_sources(): void
-    {
-        $this->assertTrue(SymbolResolver::supports(new SymbolSource('A')));
-        $this->assertFalse(SymbolResolver::supports(new class implements Source {}));
     }
 }

@@ -31,7 +31,6 @@ class UnaryResolverTest extends TestCase
             operand: new StaticSource(true)
         );
 
-        $this->assertTrue($resolver::supports($source));
         $this->assertEquals(false, $resolver->resolve($source)->unwrap()->unwrap());
     }
 
@@ -44,7 +43,6 @@ class UnaryResolverTest extends TestCase
             operand: new StaticSource(42)
         );
 
-        $this->assertTrue($resolver::supports($source));
         $this->assertEquals(-42, $resolver->resolve($source)->unwrap()->unwrap());
     }
 
@@ -57,15 +55,6 @@ class UnaryResolverTest extends TestCase
             operand: new StaticSource(42)
         );
 
-        $this->assertTrue($resolver::supports($source));
         $this->assertTrue($resolver->resolve($source)->isErr());
-    }
-
-    #[Test]
-    public function it_does_not_support_other_sources(): void
-    {
-        $source = new StaticSource(true);
-
-        $this->assertFalse(UnaryResolver::supports($source));
     }
 }

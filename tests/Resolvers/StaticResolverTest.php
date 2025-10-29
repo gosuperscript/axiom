@@ -20,15 +20,6 @@ class StaticResolverTest extends TestCase
     {
         $resolver = new StaticResolver();
         $source = new StaticSource('Hello world!');
-        $this->assertTrue($resolver::supports($source));
         $this->assertEquals('Hello world!', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function it_supports_only_static_sources(): void
-    {
-        $this->assertTrue(StaticResolver::supports(new StaticSource(42)));
-        ;
-        $this->assertFalse(StaticResolver::supports(new class implements Source {}));
     }
 }
