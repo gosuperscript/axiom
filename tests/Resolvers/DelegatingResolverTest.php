@@ -29,7 +29,7 @@ class DelegatingResolverTest extends TestCase
     public function it_can_resolve_by_delegating_to_another_resolver(): void
     {
         $resolver = new DelegatingResolver([
-            StaticResolver::class,
+            StaticSource::class => StaticResolver::class,
         ]);
 
         $result = $resolver->resolve(new StaticSource('Hello world!'));
@@ -40,8 +40,8 @@ class DelegatingResolverTest extends TestCase
     public function it_supports_resolvers_depending_on_other_resolvers(): void
     {
         $resolver = new DelegatingResolver([
-            StaticResolver::class,
-            ValueResolver::class,
+            StaticSource::class => StaticResolver::class,
+            ValueDefinition::class => ValueResolver::class,
         ]);
 
         $result = $resolver->resolve(new ValueDefinition(new NumberType(), new StaticSource('42')));
@@ -52,7 +52,7 @@ class DelegatingResolverTest extends TestCase
     public function it_supports_resolvers_with_dependencies(): void
     {
         $resolver = new DelegatingResolver([
-            ResolverWithDependency::class,
+            StaticSource::class => ResolverWithDependency::class,
         ]);
 
         $resolver->instance(Dependency::class, new Dependency('hello'));
@@ -68,11 +68,5 @@ class DelegatingResolverTest extends TestCase
 
         $resolver = new DelegatingResolver([]);
         $resolver->resolve(new StaticSource('Hello world!'));
-    }
-
-    #[Test]
-    public function it_supports_any_source(): void
-    {
-        $this->assertTrue(DelegatingResolver::supports(new StaticSource(42)));
     }
 }

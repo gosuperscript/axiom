@@ -24,9 +24,4 @@ final readonly class SymbolResolver implements Resolver
         return $this->symbolRegistry->get($source->name)
             ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())->transpose();
     }
-
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof SymbolSource;
-    }
 }

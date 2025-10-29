@@ -32,9 +32,4 @@ final readonly class UnaryResolver implements Resolver
                 })
             ->transpose());
     }
-
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof UnaryExpression;
-    }
 }

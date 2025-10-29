@@ -35,14 +35,6 @@ class InfixResolverTest extends TestCase
             operator: '+',
             right: new StaticSource(2),
         );
-        $this->assertTrue($resolver::supports($source));
         $this->assertEquals(3, $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function it_supports_only_infix_expressions(): void
-    {
-        $this->assertTrue(InfixResolver::supports(new InfixExpression(new class implements Source {}, '+', new class implements Source {})));
-        $this->assertFalse(InfixResolver::supports(new class implements Source {}));
     }
 }

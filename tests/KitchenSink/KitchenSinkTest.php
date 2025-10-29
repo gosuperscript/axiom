@@ -26,10 +26,10 @@ class KitchenSinkTest extends TestCase
     public function something_complex(): void
     {
         $resolver = new DelegatingResolver([
-            StaticResolver::class,
-            InfixResolver::class,
-            ValueResolver::class,
-            SymbolResolver::class,
+            StaticSource::class => StaticResolver::class,
+            InfixExpression::class => InfixResolver::class,
+            ValueDefinition::class => ValueResolver::class,
+            SymbolSource::class => SymbolResolver::class,
         ]);
 
         $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
@@ -57,8 +57,8 @@ class KitchenSinkTest extends TestCase
     public function transforming_a_value(): void
     {
         $resolver = new DelegatingResolver([
-            StaticResolver::class,
-            ValueResolver::class,
+            StaticSource::class => StaticResolver::class,
+            ValueDefinition::class => ValueResolver::class,
         ]);
 
         $source = new ValueDefinition(

@@ -32,24 +32,11 @@ class ValueResolverTest extends TestCase
             {
                 return Ok(Some('Hello, World!'));
             }
-
-            public static function supports(Source $source): bool
-            {
-                return true;
-            }
         });
         $source = new ValueDefinition(new StringType(), new class implements Source {});
 
-        $this->assertTrue($resolver::supports($source));
         $result = $resolver->resolve($source);
         $this->assertInstanceOf(Result::class, $result);
         $this->assertEquals('Hello, World!', $result->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function it_supports_only_value_definitions(): void
-    {
-        $this->assertTrue(ValueResolver::supports(new ValueDefinition(new NumberType(), new class implements Source {})));
-        $this->assertFalse(ValueResolver::supports(new class implements Source {}));
     }
 }

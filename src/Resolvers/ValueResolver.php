@@ -30,9 +30,4 @@ final readonly class ValueResolver implements Resolver
                 ->transpose(),
             );
     }
-
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof ValueDefinition;
-    }
 }

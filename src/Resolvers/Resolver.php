@@ -19,9 +19,4 @@ interface Resolver
      * @return Result<Option<mixed>, Throwable>
      */
     public function resolve(Source $source): Result;
-
-    /**
-     * Indicate if the resolver supports the given source.
-     */
-    public static function supports(Source $source): bool;
 }
