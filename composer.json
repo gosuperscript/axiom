@@ -3,7 +3,7 @@
     "description": "A PHP library for data transformation, type validation, and expression evaluation.",
     "type": "library",
     "license": "proprietary",
-    "keywords": ["php", "schema", "validation", "coercion", "types", "psl", "assert", "coerce"],
+    "keywords": ["php", "schema", "validation", "coercion", "types"],
     "require": {
         "php": "^8.4",
         "ext-intl": "*",
