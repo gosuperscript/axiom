@@ -1,6 +1,6 @@
 {
     "name": "gosuperscript/schema",
-    "description": "A PHP library for type validation and coercion following the PSL pattern with assert and coerce methods",
+    "description": "A PHP library for data transformation, type validation, and expression evaluation.",
     "type": "library",
     "license": "proprietary",
     "keywords": ["php", "schema", "validation", "coercion", "types", "psl", "assert", "coerce"],
