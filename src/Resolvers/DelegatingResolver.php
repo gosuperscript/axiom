@@ -16,14 +16,14 @@ final readonly class DelegatingResolver implements Resolver
     protected Container $container;
 
     /**
-     * @param list<class-string<Resolver>> $resolvers
+     * @param array<class-string<Source>, class-string<Resolver>> $resolverMap
      */
-    public function __construct(public array $resolvers = [])
+    public function __construct(public array $resolverMap = [])
     {
         $this->container = new Container();
         $this->container->instance(Resolver::class, $this);
 
-        foreach ($this->resolvers as $resolver) {
+        foreach ($this->resolverMap as $resolver) {
             $this->container->bind($resolver, $resolver);
         }
     }
@@ -41,19 +41,12 @@ final readonly class DelegatingResolver implements Resolver
      */
     public function resolve(Source $source): Result
     {
-        foreach ($this->resolvers as $resolver) {
-            // Not sure about this yet.
-            if ($resolver::supports($source) && $this->container->has($resolver)) {
-                return $this->container->make($resolver)->resolve($source);
-            }
-
+        $sourceClass = get_class($source);
+        
+        if (isset($this->resolverMap[$sourceClass]) && $this->container->has($this->resolverMap[$sourceClass])) {
+            return $this->container->make($this->resolverMap[$sourceClass])->resolve($source);
         }
 
-        throw new RuntimeException("No resolver found for source of type " . get_class($source));
-    }
-
-    public static function supports(Source $source): bool
-    {
-        return true;
+        throw new RuntimeException("No resolver found for source of type " . $sourceClass);
     }
 }

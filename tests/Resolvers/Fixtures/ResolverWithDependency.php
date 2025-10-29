@@ -21,9 +21,4 @@ final readonly class ResolverWithDependency implements Resolver
     {
         return Ok(Some($this->dependency->info));
     }
-
-    public static function supports(Source $source): bool
-    {
-        return true;
-    }
 }
