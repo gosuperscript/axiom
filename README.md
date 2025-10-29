@@ -1,6 +1,20 @@
 # Schema Library
 
-A PHP library for type validation and coercion following the [@azjezz/psl](https://github.com/azjezz/psl) pattern.
+A powerful PHP library for data transformation, type validation, and expression evaluation. This library provides a flexible framework for defining data schemas, transforming values, and evaluating complex expressions with type safety.
+
+## Features
+
+- **Type System**: Robust type validation and transformation for numbers, strings, booleans, lists, and dictionaries
+- **Expression Evaluation**: Support for infix expressions with custom operators
+- **Resolver Pattern**: Pluggable resolver system for different data sources
+- **Symbol Registry**: Named value resolution and reuse
+- **Operator Overloading**: Extensible operator system for custom evaluation logic
+- **Monadic Error Handling**: Built on functional programming principles using Result and Option types
+
+## Requirements
+
+- PHP 8.4 or higher
+- ext-intl extension
 
 ## Installation
 
@@ -8,247 +22,281 @@ A PHP library for type validation and coercion following the [@azjezz/psl](https
 composer require gosuperscript/schema
 ```
 
-## Requirements
+## Quick Start
 
-- PHP ^8.4
-- ext-intl
+### Basic Type Transformation
 
-## Overview
+```php
+<?php
 
-This library provides a type system for validating and coercing values with a clear distinction between assertion and coercion operations, inspired by the PSL library's type system.
+use Superscript\Schema\Types\NumberType;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\ValueDefinition;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\StaticResolver;
+use Superscript\Schema\Resolvers\ValueResolver;
+
+// Create a resolver with basic capabilities
+$resolver = new DelegatingResolver([
+    StaticResolver::class,
+    ValueResolver::class,
+]);
+
+// Transform a string to a number
+$source = new ValueDefinition(
+    type: new NumberType(),
+    source: new StaticSource('42')
+);
+
+$result = $resolver->resolve($source);
+$value = $result->unwrap()->unwrap(); // 42 (as integer)
+```
+
+### Expression Evaluation
+
+```php
+<?php
+
+use Superscript\Schema\Sources\InfixExpression;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\SymbolSource;
+use Superscript\Schema\SymbolRegistry;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\InfixResolver;
+use Superscript\Schema\Resolvers\SymbolResolver;
+
+// Set up resolver with symbol support
+$resolver = new DelegatingResolver([
+    StaticResolver::class,
+    InfixResolver::class,
+    SymbolResolver::class,
+]);
+
+// Register symbols
+$resolver->instance(SymbolRegistry::class, new SymbolRegistry([
+    'PI' => new StaticSource(3.14159),
+    'radius' => new StaticSource(5),
+]));
+
+// Calculate: PI * radius * radius (area of circle)
+$expression = new InfixExpression(
+    left: new SymbolSource('PI'),
+    operator: '*',
+    right: new InfixExpression(
+        left: new SymbolSource('radius'),
+        operator: '*',
+        right: new SymbolSource('radius')
+    )
+);
+
+$result = $resolver->resolve($expression);
+$area = $result->unwrap()->unwrap(); // ~78.54
+```
 
 ## Core Concepts
 
-### Type Interface
+### Types
 
-The central `Type` interface provides two main methods for value processing:
+The library provides several built-in types for data transformation:
+
+#### NumberType
+Transforms values to numeric types (int/float):
+- Numeric strings: `"42"` → `42`
+- Percentage strings: `"50%"` → `0.5`
+- Numbers: `42.5` → `42.5`
+
+#### StringType
+Transforms values to strings:
+- Numbers: `42` → `"42"`
+- Stringable objects: converted to string representation
+- Special handling for null and empty values
+
+#### BooleanType
+Transforms values to boolean:
+- Truthy/falsy evaluation
+- String representations: `"true"`, `"false"`
+
+#### ListType and DictType
+For collections and associative arrays with nested type validation.
+
+### Type API: Assert vs Coerce
+
+The `Type` interface provides two methods for value processing, following the [@azjezz/psl](https://github.com/azjezz/psl) pattern:
 
 - **`assert(T $value): Result<Option<T>>`** - Validates that a value is already of the correct type
 - **`coerce(mixed $value): Result<Option<T>>`** - Attempts to convert a value from any type to the target type
 
-### Key Differences
+**When to use:**
+- Use `assert()` when you expect a value to already be the correct type and want strict validation
+- Use `coerce()` when you want to transform values from various input types (permissive conversion)
 
-- **`assert`**: Strict validation - only accepts values that are already of the expected type
-- **`coerce`**: Permissive conversion - attempts to transform values from other types
-
-Both methods return a `Result<Option<T>, Throwable>` where:
-- `Ok(Some(value))` - successful validation/coercion with a value
-- `Ok(None())` - successful validation/coercion but no value (e.g., empty strings)
-- `Err(exception)` - failed validation/coercion with error details
-
-## Available Types
-
-### StringType
-
-Handles string validation and coercion.
-
+**Example:**
 ```php
-use Superscript\Schema\Types\StringType;
-
-$stringType = new StringType();
-
-// Assert - only accepts strings
-$result = $stringType->assert('hello');        // Ok(Some('hello'))
-$result = $stringType->assert(123);            // Err(TransformValueException)
-
-// Coerce - converts compatible types
-$result = $stringType->coerce('hello');        // Ok(Some('hello'))
-$result = $stringType->coerce(123);            // Ok(Some('123'))
-$result = $stringType->coerce(1.5);            // Ok(Some('1.5'))
-$result = $stringType->coerce('');             // Ok(None())
-$result = $stringType->coerce('null');         // Ok(None())
-```
-
-### NumberType
-
-Handles numeric validation and coercion.
-
-```php
-use Superscript\Schema\Types\NumberType;
-
 $numberType = new NumberType();
 
 // Assert - only accepts int/float
-$result = $numberType->assert(42);             // Ok(Some(42))
-$result = $numberType->assert(3.14);           // Ok(Some(3.14))
-$result = $numberType->assert('42');           // Err(TransformValueException)
+$result = $numberType->assert(42);      // Ok(Some(42))
+$result = $numberType->assert('42');    // Err(TransformValueException)
 
 // Coerce - converts compatible types
-$result = $numberType->coerce(42);             // Ok(Some(42))
-$result = $numberType->coerce('42');           // Ok(Some(42))
-$result = $numberType->coerce('3.14');         // Ok(Some(3.14))
-$result = $numberType->coerce('45%');          // Ok(Some(0.45))
-$result = $numberType->coerce('');             // Ok(None())
-$result = $numberType->coerce('null');         // Ok(None())
+$result = $numberType->coerce(42);      // Ok(Some(42))
+$result = $numberType->coerce('42');    // Ok(Some(42))
+$result = $numberType->coerce('45%');   // Ok(Some(0.45))
 ```
 
-### BooleanType
+Both methods return `Result<Option<T>, Throwable>` where:
+- `Ok(Some(value))` - successful validation/coercion with a value
+- `Ok(None())` - successful but no value (e.g., empty strings)
+- `Err(exception)` - failed validation/coercion
 
-Handles boolean validation and coercion.
+**Note:** The `coerce()` method provides the same functionality as the previous `transform()` method.
 
-```php
-use Superscript\Schema\Types\BooleanType;
+### Sources
 
-$boolType = new BooleanType();
+Sources represent different ways to provide data:
 
-// Assert - only accepts bool
-$result = $boolType->assert(true);             // Ok(Some(true))
-$result = $boolType->assert(false);            // Ok(Some(false))
-$result = $boolType->assert('true');           // Err(TransformValueException)
+- **StaticSource**: Direct values
+- **SymbolSource**: Named references to other sources
+- **ValueDefinition**: Combines a type with a source for transformation
+- **InfixExpression**: Mathematical/logical expressions
+- **UnaryExpression**: Single-operand expressions
 
-// Coerce - converts compatible types
-$result = $boolType->coerce(true);             // Ok(Some(true))
-$result = $boolType->coerce('yes');            // Ok(Some(true))
-$result = $boolType->coerce('on');             // Ok(Some(true))
-$result = $boolType->coerce('1');              // Ok(Some(true))
-$result = $boolType->coerce(1);                // Ok(Some(true))
-$result = $boolType->coerce('no');             // Ok(Some(false))
-$result = $boolType->coerce('off');            // Ok(Some(false))
-$result = $boolType->coerce('0');              // Ok(Some(false))
-$result = $boolType->coerce(0);                // Ok(Some(false))
-$result = $boolType->coerce(null);             // Ok(Some(false))
-```
+### Resolvers
 
-### Composite Types
+Resolvers handle the evaluation of sources:
 
-#### ListType
+- **StaticResolver**: Resolves static values
+- **ValueResolver**: Applies type transformations
+- **InfixResolver**: Evaluates binary expressions
+- **SymbolResolver**: Looks up named symbols
+- **DelegatingResolver**: Chains multiple resolvers together
 
-Validates and coerces arrays where all elements are of the same type.
+### Operators
 
-```php
-use Superscript\Schema\Types\{ListType, NumberType};
+The library supports various operators through the overloader system:
 
-$listType = new ListType(new NumberType());
+- **Binary**: `+`, `-`, `*`, `/`, `%`, `**`
+- **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
+- **Logical**: `&&`, `||`
+- **Special**: `has`, `in`, `intersects`
 
-// Coerce - converts array elements
-$result = $listType->coerce(['1', '2', '3']);  // Ok(Some([1, 2, 3]))
-$result = $listType->coerce('[1, 2, 3]');      // Ok(Some([1, 2, 3])) - JSON string
-```
+## Advanced Usage
 
-#### DictType
+### Custom Types
 
-Validates and coerces associative arrays where all values are of the same type.
+Implement the `Type` interface to create custom data transformations:
 
 ```php
-use Superscript\Schema\Types\{DictType, NumberType};
+<?php
 
-$dictType = new DictType(new NumberType());
+use Superscript\Schema\Types\Type;
+use Superscript\Monads\Result\Result;
 
-// Coerce - converts dictionary values
-$result = $dictType->coerce(['a' => '1', 'b' => '2']);  // Ok(Some(['a' => 1, 'b' => 2]))
-$result = $dictType->coerce('{"a": 1, "b": 2}');       // Ok(Some(['a' => 1, 'b' => 2])) - JSON string
-```
-
-## Working with Results
-
-The library uses the [gosuperscript/monads](https://github.com/gosuperscript/monads) library for Result and Option types.
-
-```php
-use Superscript\Schema\Types\StringType;
-use function Superscript\Monads\Option\None;
-
-$stringType = new StringType();
-$result = $stringType->coerce(123);
-
-if ($result->isOk()) {
-    $option = $result->unwrap();
-    $value = $option->unwrapOr('default');
-    echo "Success: $value"; // Success: 123
-} else {
-    $error = $result->unwrapErr();
-    echo "Error: " . $error->getMessage();
-}
-
-// Or use the chaining approach
-$value = $result->unwrapOr(None())->unwrapOr('default');
-```
-
-## Design Philosophy
-
-This library follows the PSL pattern where:
-
-1. **`assert`** is used when you expect a value to already be of the correct type and want to validate this assumption
-2. **`coerce`** is used when you want to be permissive and attempt conversion from various input types
-3. Both operations are explicit about their intent and return comprehensive error information
-4. The type system distinguishes between "no value" (`None`) and "error" (`Err`) states
-
-### Validation Boundaries vs Operations
-
-The Type interface separates concerns into two categories:
-
-**Validation Boundaries** (`assert` and `coerce`):
-- These are your **input boundaries** where untrusted data enters your system
-- They return `Result<Option<T>>` to force explicit error handling
-- Use these when receiving data from external sources (user input, APIs, databases, etc.)
-
-**Operations on Validated Data** (`compare` and `format`):
-- These assume you're working with **already validated data** of type T
-- They return simple types (`bool` for `compare`, `string` for `format`)
-- Use these after you've validated data with `assert` or `coerce`
-
-This design follows the principle: **validate once at boundaries, operate safely thereafter**.
-
-### Usage Pattern
-
-```php
-use Superscript\Schema\Types\NumberType;
-use function Superscript\Monads\Option\None;
-
-$numberType = new NumberType();
-
-// Step 1: Validate at the boundary
-$result = $numberType->coerce($userInput);
-
-if ($result->isOk()) {
-    $value = $result->unwrapOr(None())->unwrapOr(0);
+class EmailType implements Type
+{
+    public function transform(mixed $value): Result
+    {
+        // Custom transformation logic
+        if (is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return Ok(Some($value));
+        }
+        
+        return new Err(new TransformValueException(type: 'email', value: $value));
+    }
     
-    // Step 2: Operate on validated data (no Result handling needed)
-    $formatted = $numberType->format($value);        // Returns string directly
-    $isEqual = $numberType->compare($value, 42);     // Returns bool directly
+    public function compare(mixed $a, mixed $b): bool
+    {
+        return $a === $b;
+    }
     
-    echo "Value: $formatted, Equal to 42: " . ($isEqual ? 'yes' : 'no');
+    public function format(mixed $value): string
+    {
+        return (string) $value;
+    }
 }
 ```
 
-**Why not return `Result` from `compare` and `format`?**
+### Custom Resolvers
 
-1. **Cleaner API**: After validation, you shouldn't need to handle `Result` twice
-2. **Ergonomics**: Most operations happen after validation, making the common case simpler
-3. **Type Safety**: PHPDoc `@param T` combined with PHPStan at max level catches misuse at development time
-4. **PSL Consistency**: This matches the pattern established by the PSL library
-
-If you need runtime type checking for `compare` or `format`, you can wrap calls in try-catch blocks, but the expectation is that you've already validated your data before using these operations.
-
-## Migration from Previous API
-
-If you were using the previous `transform` method, here's how to migrate:
+Create specialized resolvers for specific data sources:
 
 ```php
-// Old API
-$result = $type->transform($value);
+<?php
 
-// New API - choose based on intent
-$result = $type->assert($value);  // For validation of already-typed values
-$result = $type->coerce($value);  // For conversion from mixed types
+use Superscript\Schema\Resolvers\Resolver;
+use Superscript\Schema\Source;
+use Superscript\Monads\Result\Result;
+
+class DatabaseResolver implements Resolver
+{
+    public function resolve(Source $source): Result
+    {
+        // Custom resolution logic
+        // Connect to database, fetch data, etc.
+    }
+    
+    public static function supports(Source $source): bool
+    {
+        return $source instanceof DatabaseSource;
+    }
+}
 ```
 
-The `coerce` method provides the same functionality as the previous `transform` method, while `assert` provides additional type safety for scenarios where you expect the value to already be of the correct type.
+## Development
 
-## Contributing
+### Setup
 
-This library maintains high code quality standards:
+1. Clone the repository
+2. Install dependencies: `composer install`
+3. Run tests: `composer test`
 
-- 100% unit test coverage required
-- Static analysis with PHPStan at max level
-- Mutation testing with Infection
-- Code style enforcement with Laravel Pint
+### Testing
 
-Run the test suite:
+The library uses PHPUnit for testing with 100% code coverage requirements:
 
 ```bash
+# Run all tests
 composer test
+
+# Individual test suites
+composer test:unit      # Unit tests
+composer test:types     # Static analysis (PHPStan)
+composer test:infection # Mutation testing
 ```
+
+### Code Quality
+
+- **PHPStan**: Level max static analysis
+- **Infection**: Mutation testing for test quality
+- **Laravel Pint**: Code formatting
+- **100% Code Coverage**: Required for all new code
+
+## Architecture
+
+The library follows several design patterns:
+
+- **Strategy Pattern**: Different resolvers for different source types
+- **Chain of Responsibility**: DelegatingResolver chains multiple resolvers
+- **Factory Pattern**: Type system for creating appropriate transformations
+- **Functional Programming**: Extensive use of Result and Option monads
+
+## Error Handling
+
+All operations return `Result<Option<T>, Throwable>` types:
+
+- `Result::Ok(Some(value))`: Successful transformation with value
+- `Result::Ok(None())`: Successful transformation with no value (null/empty)
+- `Result::Err(exception)`: Transformation failed with error
+
+This approach ensures:
+- No exceptions for normal control flow
+- Explicit handling of success/failure cases
+- Type-safe null handling
 
 ## License
 
-This library is proprietary software.
+Proprietary - See license terms in your agreement.
+
+## Contributing
+
+This is a private library. Please follow the established patterns and ensure all tests pass before submitting changes.
