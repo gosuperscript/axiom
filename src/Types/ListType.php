@@ -24,7 +24,24 @@ class ListType implements Type
         public Type $type,
     ) {}
 
-    public function transform(mixed $value): Result
+    public function assert(mixed $value): Result
+    {
+        if (!is_array($value)) {
+            return new Err(new TransformValueException(
+                type: 'list',
+                value: $value,
+            ));
+        }
+
+        return Result::collect(map($value, function (mixed $item) {
+            return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
+                default: Err(new InvalidArgumentException('List item can not be a None')),
+                f: fn(mixed $value) => Ok($value),
+            ));
+        }))->map(fn(array $items) => Some($items));
+    }
+
+    public function coerce(mixed $value): Result
     {
         if (is_string($value) && json_validate($value) && $decoded = \Psl\Json\decode($value)) {
             $value = $decoded;
@@ -38,7 +55,7 @@ class ListType implements Type
         }
 
         return Result::collect(map($value, function (mixed $item) {
-            return $this->type->transform($item)->andThen(fn(Option $value) => $value->mapOr(
+            return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
                 default: Err(new InvalidArgumentException('List item can not be a None')),
                 f: fn(mixed $value) => Ok($value),
             ));

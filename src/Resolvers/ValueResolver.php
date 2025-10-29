@@ -26,7 +26,7 @@ final readonly class ValueResolver implements Resolver
         return $this->resolver->resolve($source->source)
             ->andThen(
                 fn(Option $option) => $option
-                ->andThen(fn(mixed $result) => $source->type->transform($result)->transpose())
+                ->andThen(fn(mixed $result) => $source->type->coerce($result)->transpose())
                 ->transpose(),
             );
     }

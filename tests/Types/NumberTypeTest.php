@@ -17,15 +17,17 @@ use function Superscript\Monads\Option\None;
 #[CoversClass(TransformValueException::class)]
 class NumberTypeTest extends TestCase
 {
-    #[DataProvider('transformProvider')]
+    #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_transform_a_value(mixed $value, int|float|null $expected)
+    public function it_can_coerce_a_value(mixed $value, int|float|null $expected)
     {
         $type = new NumberType();
-        $this->assertSame($expected, $type->transform($value)->unwrapOr(None())->unwrapOr(null));
+        $result = $type->coerce($value);
+        $this->assertTrue($result->isOk(), "Coercing " . var_export($value, true) . " should return Ok, not Err");
+        $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
 
-    public static function transformProvider(): array
+    public static function coerceProvider(): array
     {
         return [
             [1, 1],
@@ -38,14 +40,71 @@ class NumberTypeTest extends TestCase
         ];
     }
 
+    #[DataProvider('assertProvider')]
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_can_assert_a_value(int|float $value, int|float $expected)
     {
         $type = new NumberType();
-        $result = $type->transform($value = 'foobar');
+        $this->assertSame($expected, $type->assert($value)->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public static function assertProvider(): array
+    {
+        return [
+            [1, 1],
+            [1.1, 1.1],
+            [42, 42],
+        ];
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_coerce()
+    {
+        $type = new NumberType();
+        $result = $type->coerce($value = 'foobar');
         $this->assertEquals(new TransformValueException(type: 'numeric', value: $value), $result->unwrapErr());
         $this->assertEquals('Unable to transform into [numeric] from [\'foobar\']', $result->unwrapErr()->getMessage());
+    }
 
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert()
+    {
+        $type = new NumberType();
+        $result = $type->assert($value = 'foobar');
+        $this->assertEquals(new TransformValueException(type: 'numeric', value: $value), $result->unwrapErr());
+        $this->assertEquals('Unable to transform into [numeric] from [\'foobar\']', $result->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function it_handles_empty_and_null_strings_in_coerce()
+    {
+        $type = new NumberType();
+        
+        // Test that empty string returns None (null when unwrapped)
+        $result = $type->coerce('');
+        $this->assertTrue($result->isOk());
+        $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
+        
+        // Test that 'null' string returns None (null when unwrapped)
+        $result = $type->coerce('null');
+        $this->assertTrue($result->isOk());
+        $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
+        
+        // Test that these specific cases are different from error cases
+        $result = $type->coerce('invalid');
+        $this->assertTrue($result->isErr());
+        
+        // Test that actual numbers still work
+        $result = $type->coerce(42);
+        $this->assertTrue($result->isOk());
+        $this->assertSame(42, $result->unwrapOr(None())->unwrapOr(null));
+        
+        // Critical test: ensure empty string doesn't throw error (would fail if is_string check was negated)
+        $emptyResult = $type->coerce('');
+        $this->assertTrue($emptyResult->isOk(), 'Empty string should return Ok(None), not an error');
+        
+        $nullStringResult = $type->coerce('null');
+        $this->assertTrue($nullStringResult->isOk(), 'String "null" should return Ok(None), not an error');
     }
 
     #[DataProvider('compareProvider')]

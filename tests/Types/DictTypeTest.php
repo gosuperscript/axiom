@@ -26,17 +26,17 @@ use function Superscript\Monads\Option\None;
 #[UsesClass(ListType::class)]
 class DictTypeTest extends TestCase
 {
-    #[DataProvider('transformProvider')]
+    #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_transform_value(Type $type, mixed $value, array $expected)
+    public function it_can_coerce_value(Type $type, mixed $value, array $expected)
     {
         $type = new DictType($type);
-        $result = $type->transform($value);
+        $result = $type->coerce($value);
         $this->assertTrue($result->isOk());
         $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
 
-    public static function transformProvider(): array
+    public static function coerceProvider(): array
     {
         return [
             [new NumberType(), ['a' => '1', 'b' => '2', 'c' => '3'], ['a' => 1, 'b' => 2, 'c' => 3]],
@@ -45,14 +45,40 @@ class DictTypeTest extends TestCase
         ];
     }
 
+    #[DataProvider('assertProvider')]
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_can_assert_value(Type $type, array $value, array $expected)
+    {
+        $type = new DictType($type);
+        $result = $type->assert($value);
+        $this->assertTrue($result->isOk());
+        $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public static function assertProvider(): array
+    {
+        return [
+            [new NumberType(), ['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 3]],
+            [new StringType(), ['x' => 'hello', 'y' => 'world'], ['x' => 'hello', 'y' => 'world']],
+        ];
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_coerce()
     {
         $type = new DictType(new NumberType());
-        $result = $type->transform($value = new \stdClass());
+        $result = $type->coerce($value = new \stdClass());
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'dict', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [dict] from [stdClass Object ()]');
+    }
 
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert()
+    {
+        $type = new DictType(new NumberType());
+        $result = $type->assert($value = new \stdClass());
+        $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'dict', value: $value));
+        $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [dict] from [stdClass Object ()]');
     }
 
     #[DataProvider('compareProvider')]

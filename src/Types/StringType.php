@@ -18,7 +18,20 @@ use function Superscript\Monads\Option\Some;
  */
 class StringType implements Type
 {
-    public function transform(mixed $value): Result
+    public function assert(mixed $value): Result
+    {
+        if (!is_string($value)) {
+            return new Err(new TransformValueException(type: 'string', value: $value));
+        }
+
+        return new Ok(match (true) {
+            $value === 'null' => None(),
+            strlen($value) === 0 => None(),
+            default => Some($value),
+        });
+    }
+
+    public function coerce(mixed $value): Result
     {
         return match (true) {
             is_string($value) => new Ok(match (true) {

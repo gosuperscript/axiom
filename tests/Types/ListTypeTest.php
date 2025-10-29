@@ -24,17 +24,17 @@ use function Superscript\Monads\Option\None;
 #[UsesClass(StringType::class)]
 class ListTypeTest extends TestCase
 {
-    #[DataProvider('transformProvider')]
+    #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_transform_value(Type $type, mixed $value, array $expected)
+    public function it_can_coerce_value(Type $type, mixed $value, array $expected)
     {
         $type = new ListType($type);
-        $result = $type->transform($value);
+        $result = $type->coerce($value);
         $this->assertTrue($result->isOk());
         $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
     }
 
-    public static function transformProvider(): array
+    public static function coerceProvider(): array
     {
         return [
             [new NumberType(), ['1', '2', '3'], [1, 2, 3]],
@@ -43,14 +43,40 @@ class ListTypeTest extends TestCase
         ];
     }
 
+    #[DataProvider('assertProvider')]
     #[Test]
-    public function it_returns_err_if_it_fails_to_transform()
+    public function it_can_assert_value(Type $type, array $value, array $expected)
+    {
+        $type = new ListType($type);
+        $result = $type->assert($value);
+        $this->assertTrue($result->isOk());
+        $this->assertSame($expected, $result->unwrapOr(None())->unwrapOr(null));
+    }
+
+    public static function assertProvider(): array
+    {
+        return [
+            [new NumberType(), [1, 2, 3], [1, 2, 3]],
+            [new StringType(), ['a', 'b', 'c'], ['a', 'b', 'c']],
+        ];
+    }
+
+    #[Test]
+    public function it_returns_err_if_it_fails_to_coerce()
     {
         $type = new ListType(new NumberType());
-        $result = $type->transform($value = new \stdClass());
+        $result = $type->coerce($value = new \stdClass());
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'list', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [list] from [stdClass Object ()]');
+    }
 
+    #[Test]
+    public function it_returns_err_if_it_fails_to_assert()
+    {
+        $type = new ListType(new NumberType());
+        $result = $type->assert($value = new \stdClass());
+        $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'list', value: $value));
+        $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [list] from [stdClass Object ()]');
     }
 
     #[DataProvider('compareProvider')]

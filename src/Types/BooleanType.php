@@ -13,11 +13,20 @@ use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 
 /**
- * @implements Type<string>
+ * @implements Type<bool>
  */
 final class BooleanType implements Type
 {
-    public function transform(mixed $value): Result
+    public function assert(mixed $value): Result
+    {
+        if (!is_bool($value)) {
+            return new Err(new TransformValueException(type: 'boolean', value: $value));
+        }
+
+        return new Ok(Some($value));
+    }
+
+    public function coerce(mixed $value): Result
     {
         return (match (true) {
             is_bool($value) => new Ok($value),

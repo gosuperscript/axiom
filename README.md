@@ -97,27 +97,59 @@ $area = $result->unwrap()->unwrap(); // ~78.54
 
 ### Types
 
-The library provides several built-in types for data transformation:
+The library provides several built-in types for data validation and coercion:
 
 #### NumberType
-Transforms values to numeric types (int/float):
+Validates and coerces values to numeric types (int/float):
 - Numeric strings: `"42"` → `42`
 - Percentage strings: `"50%"` → `0.5`
 - Numbers: `42.5` → `42.5`
 
 #### StringType
-Transforms values to strings:
+Validates and coerces values to strings:
 - Numbers: `42` → `"42"`
 - Stringable objects: converted to string representation
 - Special handling for null and empty values
 
 #### BooleanType
-Transforms values to boolean:
+Validates and coerces values to boolean:
 - Truthy/falsy evaluation
 - String representations: `"true"`, `"false"`
 
 #### ListType and DictType
 For collections and associative arrays with nested type validation.
+
+### Type API: Assert vs Coerce
+
+The `Type` interface provides two methods for value processing, following the [@azjezz/psl](https://github.com/azjezz/psl) pattern:
+
+- **`assert(T $value): Result<Option<T>>`** - Validates that a value is already of the correct type
+- **`coerce(mixed $value): Result<Option<T>>`** - Attempts to convert a value from any type to the target type
+
+**When to use:**
+- Use `assert()` when you expect a value to already be the correct type and want strict validation
+- Use `coerce()` when you want to transform values from various input types (permissive conversion)
+
+**Example:**
+```php
+$numberType = new NumberType();
+
+// Assert - only accepts int/float
+$result = $numberType->assert(42);      // Ok(Some(42))
+$result = $numberType->assert('42');    // Err(TransformValueException)
+
+// Coerce - converts compatible types
+$result = $numberType->coerce(42);      // Ok(Some(42))
+$result = $numberType->coerce('42');    // Ok(Some(42))
+$result = $numberType->coerce('45%');   // Ok(Some(0.45))
+```
+
+Both methods return `Result<Option<T>, Throwable>` where:
+- `Ok(Some(value))` - successful validation/coercion with a value
+- `Ok(None())` - successful but no value (e.g., empty strings)
+- `Err(exception)` - failed validation/coercion
+
+**Note:** The `coerce()` method provides the same functionality as the previous `transform()` method.
 
 ### Sources
 
@@ -125,7 +157,7 @@ Sources represent different ways to provide data:
 
 - **StaticSource**: Direct values
 - **SymbolSource**: Named references to other sources
-- **ValueDefinition**: Combines a type with a source for transformation
+- **ValueDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
 
@@ -134,7 +166,7 @@ Sources represent different ways to provide data:
 Resolvers handle the evaluation of sources:
 
 - **StaticResolver**: Resolves static values
-- **ValueResolver**: Applies type transformations
+- **ValueResolver**: Applies type coercion using the `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
 - **SymbolResolver**: Looks up named symbols
 - **DelegatingResolver**: Chains multiple resolvers together
@@ -152,21 +184,38 @@ The library supports various operators through the overloader system:
 
 ### Custom Types
 
-Implement the `Type` interface to create custom data transformations:
+Implement the `Type` interface to create custom data validations and coercions:
 
 ```php
 <?php
 
 use Superscript\Schema\Types\Type;
 use Superscript\Monads\Result\Result;
+use Superscript\Monads\Result\Err;
+use Superscript\Schema\Exceptions\TransformValueException;
+use function Superscript\Monads\Result\Ok;
+use function Superscript\Monads\Option\Some;
 
 class EmailType implements Type
 {
-    public function transform(mixed $value): Result
+    public function assert(mixed $value): Result
     {
-        // Custom transformation logic
+        // Strict validation - only accepts valid email strings
         if (is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
             return Ok(Some($value));
+        }
+        
+        return new Err(new TransformValueException(type: 'email', value: $value));
+    }
+    
+    public function coerce(mixed $value): Result
+    {
+        // Permissive conversion - attempts to convert to email format
+        $stringValue = is_string($value) ? $value : strval($value);
+        $trimmed = trim($stringValue);
+        
+        if (filter_var($trimmed, FILTER_VALIDATE_EMAIL)) {
+            return Ok(Some($trimmed));
         }
         
         return new Err(new TransformValueException(type: 'email', value: $value));
@@ -250,11 +299,11 @@ The library follows several design patterns:
 
 ## Error Handling
 
-All operations return `Result<Option<T>, Throwable>` types:
+All type validation and coercion operations return `Result<Option<T>, Throwable>` types:
 
-- `Result::Ok(Some(value))`: Successful transformation with value
-- `Result::Ok(None())`: Successful transformation with no value (null/empty)
-- `Result::Err(exception)`: Transformation failed with error
+- `Result::Ok(Some(value))`: Successful validation/coercion with value
+- `Result::Ok(None())`: Successful validation/coercion with no value (null/empty)
+- `Result::Err(exception)`: Validation/coercion failed with error
 
 This approach ensures:
 - No exceptions for normal control flow
