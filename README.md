@@ -52,6 +52,38 @@ $result = $resolver->resolve($source);
 $value = $result->unwrap()->unwrap(); // 42 (as integer)
 ```
 
+#### Basic Type Transformation Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User Code
+    participant DR as DelegatingResolver
+    participant VR as ValueResolver
+    participant SR as StaticResolver
+    participant NT as NumberType
+    
+    User->>DR: new DelegatingResolver([<br/>StaticResolver, ValueResolver])
+    User->>DR: resolve(ValueDefinition)
+    Note over User,NT: ValueDefinition contains:<br/>- type: NumberType<br/>- source: StaticSource('42')
+    
+    DR->>VR: resolve(ValueDefinition)
+    Note over VR: Extract inner source<br/>and type from ValueDefinition
+    
+    VR->>DR: resolve(StaticSource('42'))
+    DR->>SR: resolve(StaticSource('42'))
+    SR-->>DR: Ok(Some('42'))
+    DR-->>VR: Ok(Some('42'))
+    
+    VR->>NT: coerce('42')
+    Note over NT: Convert string '42'<br/>to integer 42
+    NT-->>VR: Ok(Some(42))
+    
+    VR-->>DR: Ok(Some(42))
+    DR-->>User: Result<Option<42>>
+    User->>User: unwrap().unwrap()
+    User->>User: value = 42
+```
+
 ### Expression Evaluation
 
 ```php
@@ -93,7 +125,126 @@ $result = $resolver->resolve($expression);
 $area = $result->unwrap()->unwrap(); // ~78.54
 ```
 
+#### Expression Evaluation Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User Code
+    participant DR as DelegatingResolver
+    participant IR as InfixResolver
+    participant SymR as SymbolResolver
+    participant Reg as SymbolRegistry
+    participant OM as OverloaderManager
+    
+    Note over User,OM: Expression: PI * (radius * radius)
+    
+    User->>DR: resolve(InfixExpression<br/>PI * (radius * radius))
+    DR->>IR: resolve(outer InfixExpression)
+    
+    Note over IR: Process left operand: PI
+    IR->>DR: resolve(SymbolSource('PI'))
+    DR->>SymR: resolve(SymbolSource('PI'))
+    SymR->>Reg: get('PI')
+    Reg-->>SymR: Some(StaticSource(3.14159))
+    SymR->>DR: resolve(StaticSource(3.14159))
+    DR-->>SymR: Ok(Some(3.14159))
+    SymR-->>DR: Ok(Some(3.14159))
+    DR-->>IR: Ok(Some(3.14159))
+    
+    Note over IR: Process right operand: radius * radius
+    IR->>DR: resolve(InfixExpression<br/>radius * radius)
+    DR->>IR: resolve(inner InfixExpression)
+    
+    Note over IR: Process inner left: radius
+    IR->>DR: resolve(SymbolSource('radius'))
+    DR->>SymR: resolve(SymbolSource('radius'))
+    SymR->>Reg: get('radius')
+    Reg-->>SymR: Some(StaticSource(5))
+    SymR->>DR: resolve(StaticSource(5))
+    DR-->>SymR: Ok(Some(5))
+    SymR-->>DR: Ok(Some(5))
+    DR-->>IR: Ok(Some(5))
+    
+    Note over IR: Process inner right: radius
+    IR->>DR: resolve(SymbolSource('radius'))
+    DR->>SymR: resolve(SymbolSource('radius'))
+    SymR->>Reg: get('radius')
+    Reg-->>SymR: Some(StaticSource(5))
+    SymR->>DR: resolve(StaticSource(5))
+    DR-->>SymR: Ok(Some(5))
+    SymR-->>DR: Ok(Some(5))
+    DR-->>IR: Ok(Some(5))
+    
+    Note over IR: Apply operator: 5 * 5
+    IR->>OM: evaluate(5, '*', 5)
+    OM-->>IR: Ok(Some(25))
+    IR-->>DR: Ok(Some(25))
+    DR-->>IR: Ok(Some(25))
+    
+    Note over IR: Apply operator: 3.14159 * 25
+    IR->>OM: evaluate(3.14159, '*', 25)
+    OM-->>IR: Ok(Some(78.53975))
+    IR-->>DR: Ok(Some(78.53975))
+    
+    DR-->>User: Result<Option<78.53975>>
+```
+
 ## Core Concepts
+
+### System Integration Example
+
+```mermaid
+graph TB
+    subgraph "Your Application"
+        WebApp[Web Application]
+        API[API Controller]
+        Config[Configuration]
+        DB[(Database)]
+    end
+    
+    subgraph "Schema Library Usage"
+        Setup[Setup Phase]
+        Transform[Data Transformation]
+        Validate[Validation]
+        Compute[Expression Computation]
+    end
+    
+    subgraph "Schema Library Components"
+        DR[DelegatingResolver]
+        Types[Type System]
+        Sources[Source Definitions]
+        Registry[SymbolRegistry]
+    end
+    
+    WebApp --> API
+    API --> Setup
+    Config --> Setup
+    
+    Setup --> DR
+    Setup --> Registry
+    Setup --> Types
+    
+    API --> Transform
+    API --> Validate
+    API --> Compute
+    
+    Transform --> DR
+    Validate --> DR
+    Compute --> DR
+    
+    DR --> Sources
+    DR --> Types
+    DR --> Registry
+    
+    DB -.provides data.-> API
+    API -.validated data.-> DB
+    
+    style WebApp fill:#b3d9ff
+    style Setup fill:#e1f5ff
+    style Transform fill:#e8f5e9
+    style Validate fill:#fff4e1
+    style Compute fill:#ffd9b3
+```
 
 ### Types
 
@@ -171,6 +322,93 @@ Resolvers handle the evaluation of sources:
 - **SymbolResolver**: Looks up named symbols
 - **DelegatingResolver**: Chains multiple resolvers together
 
+#### Resolver Chain Flow
+
+```mermaid
+flowchart TD
+    Start([Source to Resolve]) --> DR[DelegatingResolver]
+    
+    DR --> CheckMap{Source Type<br/>in Resolver Map?}
+    
+    CheckMap -->|No| Error[Throw RuntimeException:<br/>No resolver found]
+    CheckMap -->|Yes| GetResolver[Get Resolver from<br/>IoC Container]
+    
+    GetResolver --> CallResolve[Call Resolver.resolve]
+    
+    CallResolve --> ResolverType{Resolver Type}
+    
+    ResolverType -->|StaticResolver| SR[Return static value<br/>directly]
+    ResolverType -->|ValueResolver| VR[Resolve inner source,<br/>then apply Type coercion]
+    ResolverType -->|InfixResolver| IR[Resolve left & right,<br/>apply operator]
+    ResolverType -->|SymbolResolver| SymR[Lookup symbol,<br/>resolve referenced source]
+    ResolverType -->|UnaryResolver| UR[Resolve operand,<br/>apply unary operator]
+    ResolverType -->|CustomResolver| CR[Custom resolution logic]
+    
+    SR --> Result
+    VR --> Result
+    IR --> Result
+    SymR --> Result
+    UR --> Result
+    CR --> Result
+    
+    Result([Result&lt;Option&lt;value&gt;&gt;])
+    
+    style Start fill:#e1f5ff
+    style DR fill:#fff4e1
+    style Result fill:#e8f5e9
+    style Error fill:#ffcdd2
+```
+
+#### DelegatingResolver Configuration
+
+```mermaid
+graph LR
+    subgraph "Resolver Map Configuration"
+        Map[resolverMap Array]
+        Map --> M1["StaticSource::class => StaticResolver::class"]
+        Map --> M2["ValueDefinition::class => ValueResolver::class"]
+        Map --> M3["InfixExpression::class => InfixResolver::class"]
+        Map --> M4["SymbolSource::class => SymbolResolver::class"]
+        Map --> M5["UnaryExpression::class => UnaryResolver::class"]
+        Map --> M6["CustomSource::class => CustomResolver::class"]
+    end
+    
+    subgraph "IoC Container"
+        Container[Laravel Container]
+        Container --> I1[StaticResolver Instance]
+        Container --> I2[ValueResolver Instance]
+        Container --> I3[InfixResolver Instance]
+        Container --> I4[SymbolResolver Instance]
+        Container --> I5[UnaryResolver Instance]
+        Container --> I6[CustomResolver Instance]
+    end
+    
+    subgraph "Shared Dependencies"
+        SR[SymbolRegistry]
+        OM[OverloaderManager]
+        Self[Resolver Self-Reference]
+    end
+    
+    Map --> Container
+    Container --> SR
+    Container --> OM
+    Container --> Self
+    
+    I4 -.uses.-> SR
+    I3 -.uses.-> OM
+    I5 -.uses.-> OM
+    I2 -.uses.-> Self
+    I3 -.uses.-> Self
+    I4 -.uses.-> Self
+    I5 -.uses.-> Self
+    I6 -.uses.-> Self
+    
+    style Map fill:#e1f5ff
+    style Container fill:#fff4e1
+    style SR fill:#e8f5e9
+    style OM fill:#e8f5e9
+```
+
 ### Operators
 
 The library supports various operators through the overloader system:
@@ -181,6 +419,89 @@ The library supports various operators through the overloader system:
 - **Special**: `has`, `in`, `intersects`
 
 ## Advanced Usage
+
+### Composing Custom Sources, Types, and Resolvers
+
+The library is designed to be highly extensible. You can add your own sources, types, and resolvers to the system.
+
+```mermaid
+graph TB
+    subgraph "Your Application"
+        CustomSource[Custom Source Implementation]
+        CustomType[Custom Type Implementation]
+        CustomResolver[Custom Resolver Implementation]
+        AppCode[Application Code]
+    end
+    
+    subgraph "Library Core"
+        Source[Source Interface]
+        Type[Type Interface]
+        Resolver[Resolver Interface]
+        DelegatingResolver[DelegatingResolver]
+    end
+    
+    subgraph "Built-in Implementations"
+        BuiltInSources[StaticSource, SymbolSource, etc.]
+        BuiltInTypes[NumberType, StringType, etc.]
+        BuiltInResolvers[StaticResolver, ValueResolver, etc.]
+    end
+    
+    CustomSource -.implements.-> Source
+    CustomType -.implements.-> Type
+    CustomResolver -.implements.-> Resolver
+    
+    Source --> BuiltInSources
+    Type --> BuiltInTypes
+    Resolver --> BuiltInResolvers
+    
+    AppCode --> CustomSource
+    AppCode --> CustomType
+    AppCode --> CustomResolver
+    AppCode --> DelegatingResolver
+    
+    DelegatingResolver --> CustomResolver
+    DelegatingResolver --> BuiltInResolvers
+    CustomResolver --> CustomSource
+    
+    style CustomSource fill:#ffd9b3
+    style CustomType fill:#ffd9b3
+    style CustomResolver fill:#ffd9b3
+    style AppCode fill:#b3d9ff
+```
+
+### How Custom Components Integrate
+
+```mermaid
+sequenceDiagram
+    participant App as Your Application
+    participant DR as DelegatingResolver
+    participant CR as Custom Resolver
+    participant CS as Custom Source
+    participant CT as Custom Type
+    
+    Note over App,CT: Setup Phase
+    App->>DR: new DelegatingResolver([<br/>  CustomResolver::class,<br/>  StaticResolver::class,<br/>  ...<br/>])
+    App->>DR: instance(CustomConfig::class, $config)
+    
+    Note over App,CT: Resolution Phase
+    App->>DR: resolve(new CustomSource(...))
+    DR->>DR: Find matching resolver
+    DR->>CR: supports(CustomSource)?
+    CR-->>DR: true
+    DR->>CR: resolve(CustomSource)
+    CR->>CS: Extract data from CustomSource
+    CS-->>CR: Raw data
+    
+    alt With Type Validation
+        CR->>CT: coerce(raw data)
+        CT-->>CR: Result<Option<typed>>
+        CR-->>DR: Result<Option<typed>>
+    else Direct Resolution
+        CR-->>DR: Result<Option<value>>
+    end
+    
+    DR-->>App: Result<Option<value>>
+```
 
 ### Custom Types
 
@@ -296,6 +617,169 @@ The library follows several design patterns:
 - **Chain of Responsibility**: DelegatingResolver chains multiple resolvers
 - **Factory Pattern**: Type system for creating appropriate transformations
 - **Functional Programming**: Extensive use of Result and Option monads
+
+### Package Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Core Interfaces"
+        Source[Source Interface]
+        Type[Type Interface]
+        Resolver[Resolver Interface]
+    end
+    
+    subgraph "Source Types"
+        StaticSource[StaticSource]
+        SymbolSource[SymbolSource]
+        ValueDefinition[ValueDefinition]
+        InfixExpression[InfixExpression]
+        UnaryExpression[UnaryExpression]
+    end
+    
+    subgraph "Type System"
+        NumberType[NumberType]
+        StringType[StringType]
+        BooleanType[BooleanType]
+        ListType[ListType]
+        DictType[DictType]
+    end
+    
+    subgraph "Resolvers"
+        DelegatingResolver[DelegatingResolver]
+        StaticResolver[StaticResolver]
+        ValueResolver[ValueResolver]
+        InfixResolver[InfixResolver]
+        UnaryResolver[UnaryResolver]
+        SymbolResolver[SymbolResolver]
+    end
+    
+    subgraph "Operator System"
+        OverloaderManager[OverloaderManager]
+        BinaryOverloader[BinaryOverloader]
+        ComparisonOverloader[ComparisonOverloader]
+        LogicalOverloader[LogicalOverloader]
+    end
+    
+    subgraph "Support"
+        SymbolRegistry[SymbolRegistry]
+        Container[IoC Container]
+    end
+    
+    Source --> StaticSource
+    Source --> SymbolSource
+    Source --> ValueDefinition
+    Source --> InfixExpression
+    Source --> UnaryExpression
+    
+    Type --> NumberType
+    Type --> StringType
+    Type --> BooleanType
+    Type --> ListType
+    Type --> DictType
+    
+    Resolver --> DelegatingResolver
+    Resolver --> StaticResolver
+    Resolver --> ValueResolver
+    Resolver --> InfixResolver
+    Resolver --> UnaryResolver
+    Resolver --> SymbolResolver
+    
+    DelegatingResolver --> Container
+    DelegatingResolver --> StaticResolver
+    DelegatingResolver --> ValueResolver
+    DelegatingResolver --> InfixResolver
+    DelegatingResolver --> UnaryResolver
+    DelegatingResolver --> SymbolResolver
+    
+    ValueDefinition --> Type
+    InfixResolver --> OverloaderManager
+    UnaryResolver --> OverloaderManager
+    SymbolResolver --> SymbolRegistry
+    
+    OverloaderManager --> BinaryOverloader
+    OverloaderManager --> ComparisonOverloader
+    OverloaderManager --> LogicalOverloader
+    
+    style Source fill:#e1f5ff
+    style Type fill:#fff4e1
+    style Resolver fill:#e8f5e9
+```
+
+### Data Flow Through The System
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DelegatingResolver
+    participant SpecificResolver
+    participant Type
+    participant OperatorSystem
+    participant SymbolRegistry
+    
+    Client->>DelegatingResolver: resolve(Source)
+    
+    alt StaticSource
+        DelegatingResolver->>StaticResolver: resolve(StaticSource)
+        StaticResolver-->>DelegatingResolver: Result<Option<value>>
+    else ValueDefinition
+        DelegatingResolver->>ValueResolver: resolve(ValueDefinition)
+        ValueResolver->>SpecificResolver: resolve(inner source)
+        SpecificResolver-->>ValueResolver: Result<Option<raw>>
+        ValueResolver->>Type: coerce(raw)
+        Type-->>ValueResolver: Result<Option<typed>>
+        ValueResolver-->>DelegatingResolver: Result<Option<typed>>
+    else InfixExpression
+        DelegatingResolver->>InfixResolver: resolve(InfixExpression)
+        InfixResolver->>DelegatingResolver: resolve(left source)
+        DelegatingResolver-->>InfixResolver: Result<Option<left>>
+        InfixResolver->>DelegatingResolver: resolve(right source)
+        DelegatingResolver-->>InfixResolver: Result<Option<right>>
+        InfixResolver->>OperatorSystem: evaluate(left, op, right)
+        OperatorSystem-->>InfixResolver: Result<Option<result>>
+        InfixResolver-->>DelegatingResolver: Result<Option<result>>
+    else SymbolSource
+        DelegatingResolver->>SymbolResolver: resolve(SymbolSource)
+        SymbolResolver->>SymbolRegistry: get(symbol name)
+        SymbolRegistry-->>SymbolResolver: Option<Source>
+        SymbolResolver->>DelegatingResolver: resolve(referenced source)
+        DelegatingResolver-->>SymbolResolver: Result<Option<value>>
+        SymbolResolver-->>DelegatingResolver: Result<Option<value>>
+    end
+    
+    DelegatingResolver-->>Client: Result<Option<value>>
+```
+
+### Type Transformation Flow
+
+```mermaid
+flowchart TD
+    Start([Input Value]) --> TypeMethod{Method Called?}
+    
+    TypeMethod -->|assert| AssertCheck{Value Already Correct Type?}
+    TypeMethod -->|coerce| CoerceAttempt[Attempt Type Conversion]
+    
+    AssertCheck -->|Yes| AssertSuccess[Ok Some value]
+    AssertCheck -->|No| AssertFail[Err TransformValueException]
+    
+    CoerceAttempt --> CoerceCheck{Can Convert?}
+    CoerceCheck -->|Yes, with value| CoerceSuccess[Ok Some converted]
+    CoerceCheck -->|Yes, but empty| CoerceNone[Ok None]
+    CoerceCheck -->|No| CoerceFail[Err TransformValueException]
+    
+    AssertSuccess --> Return([Result&lt;Option&lt;T&gt;&gt;])
+    AssertFail --> Return
+    CoerceSuccess --> Return
+    CoerceNone --> Return
+    CoerceFail --> Return
+    
+    style Start fill:#e1f5ff
+    style Return fill:#e8f5e9
+    style AssertSuccess fill:#c8e6c9
+    style CoerceSuccess fill:#c8e6c9
+    style CoerceNone fill:#fff9c4
+    style AssertFail fill:#ffcdd2
+    style CoerceFail fill:#ffcdd2
+```
 
 ## Error Handling
 
