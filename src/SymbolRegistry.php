@@ -8,10 +8,7 @@ use Superscript\Monads\Option\Option;
 
 use function Psl\Type\dict;
 use function Psl\Type\instance_of;
-use function Psl\Type\nullable;
-use function Psl\Type\shape;
 use function Psl\Type\string;
-use function Psl\Type\vec;
 
 final readonly class SymbolRegistry
 {
@@ -19,24 +16,32 @@ final readonly class SymbolRegistry
     private array $symbols;
 
     /**
-     * @param array<array{name: string, namespace: ?string, source: Source}> $symbols
+     * @param array<string, Source|array<string, Source>> $symbols
      */
     public function __construct(array $symbols = [])
     {
-        // Validate the structure of the input
-        vec(shape([
-            'name' => string(),
-            'namespace' => nullable(string()),
-            'source' => instance_of(Source::class),
-        ]))->assert($symbols);
-
         // Transform the array into internal storage format
         $internalSymbols = [];
-        foreach ($symbols as $symbol) {
-            $key = $symbol['namespace'] !== null
-                ? $symbol['namespace'] . '.' . $symbol['name']
-                : $symbol['name'];
-            $internalSymbols[$key] = $symbol['source'];
+        
+        foreach ($symbols as $key => $value) {
+            // If value is a Source, add it without namespace
+            if ($value instanceof Source) {
+                $internalSymbols[$key] = $value;
+            }
+            // If value is an array, the key is the namespace
+            elseif (is_array($value)) {
+                // Validate that the array contains only Sources
+                dict(string(), instance_of(Source::class))->assert($value);
+                
+                foreach ($value as $name => $source) {
+                    $namespacedKey = $key . '.' . $name;
+                    $internalSymbols[$namespacedKey] = $source;
+                }
+            } else {
+                throw new \InvalidArgumentException(
+                    'Symbol values must be either Source instances or arrays of Sources'
+                );
+            }
         }
 
         $this->symbols = $internalSymbols;
