@@ -8,10 +8,6 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\SymbolResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
 use Superscript\Schema\Sources\InfixExpression;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\SymbolSource;
@@ -25,12 +21,7 @@ class KitchenSinkTest extends TestCase
     #[Test]
     public function something_complex(): void
     {
-        $resolver = new DelegatingResolver([
-            StaticSource::class => StaticResolver::class,
-            InfixExpression::class => InfixResolver::class,
-            ValueDefinition::class => ValueResolver::class,
-            SymbolSource::class => SymbolResolver::class,
-        ]);
+        $resolver = new DelegatingResolver();
 
         $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
             'A' => new StaticSource(2),
@@ -56,10 +47,7 @@ class KitchenSinkTest extends TestCase
     #[Test]
     public function transforming_a_value(): void
     {
-        $resolver = new DelegatingResolver([
-            StaticSource::class => StaticResolver::class,
-            ValueDefinition::class => ValueResolver::class,
-        ]);
+        $resolver = new DelegatingResolver();
 
         $source = new ValueDefinition(
             type: new NumberType(),

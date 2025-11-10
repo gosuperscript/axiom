@@ -4,28 +4,26 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
+use Closure;
 use Illuminate\Container\Container;
-use RuntimeException;
 use Superscript\Schema\Source;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
-final readonly class DelegatingResolver implements Resolver
+final class DelegatingResolver implements Resolver
 {
-    protected Container $container;
+    private Container $container;
 
     /**
-     * @param array<class-string<Source>, class-string<Resolver>> $resolverMap
+     * @var array<string, Closure(never, never, never, never, never, never, never): Result<Option<mixed>, Throwable>>
      */
-    public function __construct(public array $resolverMap = [])
+    private array $resolveUsing = [];
+
+    public function __construct()
     {
         $this->container = new Container();
         $this->container->instance(Resolver::class, $this);
-
-        foreach ($this->resolverMap as $resolver) {
-            $this->container->bind($resolver, $resolver);
-        }
     }
 
     /**
@@ -36,17 +34,27 @@ final readonly class DelegatingResolver implements Resolver
         $this->container->instance($key, $concrete);
     }
 
+    public function resolveUsing(string $source, Closure $resolver): self
+    {
+        $this->resolveUsing[$source] = $resolver;
+
+        return $this;
+    }
+
     /**
      * @return Result<Option<mixed>, Throwable>
      */
     public function resolve(Source $source): Result
     {
-        $sourceClass = get_class($source);
-        
-        if (isset($this->resolverMap[$sourceClass]) && $this->container->has($this->resolverMap[$sourceClass])) {
-            return $this->container->make($this->resolverMap[$sourceClass])->resolve($source);
-        }
+        /** @var Result<Option<mixed>, Throwable> */
+        return $this->container->call($this->getResolver($source));
+    }
 
-        throw new RuntimeException("No resolver found for source of type " . $sourceClass);
+    /**
+     * @return Closure(never, never, never, never, never, never, never): Result<Option<mixed>, Throwable>
+     */
+    private function getResolver(Source $source): Closure
+    {
+        return $this->resolveUsing[$source::class] ?? $source->resolver();
     }
 }

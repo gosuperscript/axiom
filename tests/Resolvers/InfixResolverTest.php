@@ -11,15 +11,12 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Schema\Operators\BinaryOverloader;
 use Superscript\Schema\Operators\DefaultOverloader;
 use Superscript\Schema\Operators\OverloaderManager;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Source;
+use Superscript\Schema\Resolvers\DelegatingResolver;
 use Superscript\Schema\Sources\InfixExpression;
 use Superscript\Schema\Sources\StaticSource;
 
 #[CoversClass(InfixExpression::class)]
-#[CoversClass(InfixResolver::class)]
-#[UsesClass(StaticResolver::class)]
+#[UsesClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(OverloaderManager::class)]
@@ -27,14 +24,15 @@ use Superscript\Schema\Sources\StaticSource;
 class InfixResolverTest extends TestCase
 {
     #[Test]
-    public function it_can_resolve_an_infix_expression()
+    public function it_can_resolve_an_infix_expression(): void
     {
-        $resolver = new InfixResolver(new StaticResolver());
         $source = new InfixExpression(
             left: new StaticSource(1),
             operator: '+',
             right: new StaticSource(2),
         );
-        $this->assertEquals(3, $resolver->resolve($source)->unwrap()->unwrap());
+
+        $resolver = $source->resolver();
+        $this->assertEquals(3, $resolver(new DelegatingResolver())->unwrap()->unwrap());
     }
 }
