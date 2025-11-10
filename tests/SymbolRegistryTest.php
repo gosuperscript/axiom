@@ -130,4 +130,17 @@ final class SymbolRegistryTest extends TestCase
         $this->assertTrue($result->isSome());
         $this->assertEquals(42, $result->unwrap()->value);
     }
+
+    #[Test]
+    public function it_must_validate_namespaced_array_contains_only_sources(): void
+    {
+        $this->expectException(AssertException::class);
+
+        (new SymbolRegistry([
+            'math' => [
+                'pi' => new StaticSource(3.14),
+                'invalid' => 42,  // Invalid: not a Source instance
+            ],
+        ]));
+    }
 }
