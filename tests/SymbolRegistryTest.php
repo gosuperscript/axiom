@@ -6,18 +6,21 @@ namespace Superscript\Schema\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use Psl\Type\Exception\AssertException;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\SymbolRegistry;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SymbolRegistry::class)]
+#[UsesClass(StaticSource::class)]
 final class SymbolRegistryTest extends TestCase
 {
     #[Test]
     public function it_must_be_created_with_sources(): void
     {
-        $this->expectException(AssertException::class);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Symbol values must be either Source instances or arrays of Sources');
 
         (new SymbolRegistry([
             'test' => 42,
