@@ -22,8 +22,16 @@ final readonly class SymbolRegistry
     /**
      * @return Option<Source>
      */
-    public function get(string $name): Option
+    public function get(string $name, ?string $namespace = null): Option
     {
+        // When namespace is provided, look for it with format "namespace.name"
+        if ($namespace !== null) {
+            $namespacedKey = $namespace . '.' . $name;
+            return Option::from($this->symbols[$namespacedKey] ?? null);
+        }
+
+        // When namespace is null, first try exact name match,
+        // then fall back to checking if there's a global namespace symbol
         return Option::from($this->symbols[$name] ?? null);
     }
 }
