@@ -33,7 +33,7 @@ class KitchenSinkTest extends TestCase
         ]);
 
         $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
-            'A' => new StaticSource(2),
+            ['name' => 'A', 'namespace' => null, 'source' => new StaticSource(2)],
         ]));
 
         $source = new InfixExpression(

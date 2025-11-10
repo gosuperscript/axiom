@@ -27,7 +27,7 @@ class SymbolResolverTest extends TestCase
     public function it_can_resolve_a_value(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
-            'A' => new StaticSource(2),
+            ['name' => 'A', 'namespace' => null, 'source' => new StaticSource(2)],
         ]));
         $source = new SymbolSource('A');
         $result = $resolver->resolve($source);
@@ -39,8 +39,8 @@ class SymbolResolverTest extends TestCase
     public function it_can_resolve_a_namespaced_symbol(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
-            'math.pi' => new StaticSource(3.14),
-            'math.e' => new StaticSource(2.71),
+            ['name' => 'pi', 'namespace' => 'math', 'source' => new StaticSource(3.14)],
+            ['name' => 'e', 'namespace' => 'math', 'source' => new StaticSource(2.71)],
         ]));
 
         $source = new SymbolSource('pi', 'math');
@@ -53,7 +53,7 @@ class SymbolResolverTest extends TestCase
     public function it_returns_none_for_nonexistent_namespaced_symbol(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
-            'math.pi' => new StaticSource(3.14),
+            ['name' => 'pi', 'namespace' => 'math', 'source' => new StaticSource(3.14)],
         ]));
 
         // Wrong namespace
@@ -67,8 +67,8 @@ class SymbolResolverTest extends TestCase
     public function it_distinguishes_between_namespaced_and_non_namespaced_symbols(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
-            'value' => new StaticSource(10),
-            'ns.value' => new StaticSource(20),
+            ['name' => 'value', 'namespace' => null, 'source' => new StaticSource(10)],
+            ['name' => 'value', 'namespace' => 'ns', 'source' => new StaticSource(20)],
         ]));
 
         // Resolve without namespace
@@ -86,7 +86,7 @@ class SymbolResolverTest extends TestCase
     public function it_preserves_backward_compatibility_with_null_namespace(): void
     {
         $resolver = new SymbolResolver(new StaticResolver(), new SymbolRegistry([
-            'A' => new StaticSource(42),
+            ['name' => 'A', 'namespace' => null, 'source' => new StaticSource(42)],
         ]));
 
         // SymbolSource with null namespace (default)

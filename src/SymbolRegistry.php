@@ -8,15 +8,38 @@ use Superscript\Monads\Option\Option;
 
 use function Psl\Type\dict;
 use function Psl\Type\instance_of;
+use function Psl\Type\nullable;
+use function Psl\Type\shape;
 use function Psl\Type\string;
+use function Psl\Type\vec;
 
 final readonly class SymbolRegistry
 {
-    public function __construct(
-        /** @var array<string, Source> */
-        public array $symbols = [],
-    ) {
-        dict(string(), instance_of(Source::class))->assert($this->symbols);
+    /** @var array<string, Source> */
+    private array $symbols;
+
+    /**
+     * @param array<array{name: string, namespace: ?string, source: Source}> $symbols
+     */
+    public function __construct(array $symbols = [])
+    {
+        // Validate the structure of the input
+        vec(shape([
+            'name' => string(),
+            'namespace' => nullable(string()),
+            'source' => instance_of(Source::class),
+        ]))->assert($symbols);
+
+        // Transform the array into internal storage format
+        $internalSymbols = [];
+        foreach ($symbols as $symbol) {
+            $key = $symbol['namespace'] !== null
+                ? $symbol['namespace'] . '.' . $symbol['name']
+                : $symbol['name'];
+            $internalSymbols[$key] = $symbol['source'];
+        }
+
+        $this->symbols = $internalSymbols;
     }
 
     /**

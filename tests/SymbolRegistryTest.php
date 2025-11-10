@@ -20,7 +20,7 @@ final class SymbolRegistryTest extends TestCase
         $this->expectException(AssertException::class);
 
         (new SymbolRegistry([
-            'test' => 42,
+            ['name' => 'test', 'namespace' => null, 'source' => 42],
         ]));
     }
 
@@ -28,8 +28,8 @@ final class SymbolRegistryTest extends TestCase
     public function it_can_get_a_symbol_without_namespace(): void
     {
         $registry = new SymbolRegistry([
-            'A' => new StaticSource(1),
-            'B' => new StaticSource(2),
+            ['name' => 'A', 'namespace' => null, 'source' => new StaticSource(1)],
+            ['name' => 'B', 'namespace' => null, 'source' => new StaticSource(2)],
         ]);
 
         $result = $registry->get('A');
@@ -42,7 +42,7 @@ final class SymbolRegistryTest extends TestCase
     public function it_returns_none_for_nonexistent_symbol(): void
     {
         $registry = new SymbolRegistry([
-            'A' => new StaticSource(1),
+            ['name' => 'A', 'namespace' => null, 'source' => new StaticSource(1)],
         ]);
 
         $result = $registry->get('B');
@@ -53,9 +53,9 @@ final class SymbolRegistryTest extends TestCase
     public function it_can_get_a_namespaced_symbol(): void
     {
         $registry = new SymbolRegistry([
-            'math.pi' => new StaticSource(3.14),
-            'math.e' => new StaticSource(2.71),
-            'constants.c' => new StaticSource(299792458),
+            ['name' => 'pi', 'namespace' => 'math', 'source' => new StaticSource(3.14)],
+            ['name' => 'e', 'namespace' => 'math', 'source' => new StaticSource(2.71)],
+            ['name' => 'c', 'namespace' => 'constants', 'source' => new StaticSource(299792458)],
         ]);
 
         $result = $registry->get('pi', 'math');
@@ -75,7 +75,7 @@ final class SymbolRegistryTest extends TestCase
     public function it_returns_none_for_nonexistent_namespaced_symbol(): void
     {
         $registry = new SymbolRegistry([
-            'math.pi' => new StaticSource(3.14),
+            ['name' => 'pi', 'namespace' => 'math', 'source' => new StaticSource(3.14)],
         ]);
 
         // Wrong namespace
@@ -91,8 +91,8 @@ final class SymbolRegistryTest extends TestCase
     public function it_distinguishes_between_namespaced_and_non_namespaced_symbols(): void
     {
         $registry = new SymbolRegistry([
-            'value' => new StaticSource(1),
-            'ns.value' => new StaticSource(2),
+            ['name' => 'value', 'namespace' => null, 'source' => new StaticSource(1)],
+            ['name' => 'value', 'namespace' => 'ns', 'source' => new StaticSource(2)],
         ]);
 
         // Getting without namespace should return the non-namespaced symbol
@@ -110,7 +110,7 @@ final class SymbolRegistryTest extends TestCase
     public function it_supports_nested_namespace_keys(): void
     {
         $registry = new SymbolRegistry([
-            'level1.level2.value' => new StaticSource(42),
+            ['name' => 'level2.value', 'namespace' => 'level1', 'source' => new StaticSource(42)],
         ]);
 
         $result = $registry->get('level2.value', 'level1');
