@@ -93,6 +93,53 @@ $result = $resolver->resolve($expression);
 $area = $result->unwrap()->unwrap(); // ~78.54
 ```
 
+### Using Namespaced Symbols
+
+The `SymbolRegistry` supports namespaces to organize related symbols:
+
+```php
+<?php
+
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\SymbolSource;
+use Superscript\Schema\SymbolRegistry;
+
+// Create registry with namespaced symbols
+$registry = new SymbolRegistry([
+    // Global symbols (no namespace)
+    'version' => new StaticSource('1.0.0'),
+    'debug' => new StaticSource(true),
+    
+    // Math namespace
+    'math' => [
+        'pi' => new StaticSource(3.14159),
+        'e' => new StaticSource(2.71828),
+        'phi' => new StaticSource(1.61803),
+    ],
+    
+    // Constants namespace
+    'physics' => [
+        'c' => new StaticSource(299792458),      // Speed of light
+        'g' => new StaticSource(9.80665),        // Gravitational acceleration
+    ],
+]);
+
+// Access global symbols
+$version = $registry->get('version');           // Some('1.0.0')
+
+// Access namespaced symbols
+$pi = $registry->get('pi', 'math');            // Some(3.14159)
+$c = $registry->get('c', 'physics');           // Some(299792458)
+
+// Using with SymbolSource
+$symbolSource = new SymbolSource('pi', 'math');
+$result = $resolver->resolve($symbolSource);   // ~3.14159
+
+// Namespaces provide isolation
+$registry->get('pi');                           // None (no global 'pi')
+$registry->get('c', 'math');                   // None (no 'c' in math namespace)
+```
+
 ## Core Concepts
 
 ### Types
@@ -156,10 +203,37 @@ Both methods return `Result<Option<T>, Throwable>` where:
 Sources represent different ways to provide data:
 
 - **StaticSource**: Direct values
-- **SymbolSource**: Named references to other sources
+- **SymbolSource**: Named references to other sources (with optional namespace support)
 - **ValueDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
+
+### Symbol Registry
+
+The `SymbolRegistry` provides a centralized way to manage named values and organize them using namespaces:
+
+**Key Features:**
+- **Global Symbols**: Direct symbol registration without namespace isolation
+- **Namespaced Symbols**: Group related symbols under namespaces for better organization
+- **Isolation**: Symbols in different namespaces are isolated from each other
+- **Type Safety**: Only `Source` instances can be registered
+
+**Registration Format:**
+```php
+new SymbolRegistry([
+    'globalSymbol' => new StaticSource(value),    // Global scope
+    'namespace' => [                               // Namespaced scope
+        'symbol1' => new StaticSource(value1),
+        'symbol2' => new StaticSource(value2),
+    ],
+])
+```
+
+**Use Cases:**
+- Organize constants by category (math, physics, config)
+- Prevent naming conflicts between different domains
+- Create clear separation between different symbol contexts
+- Improve code maintainability with logical grouping
 
 ### Resolvers
 

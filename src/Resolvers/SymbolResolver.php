@@ -21,7 +21,7 @@ final readonly class SymbolResolver implements Resolver
      */
     public function resolve(Source $source): Result
     {
-        return $this->symbolRegistry->get($source->name)
+        return $this->symbolRegistry->get($source->name, $source->namespace)
             ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())->transpose();
     }
 }
