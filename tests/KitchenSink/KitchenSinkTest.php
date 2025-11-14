@@ -259,7 +259,7 @@ class KitchenSinkTest extends TestCase
             filePath: $ordersPath,
             filterKeys: ['user_id' => $userIdLookup],
             columns: 'amount',
-            strategy: 'max',
+            aggregate: 'max',
             sortColumn: 'amount',
         );
 
@@ -306,7 +306,7 @@ class KitchenSinkTest extends TestCase
                 'location' => new SymbolSource('targetLocation'),
             ],
             columns: 'stock',
-            strategy: 'min',
+            aggregate: 'min',
             sortColumn: 'stock',
         );
 
@@ -318,6 +318,64 @@ class KitchenSinkTest extends TestCase
         $result = $resolver->resolve($source);
         $this->assertEquals('50', $result->unwrap()->unwrap());
         $this->assertIsString($result->unwrap()->unwrap());
+
+        // Cleanup
+        unlink($csvPath);
+    }
+
+    #[Test]
+    public function lookup_with_aggregate_functions(): void
+    {
+        // Create test CSV file with sales data
+        $csvPath = sys_get_temp_dir() . '/sales_' . uniqid() . '.csv';
+        file_put_contents($csvPath, "region,product,quantity,revenue\nNorth,Laptop,5,5000\nNorth,Mouse,20,600\nSouth,Laptop,3,3000\nNorth,Keyboard,10,800\n");
+
+        $resolver = new DelegatingResolver([
+            StaticSource::class => StaticResolver::class,
+            SymbolSource::class => SymbolResolver::class,
+            ValueDefinition::class => ValueResolver::class,
+            \Superscript\Schema\Sources\LookupSource::class => \Superscript\Schema\Resolvers\LookupResolver::class,
+        ]);
+
+        // Register region as symbol
+        $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
+            'targetRegion' => new StaticSource('North'),
+        ]));
+
+        // Test COUNT: How many products sold in North?
+        $countLookup = new \Superscript\Schema\Sources\LookupSource(
+            filePath: $csvPath,
+            filterKeys: ['region' => new SymbolSource('targetRegion')],
+            aggregate: 'count',
+        );
+        $result = $resolver->resolve($countLookup);
+        $this->assertEquals(3, $result->unwrap()->unwrap()); // Laptop, Mouse, Keyboard
+
+        // Test SUM: Total quantity sold in North
+        $sumLookup = new ValueDefinition(
+            type: new NumberType(),
+            source: new \Superscript\Schema\Sources\LookupSource(
+                filePath: $csvPath,
+                filterKeys: ['region' => new SymbolSource('targetRegion')],
+                aggregate: 'sum',
+                aggregateColumn: 'quantity',
+            ),
+        );
+        $result = $resolver->resolve($sumLookup);
+        $this->assertEquals(35, $result->unwrap()->unwrap()); // 5 + 20 + 10
+
+        // Test AVG: Average revenue per product in North
+        $avgLookup = new ValueDefinition(
+            type: new NumberType(),
+            source: new \Superscript\Schema\Sources\LookupSource(
+                filePath: $csvPath,
+                filterKeys: ['region' => new SymbolSource('targetRegion')],
+                aggregate: 'avg',
+                aggregateColumn: 'revenue',
+            ),
+        );
+        $result = $resolver->resolve($avgLookup);
+        $this->assertEquals(2133.33, round($result->unwrap()->unwrap(), 2)); // (5000 + 600 + 800) / 3
 
         // Cleanup
         unlink($csvPath);

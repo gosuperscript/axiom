@@ -112,7 +112,7 @@ class LookupResolverTest extends TestCase
             delimiter: ',',
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'name',
-            strategy: 'first',
+            aggregate: 'first',
         );
 
         $result = $this->resolver->resolve($source);
@@ -147,7 +147,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
             strategy: 'min',
-            sortColumn: 'salary',
+            aggregateColumn: 'salary',
         );
 
         $result = $this->resolver->resolve($source);
@@ -164,8 +164,8 @@ class LookupResolverTest extends TestCase
             delimiter: ',',
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
-            strategy: 'max',
-            sortColumn: 'salary',
+            aggregate: 'max',
+            aggregateColumn: 'salary',
         );
 
         $result = $this->resolver->resolve($source);
@@ -278,7 +278,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['category' => new StaticSource('Electronics')],
             columns: ['product', 'price'],
             strategy: 'min',
-            sortColumn: 'price',
+            aggregateColumn: 'price',
         );
 
         $result = $this->resolver->resolve($source);
@@ -297,8 +297,8 @@ class LookupResolverTest extends TestCase
             delimiter: "\t",
             filterKeys: ['category' => new StaticSource('Electronics')],
             columns: ['product', 'price'],
-            strategy: 'max',
-            sortColumn: 'price',
+            aggregate: 'max',
+            aggregateColumn: 'price',
         );
 
         $result = $this->resolver->resolve($source);
@@ -379,14 +379,14 @@ class LookupResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_throws_error_for_unknown_strategy(): void
+    public function it_throws_error_for_unknown_aggregate(): void
     {
         $source = new LookupSource(
             filePath: $this->getFixturePath('users.csv'),
             delimiter: ',',
             filterKeys: ['name' => new StaticSource('Alice')],
             columns: 'age',
-            strategy: 'invalid_strategy',
+            aggregate: 'invalid_aggregate',
         );
 
         $result = $this->resolver->resolve($source);
@@ -395,14 +395,14 @@ class LookupResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_throws_error_for_min_strategy_without_sort_column(): void
+    public function it_throws_error_for_min_aggregate_without_aggregate_column(): void
     {
         $source = new LookupSource(
             filePath: $this->getFixturePath('users.csv'),
             delimiter: ',',
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
-            strategy: 'min',
+            aggregate: 'min',
         );
 
         $result = $this->resolver->resolve($source);
@@ -411,14 +411,94 @@ class LookupResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_throws_error_for_max_strategy_without_sort_column(): void
+    public function it_throws_error_for_max_aggregate_without_aggregate_column(): void
     {
         $source = new LookupSource(
             filePath: $this->getFixturePath('users.csv'),
             delimiter: ',',
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
-            strategy: 'max',
+            aggregate: 'max',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isErr());
+    }
+
+    #[Test]
+    public function it_returns_count_of_matching_rows(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            aggregate: 'count',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals(2, $result->unwrap()->unwrap()); // Alice and Charlie are in NYC
+    }
+
+    #[Test]
+    public function it_calculates_sum_of_column_values(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            aggregate: 'sum',
+            aggregateColumn: 'salary',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals(160000, $result->unwrap()->unwrap()); // 75000 + 85000
+    }
+
+    #[Test]
+    public function it_calculates_avg_of_column_values(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            aggregate: 'avg',
+            aggregateColumn: 'salary',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals(80000.0, $result->unwrap()->unwrap()); // (75000 + 85000) / 2
+    }
+
+    #[Test]
+    public function it_throws_error_for_sum_without_aggregate_column(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            aggregate: 'sum',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isErr());
+    }
+
+    #[Test]
+    public function it_throws_error_for_avg_without_aggregate_column(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            aggregate: 'avg',
         );
 
         $result = $this->resolver->resolve($source);

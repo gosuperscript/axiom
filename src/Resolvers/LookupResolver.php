@@ -72,11 +72,8 @@ final readonly class LookupResolver implements Resolver
                 return Ok(None());
             }
 
-            // Apply strategy to select the appropriate row
-            $selectedRow = $this->applyStrategy($matchingRows, $source->strategy, $source->columns, $source->sortColumn);
-
-            // Extract the requested column(s)
-            $result = $this->extractColumns($selectedRow, $source->columns);
+            // Apply aggregate function
+            $result = $this->applyAggregate($matchingRows, $source->aggregate, $source->columns, $source->aggregateColumn);
 
             return Ok(Some($result));
         } catch (Throwable $e) {
@@ -101,37 +98,41 @@ final readonly class LookupResolver implements Resolver
 
     /**
      * @param array<array<string, mixed>> $rows
+     * @param string $aggregate
      * @param array<string>|string $columns
-     * @param string|null $sortColumn
-     * @return array<string, mixed>
+     * @param string|null $aggregateColumn
+     * @return mixed
      */
-    private function applyStrategy(array $rows, string $strategy, array|string $columns, ?string $sortColumn): array
+    private function applyAggregate(array $rows, string $aggregate, array|string $columns, ?string $aggregateColumn): mixed
     {
-        return match ($strategy) {
-            'first' => $rows[0],
-            'last' => $rows[count($rows) - 1],
-            'min' => $this->findMinRow($rows, $sortColumn),
-            'max' => $this->findMaxRow($rows, $sortColumn),
-            default => throw new RuntimeException("Unknown strategy: {$strategy}"),
+        return match ($aggregate) {
+            'first' => $this->extractColumns($rows[0], $columns),
+            'last' => $this->extractColumns($rows[count($rows) - 1], $columns),
+            'min' => $this->extractColumns($this->findMinRow($rows, $aggregateColumn), $columns),
+            'max' => $this->extractColumns($this->findMaxRow($rows, $aggregateColumn), $columns),
+            'count' => count($rows),
+            'sum' => $this->calculateSum($rows, $aggregateColumn),
+            'avg' => $this->calculateAvg($rows, $aggregateColumn),
+            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
         };
     }
 
     /**
      * @param array<array<string, mixed>> $rows
-     * @param string|null $sortColumn
+     * @param string|null $aggregateColumn
      * @return array<string, mixed>
      */
-    private function findMinRow(array $rows, ?string $sortColumn): array
+    private function findMinRow(array $rows, ?string $aggregateColumn): array
     {
-        if ($sortColumn === null) {
-            throw new RuntimeException("sortColumn is required when using 'min' strategy");
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'min' aggregate");
         }
         
         $minRow = $rows[0];
-        $minValue = $rows[0][$sortColumn] ?? null;
+        $minValue = $rows[0][$aggregateColumn] ?? null;
         
         foreach ($rows as $row) {
-            $value = $row[$sortColumn] ?? null;
+            $value = $row[$aggregateColumn] ?? null;
             if ($value !== null && ($minValue === null || $value < $minValue)) {
                 $minValue = $value;
                 $minRow = $row;
@@ -143,20 +144,20 @@ final readonly class LookupResolver implements Resolver
 
     /**
      * @param array<array<string, mixed>> $rows
-     * @param string|null $sortColumn
+     * @param string|null $aggregateColumn
      * @return array<string, mixed>
      */
-    private function findMaxRow(array $rows, ?string $sortColumn): array
+    private function findMaxRow(array $rows, ?string $aggregateColumn): array
     {
-        if ($sortColumn === null) {
-            throw new RuntimeException("sortColumn is required when using 'max' strategy");
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'max' aggregate");
         }
         
         $maxRow = $rows[0];
-        $maxValue = $rows[0][$sortColumn] ?? null;
+        $maxValue = $rows[0][$aggregateColumn] ?? null;
         
         foreach ($rows as $row) {
-            $value = $row[$sortColumn] ?? null;
+            $value = $row[$aggregateColumn] ?? null;
             if ($value !== null && ($maxValue === null || $value > $maxValue)) {
                 $maxValue = $value;
                 $maxRow = $row;
@@ -164,6 +165,56 @@ final readonly class LookupResolver implements Resolver
         }
         
         return $maxRow;
+    }
+
+    /**
+     * @param array<array<string, mixed>> $rows
+     * @param string|null $aggregateColumn
+     * @return float|int
+     */
+    private function calculateSum(array $rows, ?string $aggregateColumn): float|int
+    {
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'sum' aggregate");
+        }
+
+        $sum = 0;
+        foreach ($rows as $row) {
+            $value = $row[$aggregateColumn] ?? null;
+            if ($value !== null && is_numeric($value)) {
+                $sum += $value;
+            }
+        }
+
+        return $sum;
+    }
+
+    /**
+     * @param array<array<string, mixed>> $rows
+     * @param string|null $aggregateColumn
+     * @return float
+     */
+    private function calculateAvg(array $rows, ?string $aggregateColumn): float
+    {
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'avg' aggregate");
+        }
+
+        if (empty($rows)) {
+            return 0.0;
+        }
+
+        $sum = 0;
+        $count = 0;
+        foreach ($rows as $row) {
+            $value = $row[$aggregateColumn] ?? null;
+            if ($value !== null && is_numeric($value)) {
+                $sum += $value;
+                $count++;
+            }
+        }
+
+        return $count > 0 ? $sum / $count : 0.0;
     }
 
     /**

@@ -206,19 +206,48 @@ $lookup = new LookupSource(
     columns: 'store_name',
 );
 
-// Filter strategies
+// Aggregate functions
+// Row selection aggregates (return row data):
 // 'first' - returns first matching row (default)
 // 'last' - returns last matching row
-// 'min' - returns row with minimum value in the specified sortColumn
-// 'max' - returns row with maximum value in the specified sortColumn
+// 'min' - returns row with minimum value in aggregateColumn
+// 'max' - returns row with maximum value in aggregateColumn
+//
+// Computational aggregates (return computed values):
+// 'count' - returns count of matching rows
+// 'sum' - returns sum of values in aggregateColumn
+// 'avg' - returns average of values in aggregateColumn
 
-// Find user with highest salary in NYC
+// Find user with highest salary in NYC (returns row data)
 $lookup = new LookupSource(
     filePath: '/path/to/employees.csv',
     filterKeys: ['city' => new StaticSource('NYC')],
     columns: ['name', 'salary'],
-    strategy: 'max',
-    sortColumn: 'salary', // Required for min/max strategies
+    aggregate: 'max',
+    aggregateColumn: 'salary',
+);
+
+// Count total employees in NYC (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/employees.csv',
+    filterKeys: ['city' => new StaticSource('NYC')],
+    aggregate: 'count',
+);
+
+// Calculate total revenue for a region (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/sales.csv',
+    filterKeys: ['region' => new StaticSource('West')],
+    aggregate: 'sum',
+    aggregateColumn: 'revenue',
+);
+
+// Calculate average price (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    filterKeys: ['category' => new StaticSource('Electronics')],
+    aggregate: 'avg',
+    aggregateColumn: 'price',
 );
 ```
 
@@ -227,7 +256,10 @@ $lookup = new LookupSource(
 - Dynamic filter values using any Source
 - Multiple filtering keys with AND logic
 - Single or multiple column retrieval
-- Four strategies for handling multiple matches
+- Seven aggregate functions:
+  - Row selection: first, last, min, max
+  - Computational: count, sum, avg
+- Explicit aggregateColumn for operations that need it
 - Optional header row support
 
 ## Core Concepts
