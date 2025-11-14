@@ -147,7 +147,9 @@ The `LookupSource` enables powerful data lookups from CSV and TSV files with str
 ```php
 <?php
 
+use Superscript\Schema\Sources\ExactFilter;
 use Superscript\Schema\Sources\LookupSource;
+use Superscript\Schema\Sources\RangeFilter;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Resolvers\DelegatingResolver;
 use Superscript\Schema\Resolvers\LookupResolver;
@@ -158,38 +160,38 @@ $resolver = new DelegatingResolver([
     LookupSource::class => LookupResolver::class,
 ]);
 
-// Basic lookup: Find price by product name
+// Basic lookup: Find price by product name using exact match filter
 $lookup = new LookupSource(
     filePath: '/path/to/products.csv',
     delimiter: ',',
-    filterKeys: ['product' => new StaticSource('Laptop')],
+    filters: [new ExactFilter('product', new StaticSource('Laptop'))],
     columns: 'price',
 );
 $result = $resolver->resolve($lookup);
 $price = $result->unwrap()->unwrap(); // "999.99"
 
-// Multi-column retrieval
+// Multi-column retrieval with exact filter
 $lookup = new LookupSource(
     filePath: '/path/to/products.csv',
-    filterKeys: ['category' => new StaticSource('Electronics')],
+    filters: [new ExactFilter('category', new StaticSource('Electronics'))],
     columns: ['product', 'price', 'stock'],
-    strategy: 'first', // or 'last', 'min', 'max'
+    aggregate: 'first', // or 'last', 'min', 'max'
 );
 
 // TSV files with tab delimiter
 $lookup = new LookupSource(
     filePath: '/path/to/data.tsv',
     delimiter: "\t",
-    filterKeys: ['id' => new StaticSource('123')],
+    filters: [new ExactFilter('id', new StaticSource('123'))],
     columns: 'value',
 );
 
 // Multiple filter keys
 $lookup = new LookupSource(
     filePath: '/path/to/users.csv',
-    filterKeys: [
-        'city' => new StaticSource('NYC'),
-        'status' => new StaticSource('active'),
+    filters: [
+        new ExactFilter('city', new StaticSource('NYC')),
+        new ExactFilter('status', new StaticSource('active')),
     ],
     columns: ['name', 'email'],
 );
@@ -197,12 +199,12 @@ $lookup = new LookupSource(
 // Dynamic filter values (nested lookups)
 $cityLookup = new LookupSource(
     filePath: '/path/to/users.csv',
-    filterKeys: ['user_id' => new StaticSource('123')],
+    filters: [new ExactFilter('user_id', new StaticSource('123'))],
     columns: 'city',
 );
 $lookup = new LookupSource(
     filePath: '/path/to/stores.csv',
-    filterKeys: ['city' => $cityLookup], // Resolves dynamically
+    filters: [new ExactFilter('city', $cityLookup)], // Resolves dynamically
     columns: 'store_name',
 );
 
@@ -221,7 +223,7 @@ $lookup = new LookupSource(
 // Find user with highest salary in NYC (returns row data)
 $lookup = new LookupSource(
     filePath: '/path/to/employees.csv',
-    filterKeys: ['city' => new StaticSource('NYC')],
+    filters: [new ExactFilter('city', new StaticSource('NYC'))],
     columns: ['name', 'salary'],
     aggregate: 'max',
     aggregateColumn: 'salary',
@@ -230,14 +232,14 @@ $lookup = new LookupSource(
 // Count total employees in NYC (returns number)
 $lookup = new LookupSource(
     filePath: '/path/to/employees.csv',
-    filterKeys: ['city' => new StaticSource('NYC')],
+    filters: [new ExactFilter('city', new StaticSource('NYC'))],
     aggregate: 'count',
 );
 
 // Calculate total revenue for a region (returns number)
 $lookup = new LookupSource(
     filePath: '/path/to/sales.csv',
-    filterKeys: ['region' => new StaticSource('West')],
+    filters: [new ExactFilter('region', new StaticSource('West'))],
     aggregate: 'sum',
     aggregateColumn: 'revenue',
 );
@@ -245,7 +247,7 @@ $lookup = new LookupSource(
 // Calculate average price (returns number)
 $lookup = new LookupSource(
     filePath: '/path/to/products.csv',
-    filterKeys: ['category' => new StaticSource('Electronics')],
+    filters: [new ExactFilter('category', new StaticSource('Electronics'))],
     aggregate: 'avg',
     aggregateColumn: 'price',
 );
@@ -257,9 +259,8 @@ $lookup = new LookupSource(
 //                200000,300000,20
 $lookup = new LookupSource(
     filePath: '/path/to/premium_bands.csv',
-    filterKeys: ['turnover' => new StaticSource('150000')],
+    filters: [new RangeFilter('min_turnover', 'max_turnover', new StaticSource('150000'))],
     columns: 'premium',
-    rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
 );
 // Returns: '15' (150k falls in the 100k-200k band)
 ```

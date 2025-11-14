@@ -12,7 +12,9 @@ use Superscript\Schema\Resolvers\InfixResolver;
 use Superscript\Schema\Resolvers\StaticResolver;
 use Superscript\Schema\Resolvers\SymbolResolver;
 use Superscript\Schema\Resolvers\ValueResolver;
+use Superscript\Schema\Sources\ExactFilter;
 use Superscript\Schema\Sources\InfixExpression;
+use Superscript\Schema\Sources\RangeFilter;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\SymbolSource;
 use Superscript\Schema\Sources\ValueDefinition;
@@ -86,7 +88,7 @@ class KitchenSinkTest extends TestCase
         $source = new \Superscript\Schema\Sources\LookupSource(
             filePath: $csvPath,
             delimiter: ',',
-            filterKeys: ['name' => new StaticSource('Banana')],
+            filters: [new ExactFilter('name', new StaticSource('Banana'))],
             columns: 'price',
         );
 
@@ -119,7 +121,7 @@ class KitchenSinkTest extends TestCase
         $source = new \Superscript\Schema\Sources\LookupSource(
             filePath: $csvPath,
             delimiter: ',',
-            filterKeys: ['category' => new SymbolSource('searchCategory')],
+            filters: [new ExactFilter('category', new SymbolSource('searchCategory'))],
             columns: 'product',
             strategy: 'first',
         );
@@ -148,7 +150,7 @@ class KitchenSinkTest extends TestCase
         $lookupSource = new \Superscript\Schema\Sources\LookupSource(
             filePath: $csvPath,
             delimiter: ',',
-            filterKeys: ['name' => new StaticSource('Widget')],
+            filters: [new ExactFilter('name', new StaticSource('Widget'))],
             columns: 'price',
         );
 
@@ -192,7 +194,7 @@ class KitchenSinkTest extends TestCase
             type: new NumberType(),
             source: new \Superscript\Schema\Sources\LookupSource(
                 filePath: $pricesPath,
-                filterKeys: ['product' => new SymbolSource('productName')],
+                filters: [new ExactFilter('product', new SymbolSource('productName'))],
                 columns: 'price',
             ),
         );
@@ -202,7 +204,7 @@ class KitchenSinkTest extends TestCase
             type: new NumberType(),
             source: new \Superscript\Schema\Sources\LookupSource(
                 filePath: $discountsPath,
-                filterKeys: ['product' => new SymbolSource('productName')],
+                filters: [new ExactFilter('product', new SymbolSource('productName'))],
                 columns: 'discount',
             ),
         );
@@ -250,7 +252,7 @@ class KitchenSinkTest extends TestCase
         // Step 1: Lookup user_id by name
         $userIdLookup = new \Superscript\Schema\Sources\LookupSource(
             filePath: $usersPath,
-            filterKeys: ['name' => new SymbolSource('userName')],
+            filters: [new ExactFilter('name', new SymbolSource('userName'))],
             columns: 'user_id',
         );
 
@@ -301,9 +303,9 @@ class KitchenSinkTest extends TestCase
         // Lookup using multiple symbol filters and cast result to string
         $lookupSource = new \Superscript\Schema\Sources\LookupSource(
             filePath: $csvPath,
-            filterKeys: [
-                'category' => new SymbolSource('targetCategory'),
-                'location' => new SymbolSource('targetLocation'),
+            filters: [
+                new ExactFilter('category', new SymbolSource('targetCategory')),
+                new ExactFilter('location', new SymbolSource('targetLocation')),
             ],
             columns: 'stock',
             aggregate: 'min',
@@ -345,7 +347,7 @@ class KitchenSinkTest extends TestCase
         // Test COUNT: How many products sold in North?
         $countLookup = new \Superscript\Schema\Sources\LookupSource(
             filePath: $csvPath,
-            filterKeys: ['region' => new SymbolSource('targetRegion')],
+            filters: [new ExactFilter('region', new SymbolSource('targetRegion'))],
             aggregate: 'count',
         );
         $result = $resolver->resolve($countLookup);
@@ -356,7 +358,7 @@ class KitchenSinkTest extends TestCase
             type: new NumberType(),
             source: new \Superscript\Schema\Sources\LookupSource(
                 filePath: $csvPath,
-                filterKeys: ['region' => new SymbolSource('targetRegion')],
+                filters: [new ExactFilter('region', new SymbolSource('targetRegion'))],
                 aggregate: 'sum',
                 aggregateColumn: 'quantity',
             ),
@@ -369,7 +371,7 @@ class KitchenSinkTest extends TestCase
             type: new NumberType(),
             source: new \Superscript\Schema\Sources\LookupSource(
                 filePath: $csvPath,
-                filterKeys: ['region' => new SymbolSource('targetRegion')],
+                filters: [new ExactFilter('region', new SymbolSource('targetRegion'))],
                 aggregate: 'avg',
                 aggregateColumn: 'revenue',
             ),
@@ -408,7 +410,7 @@ class KitchenSinkTest extends TestCase
         // Step 1: Lookup company turnover
         $turnoverLookup = new \Superscript\Schema\Sources\LookupSource(
             filePath: $companyPath,
-            filterKeys: ['company_id' => new SymbolSource('companyId')],
+            filters: [new ExactFilter('company_id', new SymbolSource('companyId'))],
             columns: 'annual_turnover',
         );
 
@@ -417,9 +419,8 @@ class KitchenSinkTest extends TestCase
             type: new NumberType(),
             source: new \Superscript\Schema\Sources\LookupSource(
                 filePath: $bandingPath,
-                filterKeys: ['turnover' => $turnoverLookup],
+                filters: [new RangeFilter('min_turnover', 'max_turnover', $turnoverLookup)],
                 columns: 'premium',
-                rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
             ),
         );
 
@@ -429,9 +430,8 @@ class KitchenSinkTest extends TestCase
         // Test policy type lookup as well
         $policyLookup = new \Superscript\Schema\Sources\LookupSource(
             filePath: $bandingPath,
-            filterKeys: ['turnover' => $turnoverLookup],
+            filters: [new RangeFilter('min_turnover', 'max_turnover', $turnoverLookup)],
             columns: 'policy_type',
-            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
         );
 
         $result = $resolver->resolve($policyLookup);

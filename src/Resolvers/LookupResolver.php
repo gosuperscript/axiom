@@ -7,7 +7,9 @@ namespace Superscript\Schema\Resolvers;
 use League\Csv\Reader;
 use RuntimeException;
 use Superscript\Schema\Source;
+use Superscript\Schema\Sources\ExactFilter;
 use Superscript\Schema\Sources\LookupSource;
+use Superscript\Schema\Sources\RangeFilter;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Superscript\Monads\Result\Err;
@@ -40,10 +42,12 @@ final readonly class LookupResolver implements Resolver
                 $reader->setHeaderOffset(0);
             }
 
-            // Resolve all filter key values dynamically
-            $resolvedFilters = [];
-            foreach ($source->filterKeys as $column => $filterSource) {
-                $result = $this->resolver->resolve($filterSource);
+            // Resolve all filters
+            $resolvedExactFilters = [];
+            $resolvedRangeFilters = [];
+            
+            foreach ($source->filters as $filter) {
+                $result = $this->resolver->resolve($filter->value);
                 
                 if ($result->isErr()) {
                     return $result;
@@ -54,21 +58,16 @@ final readonly class LookupResolver implements Resolver
                     return Ok(None());
                 }
                 
-                $resolvedFilters[$column] = $option->unwrap();
-            }
-
-            // Resolve range lookup values if configured
-            $resolvedRangeLookups = [];
-            if ($source->rangeLookup !== null) {
-                foreach ($source->rangeLookup as $key => $rangeConfig) {
-                    if (isset($resolvedFilters[$key])) {
-                        $resolvedRangeLookups[$key] = [
-                            'value' => $resolvedFilters[$key],
-                            'min' => $rangeConfig['min'],
-                            'max' => $rangeConfig['max'],
-                        ];
-                        unset($resolvedFilters[$key]); // Remove from exact match filters
-                    }
+                $resolvedValue = $option->unwrap();
+                
+                if ($filter instanceof ExactFilter) {
+                    $resolvedExactFilters[$filter->column] = $resolvedValue;
+                } elseif ($filter instanceof RangeFilter) {
+                    $resolvedRangeFilters[] = [
+                        'value' => $resolvedValue,
+                        'minColumn' => $filter->minColumn,
+                        'maxColumn' => $filter->maxColumn,
+                    ];
                 }
             }
 
@@ -77,7 +76,7 @@ final readonly class LookupResolver implements Resolver
             $records = $source->hasHeader ? $reader->getRecords() : $reader->getRecords([]);
             
             foreach ($records as $record) {
-                if ($this->matchesFilters($record, $resolvedFilters) && $this->matchesRangeLookups($record, $resolvedRangeLookups)) {
+                if ($this->matchesExactFilters($record, $resolvedExactFilters) && $this->matchesRangeFilters($record, $resolvedRangeFilters)) {
                     $matchingRows[] = $record;
                 }
             }
@@ -100,7 +99,7 @@ final readonly class LookupResolver implements Resolver
      * @param array<string, mixed> $record
      * @param array<string, mixed> $filters
      */
-    private function matchesFilters(array $record, array $filters): bool
+    private function matchesExactFilters(array $record, array $filters): bool
     {
         foreach ($filters as $column => $value) {
             if (!isset($record[$column]) || $record[$column] !== (string) $value) {
@@ -113,14 +112,14 @@ final readonly class LookupResolver implements Resolver
 
     /**
      * @param array<string, mixed> $record
-     * @param array<string, array{value: mixed, min: string, max: string}> $rangeLookups
+     * @param array<array{value: mixed, minColumn: string, maxColumn: string}> $rangeFilters
      */
-    private function matchesRangeLookups(array $record, array $rangeLookups): bool
+    private function matchesRangeFilters(array $record, array $rangeFilters): bool
     {
-        foreach ($rangeLookups as $rangeConfig) {
+        foreach ($rangeFilters as $rangeConfig) {
             $value = $rangeConfig['value'];
-            $minColumn = $rangeConfig['min'];
-            $maxColumn = $rangeConfig['max'];
+            $minColumn = $rangeConfig['minColumn'];
+            $maxColumn = $rangeConfig['maxColumn'];
             
             if (!isset($record[$minColumn]) || !isset($record[$maxColumn])) {
                 return false;
