@@ -33,14 +33,9 @@ use Superscript\Schema\Types\NumberType;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\ValueDefinition;
 use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
 
-// Create a resolver with basic capabilities
-$resolver = new DelegatingResolver([
-    StaticResolver::class,
-    ValueResolver::class,
-]);
+// Create a resolver
+$resolver = new DelegatingResolver();
 
 // Transform a string to a number
 $source = new ValueDefinition(
@@ -62,15 +57,9 @@ use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\SymbolSource;
 use Superscript\Schema\SymbolRegistry;
 use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\SymbolResolver;
 
-// Set up resolver with symbol support
-$resolver = new DelegatingResolver([
-    StaticResolver::class,
-    InfixResolver::class,
-    SymbolResolver::class,
-]);
+// Set up resolver
+$resolver = new DelegatingResolver();
 
 // Register symbols
 $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
@@ -235,15 +224,14 @@ new SymbolRegistry([
 - Create clear separation between different symbol contexts
 - Improve code maintainability with logical grouping
 
-### Resolvers
+### Resolver Architecture
 
-Resolvers handle the evaluation of sources:
+The library uses a unified resolver pattern where each source knows how to resolve itself:
 
-- **StaticResolver**: Resolves static values
-- **ValueResolver**: Applies type coercion using the `coerce()` method
-- **InfixResolver**: Evaluates binary expressions
-- **SymbolResolver**: Looks up named symbols
-- **DelegatingResolver**: Chains multiple resolvers together
+- **DelegatingResolver**: The main resolver that delegates to source-specific resolution logic
+- Each source implements a `resolver()` method that returns a closure for resolving that source type
+- Sources can accept dependencies (like SymbolRegistry) via the resolver's dependency injection container
+- Custom resolution logic can be registered using `resolveUsing()` to override default behavior
 
 ### Operators
 
@@ -307,30 +295,48 @@ class EmailType implements Type
 }
 ```
 
-### Custom Resolvers
+### Custom Source Resolution
 
-Create specialized resolvers for specific data sources:
+You can create custom resolution logic for specific source types:
 
 ```php
 <?php
 
-use Superscript\Schema\Resolvers\Resolver;
+use Superscript\Schema\Resolvers\DelegatingResolver;
 use Superscript\Schema\Source;
 use Superscript\Monads\Result\Result;
+use function Superscript\Monads\Result\Ok;
+use function Superscript\Monads\Option\Some;
 
-class DatabaseResolver implements Resolver
+// Create a custom source
+class DatabaseSource implements Source
 {
-    public function resolve(Source $source): Result
-    {
-        // Custom resolution logic
-        // Connect to database, fetch data, etc.
-    }
+    public function __construct(
+        public string $query
+    ) {}
     
-    public static function supports(Source $source): bool
+    public function resolver(): Closure
     {
-        return $source instanceof DatabaseSource;
+        return function (DatabaseConnection $db) {
+            $result = $db->query($this->query);
+            return Ok(Some($result));
+        };
     }
 }
+
+// Register the database connection
+$resolver = new DelegatingResolver();
+$resolver->instance(DatabaseConnection::class, $connection);
+
+// Or override resolution for a specific source class
+$resolver->resolveUsing(DatabaseSource::class, function (DatabaseSource $source, DatabaseConnection $db) {
+    $result = $db->query($source->query);
+    return Ok(Some($result));
+});
+
+// Resolve the source
+$source = new DatabaseSource('SELECT * FROM users');
+$result = $resolver->resolve($source);
 ```
 
 ## Development
@@ -366,8 +372,8 @@ composer test:infection # Mutation testing
 
 The library follows several design patterns:
 
-- **Strategy Pattern**: Different resolvers for different source types
-- **Chain of Responsibility**: DelegatingResolver chains multiple resolvers
+- **Strategy Pattern**: Each source type implements its own resolution strategy via the `resolver()` method
+- **Dependency Injection**: DelegatingResolver uses a container to provide dependencies to source resolvers
 - **Factory Pattern**: Type system for creating appropriate transformations
 - **Functional Programming**: Extensive use of Result and Option monads
 
