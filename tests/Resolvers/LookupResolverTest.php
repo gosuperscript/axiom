@@ -505,4 +505,100 @@ class LookupResolverTest extends TestCase
         
         $this->assertTrue($result->isErr());
     }
+
+    #[Test]
+    public function it_supports_range_based_lookup_for_banding(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('premium_bands.csv'),
+            delimiter: ',',
+            filterKeys: ['turnover' => new StaticSource('150000')],
+            columns: 'premium',
+            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals('15', $result->unwrap()->unwrap()); // 150k falls in 100k-200k band
+    }
+
+    #[Test]
+    public function it_supports_range_lookup_for_lower_band(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('premium_bands.csv'),
+            delimiter: ',',
+            filterKeys: ['turnover' => new StaticSource('50000')],
+            columns: 'premium',
+            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals('10', $result->unwrap()->unwrap()); // 50k falls in 0-100k band
+    }
+
+    #[Test]
+    public function it_supports_range_lookup_for_upper_band(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('premium_bands.csv'),
+            delimiter: ',',
+            filterKeys: ['turnover' => new StaticSource('500000')],
+            columns: 'premium',
+            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals('25', $result->unwrap()->unwrap()); // 500k falls in 300k+ band
+    }
+
+    #[Test]
+    public function it_supports_range_lookup_at_band_boundary(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('premium_bands.csv'),
+            delimiter: ',',
+            filterKeys: ['turnover' => new StaticSource('100000')],
+            columns: 'premium',
+            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals('15', $result->unwrap()->unwrap()); // 100k falls in 100k-200k band (inclusive)
+    }
+
+    #[Test]
+    public function it_combines_range_lookup_with_exact_filters(): void
+    {
+        // Create a CSV with regions and banding
+        $csvPath = $this->getFixturePath('regional_bands.csv');
+        file_put_contents($csvPath, "region,min_value,max_value,rate\nNorth,0,100,5\nNorth,100,200,10\nSouth,0,100,7\nSouth,100,200,12\n");
+
+        $source = new LookupSource(
+            filePath: $csvPath,
+            delimiter: ',',
+            filterKeys: [
+                'region' => new StaticSource('North'),
+                'value' => new StaticSource('150'),
+            ],
+            columns: 'rate',
+            rangeLookup: ['value' => ['min' => 'min_value', 'max' => 'max_value']],
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isOk());
+        $this->assertEquals('10', $result->unwrap()->unwrap()); // North region, 150 in 100-200 band
+
+        // Cleanup
+        unlink($csvPath);
+    }
 }
+

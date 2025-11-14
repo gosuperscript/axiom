@@ -380,4 +380,65 @@ class KitchenSinkTest extends TestCase
         // Cleanup
         unlink($csvPath);
     }
+
+    #[Test]
+    public function lookup_with_range_based_banding(): void
+    {
+        // Create banding CSV for insurance premiums based on turnover
+        $bandingPath = sys_get_temp_dir() . '/premium_bands_' . uniqid() . '.csv';
+        file_put_contents($bandingPath, "min_turnover,max_turnover,premium,policy_type\n0,100000,10,Basic\n100000,200000,15,Standard\n200000,300000,20,Premium\n300000,999999999,25,Elite\n");
+
+        // Create company data
+        $companyPath = sys_get_temp_dir() . '/companies_' . uniqid() . '.csv';
+        file_put_contents($companyPath, "company_id,name,annual_turnover\n1,Small Co,75000\n2,Medium Co,150000\n3,Large Co,450000\n");
+
+        $resolver = new DelegatingResolver([
+            StaticSource::class => StaticResolver::class,
+            SymbolSource::class => SymbolResolver::class,
+            ValueDefinition::class => ValueResolver::class,
+            InfixExpression::class => InfixResolver::class,
+            \Superscript\Schema\Sources\LookupSource::class => \Superscript\Schema\Resolvers\LookupResolver::class,
+        ]);
+
+        // Register company ID as symbol
+        $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
+            'companyId' => new StaticSource('2'),
+        ]));
+
+        // Step 1: Lookup company turnover
+        $turnoverLookup = new \Superscript\Schema\Sources\LookupSource(
+            filePath: $companyPath,
+            filterKeys: ['company_id' => new SymbolSource('companyId')],
+            columns: 'annual_turnover',
+        );
+
+        // Step 2: Use turnover to find premium via banding
+        $premiumLookup = new ValueDefinition(
+            type: new NumberType(),
+            source: new \Superscript\Schema\Sources\LookupSource(
+                filePath: $bandingPath,
+                filterKeys: ['turnover' => $turnoverLookup],
+                columns: 'premium',
+                rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+            ),
+        );
+
+        $result = $resolver->resolve($premiumLookup);
+        $this->assertEquals(15, $result->unwrap()->unwrap()); // Medium Co with 150k turnover gets £15 premium
+
+        // Test policy type lookup as well
+        $policyLookup = new \Superscript\Schema\Sources\LookupSource(
+            filePath: $bandingPath,
+            filterKeys: ['turnover' => $turnoverLookup],
+            columns: 'policy_type',
+            rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+        );
+
+        $result = $resolver->resolve($policyLookup);
+        $this->assertEquals('Standard', $result->unwrap()->unwrap()); // Medium Co gets Standard policy
+
+        // Cleanup
+        unlink($bandingPath);
+        unlink($companyPath);
+    }
 }

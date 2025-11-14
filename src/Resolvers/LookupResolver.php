@@ -57,12 +57,27 @@ final readonly class LookupResolver implements Resolver
                 $resolvedFilters[$column] = $option->unwrap();
             }
 
+            // Resolve range lookup values if configured
+            $resolvedRangeLookups = [];
+            if ($source->rangeLookup !== null) {
+                foreach ($source->rangeLookup as $key => $rangeConfig) {
+                    if (isset($resolvedFilters[$key])) {
+                        $resolvedRangeLookups[$key] = [
+                            'value' => $resolvedFilters[$key],
+                            'min' => $rangeConfig['min'],
+                            'max' => $rangeConfig['max'],
+                        ];
+                        unset($resolvedFilters[$key]); // Remove from exact match filters
+                    }
+                }
+            }
+
             // Stream through records and find matching rows
             $matchingRows = [];
             $records = $source->hasHeader ? $reader->getRecords() : $reader->getRecords([]);
             
             foreach ($records as $record) {
-                if ($this->matchesFilters($record, $resolvedFilters)) {
+                if ($this->matchesFilters($record, $resolvedFilters) && $this->matchesRangeLookups($record, $resolvedRangeLookups)) {
                     $matchingRows[] = $record;
                 }
             }
@@ -90,6 +105,41 @@ final readonly class LookupResolver implements Resolver
         foreach ($filters as $column => $value) {
             if (!isset($record[$column]) || $record[$column] !== (string) $value) {
                 return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @param array<string, array{value: mixed, min: string, max: string}> $rangeLookups
+     */
+    private function matchesRangeLookups(array $record, array $rangeLookups): bool
+    {
+        foreach ($rangeLookups as $rangeConfig) {
+            $value = $rangeConfig['value'];
+            $minColumn = $rangeConfig['min'];
+            $maxColumn = $rangeConfig['max'];
+            
+            if (!isset($record[$minColumn]) || !isset($record[$maxColumn])) {
+                return false;
+            }
+            
+            $minValue = $record[$minColumn];
+            $maxValue = $record[$maxColumn];
+            
+            // Check if value falls within the range [min, max]
+            // Using numeric comparison if values are numeric
+            if (is_numeric($value) && is_numeric($minValue) && is_numeric($maxValue)) {
+                if ($value < $minValue || $value > $maxValue) {
+                    return false;
+                }
+            } else {
+                // String comparison fallback
+                if ($value < $minValue || $value > $maxValue) {
+                    return false;
+                }
             }
         }
         

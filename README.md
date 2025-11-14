@@ -249,12 +249,26 @@ $lookup = new LookupSource(
     aggregate: 'avg',
     aggregateColumn: 'price',
 );
+
+// Range-based lookup for banding (e.g., premium based on turnover)
+// CSV structure: min_turnover,max_turnover,premium
+//                0,100000,10
+//                100000,200000,15
+//                200000,300000,20
+$lookup = new LookupSource(
+    filePath: '/path/to/premium_bands.csv',
+    filterKeys: ['turnover' => new StaticSource('150000')],
+    columns: 'premium',
+    rangeLookup: ['turnover' => ['min' => 'min_turnover', 'max' => 'max_turnover']],
+);
+// Returns: '15' (150k falls in the 100k-200k band)
 ```
 
 **Features:**
 - Efficient streaming for large CSV/TSV files
 - Dynamic filter values using any Source
 - Multiple filtering keys with AND logic
+- Range-based lookups for banding scenarios
 - Single or multiple column retrieval
 - Seven aggregate functions:
   - Row selection: first, last, min, max
