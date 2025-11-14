@@ -147,6 +147,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
             strategy: 'min',
+            sortColumn: 'salary',
         );
 
         $result = $this->resolver->resolve($source);
@@ -164,6 +165,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['city' => new StaticSource('NYC')],
             columns: 'salary',
             strategy: 'max',
+            sortColumn: 'salary',
         );
 
         $result = $this->resolver->resolve($source);
@@ -276,6 +278,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['category' => new StaticSource('Electronics')],
             columns: ['product', 'price'],
             strategy: 'min',
+            sortColumn: 'price',
         );
 
         $result = $this->resolver->resolve($source);
@@ -295,6 +298,7 @@ class LookupResolverTest extends TestCase
             filterKeys: ['category' => new StaticSource('Electronics')],
             columns: ['product', 'price'],
             strategy: 'max',
+            sortColumn: 'price',
         );
 
         $result = $this->resolver->resolve($source);
@@ -383,6 +387,38 @@ class LookupResolverTest extends TestCase
             filterKeys: ['name' => new StaticSource('Alice')],
             columns: 'age',
             strategy: 'invalid_strategy',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isErr());
+    }
+
+    #[Test]
+    public function it_throws_error_for_min_strategy_without_sort_column(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            columns: 'salary',
+            strategy: 'min',
+        );
+
+        $result = $this->resolver->resolve($source);
+        
+        $this->assertTrue($result->isErr());
+    }
+
+    #[Test]
+    public function it_throws_error_for_max_strategy_without_sort_column(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filterKeys: ['city' => new StaticSource('NYC')],
+            columns: 'salary',
+            strategy: 'max',
         );
 
         $result = $this->resolver->resolve($source);

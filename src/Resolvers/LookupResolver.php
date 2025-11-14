@@ -73,7 +73,7 @@ final readonly class LookupResolver implements Resolver
             }
 
             // Apply strategy to select the appropriate row
-            $selectedRow = $this->applyStrategy($matchingRows, $source->strategy, $source->columns);
+            $selectedRow = $this->applyStrategy($matchingRows, $source->strategy, $source->columns, $source->sortColumn);
 
             // Extract the requested column(s)
             $result = $this->extractColumns($selectedRow, $source->columns);
@@ -102,33 +102,36 @@ final readonly class LookupResolver implements Resolver
     /**
      * @param array<array<string, mixed>> $rows
      * @param array<string>|string $columns
+     * @param string|null $sortColumn
      * @return array<string, mixed>
      */
-    private function applyStrategy(array $rows, string $strategy, array|string $columns): array
+    private function applyStrategy(array $rows, string $strategy, array|string $columns, ?string $sortColumn): array
     {
         return match ($strategy) {
             'first' => $rows[0],
             'last' => $rows[count($rows) - 1],
-            'min' => $this->findMinRow($rows, $columns),
-            'max' => $this->findMaxRow($rows, $columns),
+            'min' => $this->findMinRow($rows, $sortColumn),
+            'max' => $this->findMaxRow($rows, $sortColumn),
             default => throw new RuntimeException("Unknown strategy: {$strategy}"),
         };
     }
 
     /**
      * @param array<array<string, mixed>> $rows
-     * @param array<string>|string $columns
+     * @param string|null $sortColumn
      * @return array<string, mixed>
      */
-    private function findMinRow(array $rows, array|string $columns): array
+    private function findMinRow(array $rows, ?string $sortColumn): array
     {
-        $compareColumn = is_array($columns) ? $columns[0] : $columns;
+        if ($sortColumn === null) {
+            throw new RuntimeException("sortColumn is required when using 'min' strategy");
+        }
         
         $minRow = $rows[0];
-        $minValue = $rows[0][$compareColumn] ?? null;
+        $minValue = $rows[0][$sortColumn] ?? null;
         
         foreach ($rows as $row) {
-            $value = $row[$compareColumn] ?? null;
+            $value = $row[$sortColumn] ?? null;
             if ($value !== null && ($minValue === null || $value < $minValue)) {
                 $minValue = $value;
                 $minRow = $row;
@@ -140,18 +143,20 @@ final readonly class LookupResolver implements Resolver
 
     /**
      * @param array<array<string, mixed>> $rows
-     * @param array<string>|string $columns
+     * @param string|null $sortColumn
      * @return array<string, mixed>
      */
-    private function findMaxRow(array $rows, array|string $columns): array
+    private function findMaxRow(array $rows, ?string $sortColumn): array
     {
-        $compareColumn = is_array($columns) ? $columns[0] : $columns;
+        if ($sortColumn === null) {
+            throw new RuntimeException("sortColumn is required when using 'max' strategy");
+        }
         
         $maxRow = $rows[0];
-        $maxValue = $rows[0][$compareColumn] ?? null;
+        $maxValue = $rows[0][$sortColumn] ?? null;
         
         foreach ($rows as $row) {
-            $value = $row[$compareColumn] ?? null;
+            $value = $row[$sortColumn] ?? null;
             if ($value !== null && ($maxValue === null || $value > $maxValue)) {
                 $maxValue = $value;
                 $maxRow = $row;

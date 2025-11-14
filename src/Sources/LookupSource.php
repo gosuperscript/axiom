@@ -13,7 +13,8 @@ use Superscript\Schema\Source;
  * @property string $delimiter The field delimiter (e.g., ',' for CSV, "\t" for TSV)
  * @property array<string, Source> $filterKeys Array of column names to filter values (values are Sources to be resolved)
  * @property array<string>|string $columns Column name(s) to retrieve from matching rows
- * @property string $strategy Strategy to use when multiple rows match (first, min, max)
+ * @property string $strategy Strategy to use when multiple rows match (first, last, min, max)
+ * @property string|null $sortColumn Column to use for min/max strategies (required when using min/max)
  * @property bool $hasHeader Whether the file has a header row
  */
 final readonly class LookupSource implements Source
@@ -24,6 +25,7 @@ final readonly class LookupSource implements Source
      * @param array<string, Source> $filterKeys
      * @param array<string>|string $columns
      * @param string $strategy
+     * @param string|null $sortColumn
      * @param bool $hasHeader
      */
     public function __construct(
@@ -32,6 +34,7 @@ final readonly class LookupSource implements Source
         public array $filterKeys = [],
         public array|string $columns = [],
         public string $strategy = 'first',
+        public ?string $sortColumn = null,
         public bool $hasHeader = true,
     ) {}
 }

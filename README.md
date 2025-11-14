@@ -209,15 +209,16 @@ $lookup = new LookupSource(
 // Filter strategies
 // 'first' - returns first matching row (default)
 // 'last' - returns last matching row
-// 'min' - returns row with minimum value in the specified column
-// 'max' - returns row with maximum value in the specified column
+// 'min' - returns row with minimum value in the specified sortColumn
+// 'max' - returns row with maximum value in the specified sortColumn
 
 // Find user with highest salary in NYC
 $lookup = new LookupSource(
     filePath: '/path/to/employees.csv',
     filterKeys: ['city' => new StaticSource('NYC')],
     columns: ['name', 'salary'],
-    strategy: 'max', // Compares by first column in columns array
+    strategy: 'max',
+    sortColumn: 'salary', // Required for min/max strategies
 );
 ```
 

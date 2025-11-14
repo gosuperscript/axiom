@@ -260,6 +260,7 @@ class KitchenSinkTest extends TestCase
             filterKeys: ['user_id' => $userIdLookup],
             columns: 'amount',
             strategy: 'max',
+            sortColumn: 'amount',
         );
 
         // Step 3: Cast the amount to a number
@@ -306,6 +307,7 @@ class KitchenSinkTest extends TestCase
             ],
             columns: 'stock',
             strategy: 'min',
+            sortColumn: 'stock',
         );
 
         $source = new ValueDefinition(
