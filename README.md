@@ -140,6 +140,95 @@ $registry->get('pi');                           // None (no global 'pi')
 $registry->get('c', 'math');                   // None (no 'c' in math namespace)
 ```
 
+### CSV/TSV Lookups
+
+The `LookupSource` enables powerful data lookups from CSV and TSV files with streaming support for large datasets:
+
+```php
+<?php
+
+use Superscript\Schema\Sources\LookupSource;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\LookupResolver;
+use Superscript\Schema\Resolvers\StaticResolver;
+
+$resolver = new DelegatingResolver([
+    StaticSource::class => StaticResolver::class,
+    LookupSource::class => LookupResolver::class,
+]);
+
+// Basic lookup: Find price by product name
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    delimiter: ',',
+    filterKeys: ['product' => new StaticSource('Laptop')],
+    columns: 'price',
+);
+$result = $resolver->resolve($lookup);
+$price = $result->unwrap()->unwrap(); // "999.99"
+
+// Multi-column retrieval
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    filterKeys: ['category' => new StaticSource('Electronics')],
+    columns: ['product', 'price', 'stock'],
+    strategy: 'first', // or 'last', 'min', 'max'
+);
+
+// TSV files with tab delimiter
+$lookup = new LookupSource(
+    filePath: '/path/to/data.tsv',
+    delimiter: "\t",
+    filterKeys: ['id' => new StaticSource('123')],
+    columns: 'value',
+);
+
+// Multiple filter keys
+$lookup = new LookupSource(
+    filePath: '/path/to/users.csv',
+    filterKeys: [
+        'city' => new StaticSource('NYC'),
+        'status' => new StaticSource('active'),
+    ],
+    columns: ['name', 'email'],
+);
+
+// Dynamic filter values (nested lookups)
+$cityLookup = new LookupSource(
+    filePath: '/path/to/users.csv',
+    filterKeys: ['user_id' => new StaticSource('123')],
+    columns: 'city',
+);
+$lookup = new LookupSource(
+    filePath: '/path/to/stores.csv',
+    filterKeys: ['city' => $cityLookup], // Resolves dynamically
+    columns: 'store_name',
+);
+
+// Filter strategies
+// 'first' - returns first matching row (default)
+// 'last' - returns last matching row
+// 'min' - returns row with minimum value in the specified column
+// 'max' - returns row with maximum value in the specified column
+
+// Find user with highest salary in NYC
+$lookup = new LookupSource(
+    filePath: '/path/to/employees.csv',
+    filterKeys: ['city' => new StaticSource('NYC')],
+    columns: ['name', 'salary'],
+    strategy: 'max', // Compares by first column in columns array
+);
+```
+
+**Features:**
+- Efficient streaming for large CSV/TSV files
+- Dynamic filter values using any Source
+- Multiple filtering keys with AND logic
+- Single or multiple column retrieval
+- Four strategies for handling multiple matches
+- Optional header row support
+
 ## Core Concepts
 
 ### Types
@@ -207,6 +296,7 @@ Sources represent different ways to provide data:
 - **ValueDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
+- **LookupSource**: CSV/TSV file lookups with filtering and strategies
 
 ### Symbol Registry
 
@@ -243,6 +333,7 @@ Resolvers handle the evaluation of sources:
 - **ValueResolver**: Applies type coercion using the `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
 - **SymbolResolver**: Looks up named symbols
+- **LookupResolver**: Performs lookups in CSV/TSV files with dynamic filtering
 - **DelegatingResolver**: Chains multiple resolvers together
 
 ### Operators
