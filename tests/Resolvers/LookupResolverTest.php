@@ -6,6 +6,7 @@ namespace Superscript\Schema\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Schema\Resolvers\DelegatingResolver;
 use Superscript\Schema\Resolvers\LookupResolver;
@@ -17,6 +18,11 @@ use Superscript\Schema\Sources\StaticSource;
 
 #[CoversClass(LookupResolver::class)]
 #[CoversClass(LookupSource::class)]
+#[CoversClass(ExactFilter::class)]
+#[CoversClass(RangeFilter::class)]
+#[UsesClass(DelegatingResolver::class)]
+#[UsesClass(StaticResolver::class)]
+#[UsesClass(StaticSource::class)]
 class LookupResolverTest extends TestCase
 {
     private DelegatingResolver $resolver;
