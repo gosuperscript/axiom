@@ -23,6 +23,14 @@ use Superscript\Schema\Sources\StaticSource;
 #[UsesClass(DelegatingResolver::class)]
 #[UsesClass(StaticResolver::class)]
 #[UsesClass(StaticSource::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\CsvRecord::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\FirstAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\LastAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\CountAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\SumAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\AvgAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\MinAggregateState::class)]
+#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\MaxAggregateState::class)]
 class LookupResolverTest extends TestCase
 {
     private DelegatingResolver $resolver;

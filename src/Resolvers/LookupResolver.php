@@ -6,6 +6,15 @@ namespace Superscript\Schema\Resolvers;
 
 use League\Csv\Reader;
 use RuntimeException;
+use Superscript\Schema\Resolvers\LookupResolver\AggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\AvgAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\CountAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\CsvRecord;
+use Superscript\Schema\Resolvers\LookupResolver\FirstAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\LastAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\MaxAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\MinAggregateState;
+use Superscript\Schema\Resolvers\LookupResolver\SumAggregateState;
 use Superscript\Schema\Source;
 use Superscript\Schema\Sources\ExactFilter;
 use Superscript\Schema\Sources\LookupSource;
@@ -72,27 +81,28 @@ final readonly class LookupResolver implements Resolver
             }
 
             // Stream through records with memory-efficient processing
-            // Instead of collecting all matches, we process them one at a time
             $records = $source->hasHeader ? $reader->getRecords() : $reader->getRecords([]);
             
-            // Initialize aggregate-specific state
-            $aggregateState = $this->initializeAggregateState($source->aggregate);
+            // Initialize aggregate-specific state using value objects
+            $aggregateState = $this->createAggregateState($source->aggregate);
             
             foreach ($records as $record) {
                 /** @var array<string, mixed> $record */
-                if ($this->matchesExactFilters($record, $resolvedExactFilters) && $this->matchesRangeFilters($record, $resolvedRangeFilters)) {
-                    // Process record immediately based on aggregate type
-                    $aggregateState = $this->processRecordForAggregate($record, $aggregateState, $source->aggregate, $source->aggregateColumn);
+                $csvRecord = CsvRecord::from($record);
+                
+                if ($this->matchesExactFilters($csvRecord, $resolvedExactFilters) && $this->matchesRangeFilters($csvRecord, $resolvedRangeFilters)) {
+                    // Process record immediately with immutable value object
+                    $aggregateState = $aggregateState->process($csvRecord, $source->aggregateColumn);
                     
                     // Early exit optimization for 'first' aggregate
-                    if ($source->aggregate === 'first' && isset($aggregateState['found']) && $aggregateState['found']) {
+                    if ($aggregateState->canEarlyExit()) {
                         break;
                     }
                 }
             }
 
             // Finalize and extract result from aggregate state
-            $result = $this->finalizeAggregate($aggregateState, $source->aggregate, $source->columns);
+            $result = $aggregateState->finalize($source->columns);
             
             if ($result === null) {
                 return Ok(None());
@@ -105,13 +115,29 @@ final readonly class LookupResolver implements Resolver
     }
 
     /**
-     * @param array<string, mixed> $record
+     * Create appropriate aggregate state value object
+     */
+    private function createAggregateState(string $aggregate): AggregateState
+    {
+        return match ($aggregate) {
+            'first' => FirstAggregateState::initial(),
+            'last' => LastAggregateState::initial(),
+            'count' => CountAggregateState::initial(),
+            'sum' => SumAggregateState::initial(),
+            'avg' => AvgAggregateState::initial(),
+            'min' => MinAggregateState::initial(),
+            'max' => MaxAggregateState::initial(),
+            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
+        };
+    }
+
+    /**
      * @param array<string|int, mixed> $filters
      */
-    private function matchesExactFilters(array $record, array $filters): bool
+    private function matchesExactFilters(CsvRecord $record, array $filters): bool
     {
         foreach ($filters as $column => $value) {
-            $recordValue = $record[$column] ?? null;
+            $recordValue = $record->getString($column);
             $compareValue = is_scalar($value) ? (string) $value : null;
             
             if ($recordValue === null || $compareValue === null || $recordValue !== $compareValue) {
@@ -123,22 +149,21 @@ final readonly class LookupResolver implements Resolver
     }
 
     /**
-     * @param array<string, mixed> $record
      * @param array<array{value: mixed, minColumn: string|int, maxColumn: string|int}> $rangeFilters
      */
-    private function matchesRangeFilters(array $record, array $rangeFilters): bool
+    private function matchesRangeFilters(CsvRecord $record, array $rangeFilters): bool
     {
         foreach ($rangeFilters as $rangeConfig) {
             $value = $rangeConfig['value'];
             $minColumn = $rangeConfig['minColumn'];
             $maxColumn = $rangeConfig['maxColumn'];
             
-            if (!isset($record[$minColumn]) || !isset($record[$maxColumn])) {
+            if (!$record->has($minColumn) || !$record->has($maxColumn)) {
                 return false;
             }
             
-            $minValue = $record[$minColumn];
-            $maxValue = $record[$maxColumn];
+            $minValue = $record->get($minColumn);
+            $maxValue = $record->get($maxColumn);
             
             // Check if value falls within the range [min, max)
             // Using min <= value < max for banding scenarios
@@ -156,213 +181,5 @@ final readonly class LookupResolver implements Resolver
         }
         
         return true;
-    }
-
-    /**
-     * Initialize state for streaming aggregate processing
-     * @param string $aggregate
-     * @return array<string, mixed>
-     */
-    private function initializeAggregateState(string $aggregate): array
-    {
-        return match ($aggregate) {
-            'first' => ['found' => false, 'row' => null],
-            'last' => ['found' => false, 'row' => null],
-            'count' => ['count' => 0],
-            'sum' => ['sum' => 0, 'column' => null],
-            'avg' => ['sum' => 0, 'count' => 0, 'column' => null],
-            'min' => ['minRow' => null, 'minValue' => null, 'column' => null],
-            'max' => ['maxRow' => null, 'maxValue' => null, 'column' => null],
-            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
-        };
-    }
-
-    /**
-     * Process a single matching record for the aggregate (memory efficient)
-     * @param array<string, mixed> $record
-     * @param array<string, mixed> $state
-     * @param string $aggregate
-     * @param string|int|null $aggregateColumn
-     * @return array<string, mixed>
-     */
-    private function processRecordForAggregate(array $record, array $state, string $aggregate, string|int|null $aggregateColumn): array
-    {
-        return match ($aggregate) {
-            'first' => [
-                'found' => true,
-                'row' => isset($state['found']) && $state['found'] ? $state['row'] : $record,
-            ],
-            'last' => [
-                'found' => true,
-                'row' => $record, // Always keep the latest
-            ],
-            'count' => [
-                'count' => (isset($state['count']) && is_int($state['count']) ? $state['count'] : 0) + 1,
-            ],
-            'sum' => $this->processSumRecord($record, $state, $aggregateColumn),
-            'avg' => $this->processAvgRecord($record, $state, $aggregateColumn),
-            'min' => $this->processMinRecord($record, $state, $aggregateColumn),
-            'max' => $this->processMaxRecord($record, $state, $aggregateColumn),
-            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
-        };
-    }
-
-    /**
-     * @param array<string, mixed> $record
-     * @param array<string, mixed> $state
-     * @param string|int|null $aggregateColumn
-     * @return array<string, mixed>
-     */
-    private function processSumRecord(array $record, array $state, string|int|null $aggregateColumn): array
-    {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'sum' aggregate");
-        }
-
-        $value = $record[$aggregateColumn] ?? null;
-        if ($value !== null && is_numeric($value)) {
-            $currentSum = isset($state['sum']) && is_numeric($state['sum']) ? $state['sum'] : 0;
-            $state['sum'] = (float) $currentSum + (float) $value;
-        }
-        $state['column'] = $aggregateColumn;
-        
-        return $state;
-    }
-
-    /**
-     * @param array<string, mixed> $record
-     * @param array<string, mixed> $state
-     * @param string|int|null $aggregateColumn
-     * @return array<string, mixed>
-     */
-    private function processAvgRecord(array $record, array $state, string|int|null $aggregateColumn): array
-    {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'avg' aggregate");
-        }
-
-        $value = $record[$aggregateColumn] ?? null;
-        if ($value !== null && is_numeric($value)) {
-            $currentSum = isset($state['sum']) && is_numeric($state['sum']) ? $state['sum'] : 0;
-            $currentCount = isset($state['count']) && is_int($state['count']) ? $state['count'] : 0;
-            $state['sum'] = (float) $currentSum + (float) $value;
-            $state['count'] = $currentCount + 1;
-        }
-        $state['column'] = $aggregateColumn;
-        
-        return $state;
-    }
-
-    /**
-     * @param array<string, mixed> $record
-     * @param array<string, mixed> $state
-     * @param string|int|null $aggregateColumn
-     * @return array<string, mixed>
-     */
-    private function processMinRecord(array $record, array $state, string|int|null $aggregateColumn): array
-    {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'min' aggregate");
-        }
-
-        $value = $record[$aggregateColumn] ?? null;
-        if ($value !== null && ($state['minValue'] === null || $value < $state['minValue'])) {
-            $state['minValue'] = $value;
-            $state['minRow'] = $record;
-        }
-        $state['column'] = $aggregateColumn;
-        
-        return $state;
-    }
-
-    /**
-     * @param array<string, mixed> $record
-     * @param array<string, mixed> $state
-     * @param string|int|null $aggregateColumn
-     * @return array<string, mixed>
-     */
-    private function processMaxRecord(array $record, array $state, string|int|null $aggregateColumn): array
-    {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'max' aggregate");
-        }
-
-        $value = $record[$aggregateColumn] ?? null;
-        if ($value !== null && ($state['maxValue'] === null || $value > $state['maxValue'])) {
-            $state['maxValue'] = $value;
-            $state['maxRow'] = $record;
-        }
-        $state['column'] = $aggregateColumn;
-        
-        return $state;
-    }
-
-    /**
-     * Finalize aggregate state and extract the result
-     * @param array<string, mixed> $state
-     * @param string $aggregate
-     * @param array<string|int>|string|int $columns
-     * @return mixed
-     */
-    private function finalizeAggregate(array $state, string $aggregate, array|string|int $columns): mixed
-    {
-        return match ($aggregate) {
-            'first' => (isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row'])) 
-                ? $this->extractColumns($this->ensureStringKeyedArray($state['row']), $columns) 
-                : null,
-            'last' => (isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row'])) 
-                ? $this->extractColumns($this->ensureStringKeyedArray($state['row']), $columns) 
-                : null,
-            'count' => (isset($state['count']) && is_int($state['count']) && $state['count'] > 0) 
-                ? $state['count'] 
-                : null,
-            'sum' => (isset($state['sum']) && is_numeric($state['sum']) && ($state['sum'] !== 0 || isset($state['column']))) 
-                ? $state['sum'] 
-                : null,
-            'avg' => (isset($state['count']) && is_int($state['count']) && $state['count'] > 0 && isset($state['sum']) && is_numeric($state['sum'])) 
-                ? $state['sum'] / $state['count'] 
-                : null,
-            'min' => (isset($state['minRow']) && is_array($state['minRow'])) 
-                ? $this->extractColumns($this->ensureStringKeyedArray($state['minRow']), $columns) 
-                : null,
-            'max' => (isset($state['maxRow']) && is_array($state['maxRow'])) 
-                ? $this->extractColumns($this->ensureStringKeyedArray($state['maxRow']), $columns) 
-                : null,
-            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
-        };
-    }
-
-    /**
-     * Ensure array has string keys (helper for PHPStan)
-     * @param array<mixed, mixed> $array
-     * @return array<string, mixed>
-     */
-    private function ensureStringKeyedArray(array $array): array
-    {
-        /** @var array<string, mixed> */
-        return $array;
-    }
-
-    /**
-     * @param array<string, mixed> $row
-     * @param array<string|int>|string|int $columns
-     * @return mixed
-     */
-    private function extractColumns(array $row, array|string|int $columns): mixed
-    {
-        if (empty($columns)) {
-            return $row;
-        }
-        
-        if (is_string($columns) || is_int($columns)) {
-            return $row[$columns] ?? null;
-        }
-        
-        $result = [];
-        foreach ($columns as $column) {
-            $result[$column] = $row[$column] ?? null;
-        }
-        
-        return $result;
     }
 }
