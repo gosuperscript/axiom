@@ -12,8 +12,8 @@ use Superscript\Schema\Source;
 final readonly class RangeFilter
 {
     public function __construct(
-        public string $minColumn,
-        public string $maxColumn,
+        public string|int $minColumn,
+        public string|int $maxColumn,
         public Source $value,
     ) {}
 }

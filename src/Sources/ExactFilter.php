@@ -12,7 +12,7 @@ use Superscript\Schema\Source;
 final readonly class ExactFilter
 {
     public function __construct(
-        public string $column,
+        public string|int $column,
         public Source $value,
     ) {}
 }

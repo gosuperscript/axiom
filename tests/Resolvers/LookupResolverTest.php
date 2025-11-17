@@ -131,7 +131,7 @@ class LookupResolverTest extends TestCase
             delimiter: ',',
             filters: [new ExactFilter('city', new StaticSource('NYC'))],
             columns: 'name',
-            strategy: 'last',
+            aggregate: 'last',
         );
 
         $result = $this->resolver->resolve($source);
@@ -148,7 +148,7 @@ class LookupResolverTest extends TestCase
             delimiter: ',',
             filters: [new ExactFilter('city', new StaticSource('NYC'))],
             columns: 'salary',
-            strategy: 'min',
+            aggregate: 'min',
             aggregateColumn: 'salary',
         );
 
@@ -279,7 +279,7 @@ class LookupResolverTest extends TestCase
             delimiter: "\t",
             filters: [new ExactFilter('category', new StaticSource('Electronics'))],
             columns: ['product', 'price'],
-            strategy: 'min',
+            aggregate: 'min',
             aggregateColumn: 'price',
         );
 

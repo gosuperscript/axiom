@@ -123,7 +123,7 @@ class KitchenSinkTest extends TestCase
             delimiter: ',',
             filters: [new ExactFilter('category', new SymbolSource('searchCategory'))],
             columns: 'product',
-            strategy: 'first',
+            aggregate: 'first',
         );
 
         $result = $resolver->resolve($source);
@@ -259,10 +259,10 @@ class KitchenSinkTest extends TestCase
         // Step 2: Use the user_id to find max order amount
         $maxAmountLookup = new \Superscript\Schema\Sources\LookupSource(
             filePath: $ordersPath,
-            filterKeys: ['user_id' => $userIdLookup],
+            filters: [new ExactFilter('user_id', $userIdLookup)],
             columns: 'amount',
             aggregate: 'max',
-            sortColumn: 'amount',
+            aggregateColumn: 'amount',
         );
 
         // Step 3: Cast the amount to a number
@@ -309,7 +309,7 @@ class KitchenSinkTest extends TestCase
             ],
             columns: 'stock',
             aggregate: 'min',
-            sortColumn: 'stock',
+            aggregateColumn: 'stock',
         );
 
         $source = new ValueDefinition(

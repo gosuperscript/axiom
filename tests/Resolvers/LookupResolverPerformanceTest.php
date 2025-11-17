@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Tests\Resolvers;
 
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Schema\Resolvers\DelegatingResolver;
@@ -14,8 +14,7 @@ use Superscript\Schema\Sources\ExactFilter;
 use Superscript\Schema\Sources\LookupSource;
 use Superscript\Schema\Sources\StaticSource;
 
-#[CoversClass(LookupResolver::class)]
-#[CoversClass(LookupSource::class)]
+#[CoversNothing]
 class LookupResolverPerformanceTest extends TestCase
 {
     private DelegatingResolver $resolver;
