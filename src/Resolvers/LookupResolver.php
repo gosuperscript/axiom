@@ -71,23 +71,31 @@ final readonly class LookupResolver implements Resolver
                 }
             }
 
-            // Stream through records and find matching rows
-            $matchingRows = [];
+            // Stream through records with memory-efficient processing
+            // Instead of collecting all matches, we process them one at a time
             $records = $source->hasHeader ? $reader->getRecords() : $reader->getRecords([]);
+            
+            // Initialize aggregate-specific state
+            $aggregateState = $this->initializeAggregateState($source->aggregate);
             
             foreach ($records as $record) {
                 if ($this->matchesExactFilters($record, $resolvedExactFilters) && $this->matchesRangeFilters($record, $resolvedRangeFilters)) {
-                    $matchingRows[] = $record;
+                    // Process record immediately based on aggregate type
+                    $aggregateState = $this->processRecordForAggregate($record, $aggregateState, $source->aggregate, $source->aggregateColumn);
+                    
+                    // Early exit optimization for 'first' aggregate
+                    if ($source->aggregate === 'first' && $aggregateState['found']) {
+                        break;
+                    }
                 }
             }
 
-            // No matches found
-            if (empty($matchingRows)) {
+            // Finalize and extract result from aggregate state
+            $result = $this->finalizeAggregate($aggregateState, $source->aggregate, $source->columns);
+            
+            if ($result === null) {
                 return Ok(None());
             }
-
-            // Apply aggregate function
-            $result = $this->applyAggregate($matchingRows, $source->aggregate, $source->columns, $source->aggregateColumn);
 
             return Ok(Some($result));
         } catch (Throwable $e) {
@@ -146,124 +154,160 @@ final readonly class LookupResolver implements Resolver
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
+     * Initialize state for streaming aggregate processing
      * @param string $aggregate
-     * @param array<string>|string $columns
-     * @param string|null $aggregateColumn
-     * @return mixed
+     * @return array<string, mixed>
      */
-    private function applyAggregate(array $rows, string $aggregate, array|string $columns, ?string $aggregateColumn): mixed
+    private function initializeAggregateState(string $aggregate): array
     {
         return match ($aggregate) {
-            'first' => $this->extractColumns($rows[0], $columns),
-            'last' => $this->extractColumns($rows[count($rows) - 1], $columns),
-            'min' => $this->extractColumns($this->findMinRow($rows, $aggregateColumn), $columns),
-            'max' => $this->extractColumns($this->findMaxRow($rows, $aggregateColumn), $columns),
-            'count' => count($rows),
-            'sum' => $this->calculateSum($rows, $aggregateColumn),
-            'avg' => $this->calculateAvg($rows, $aggregateColumn),
+            'first' => ['found' => false, 'row' => null],
+            'last' => ['found' => false, 'row' => null],
+            'count' => ['count' => 0],
+            'sum' => ['sum' => 0, 'column' => null],
+            'avg' => ['sum' => 0, 'count' => 0, 'column' => null],
+            'min' => ['minRow' => null, 'minValue' => null, 'column' => null],
+            'max' => ['maxRow' => null, 'maxValue' => null, 'column' => null],
             default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
         };
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
+     * Process a single matching record for the aggregate (memory efficient)
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $state
+     * @param string $aggregate
      * @param string|null $aggregateColumn
      * @return array<string, mixed>
      */
-    private function findMinRow(array $rows, ?string $aggregateColumn): array
+    private function processRecordForAggregate(array $record, array $state, string $aggregate, ?string $aggregateColumn): array
     {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'min' aggregate");
-        }
-        
-        $minRow = $rows[0];
-        $minValue = $rows[0][$aggregateColumn] ?? null;
-        
-        foreach ($rows as $row) {
-            $value = $row[$aggregateColumn] ?? null;
-            if ($value !== null && ($minValue === null || $value < $minValue)) {
-                $minValue = $value;
-                $minRow = $row;
-            }
-        }
-        
-        return $minRow;
+        return match ($aggregate) {
+            'first' => [
+                'found' => true,
+                'row' => $state['found'] ? $state['row'] : $record,
+            ],
+            'last' => [
+                'found' => true,
+                'row' => $record, // Always keep the latest
+            ],
+            'count' => [
+                'count' => $state['count'] + 1,
+            ],
+            'sum' => $this->processSumRecord($record, $state, $aggregateColumn),
+            'avg' => $this->processAvgRecord($record, $state, $aggregateColumn),
+            'min' => $this->processMinRecord($record, $state, $aggregateColumn),
+            'max' => $this->processMaxRecord($record, $state, $aggregateColumn),
+            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
+        };
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $state
      * @param string|null $aggregateColumn
      * @return array<string, mixed>
      */
-    private function findMaxRow(array $rows, ?string $aggregateColumn): array
-    {
-        if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'max' aggregate");
-        }
-        
-        $maxRow = $rows[0];
-        $maxValue = $rows[0][$aggregateColumn] ?? null;
-        
-        foreach ($rows as $row) {
-            $value = $row[$aggregateColumn] ?? null;
-            if ($value !== null && ($maxValue === null || $value > $maxValue)) {
-                $maxValue = $value;
-                $maxRow = $row;
-            }
-        }
-        
-        return $maxRow;
-    }
-
-    /**
-     * @param array<array<string, mixed>> $rows
-     * @param string|null $aggregateColumn
-     * @return float|int
-     */
-    private function calculateSum(array $rows, ?string $aggregateColumn): float|int
+    private function processSumRecord(array $record, array $state, ?string $aggregateColumn): array
     {
         if ($aggregateColumn === null) {
             throw new RuntimeException("aggregateColumn is required when using 'sum' aggregate");
         }
 
-        $sum = 0;
-        foreach ($rows as $row) {
-            $value = $row[$aggregateColumn] ?? null;
-            if ($value !== null && is_numeric($value)) {
-                $sum += $value;
-            }
+        $value = $record[$aggregateColumn] ?? null;
+        if ($value !== null && is_numeric($value)) {
+            $state['sum'] += $value;
         }
-
-        return $sum;
+        $state['column'] = $aggregateColumn;
+        
+        return $state;
     }
 
     /**
-     * @param array<array<string, mixed>> $rows
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $state
      * @param string|null $aggregateColumn
-     * @return float
+     * @return array<string, mixed>
      */
-    private function calculateAvg(array $rows, ?string $aggregateColumn): float
+    private function processAvgRecord(array $record, array $state, ?string $aggregateColumn): array
     {
         if ($aggregateColumn === null) {
             throw new RuntimeException("aggregateColumn is required when using 'avg' aggregate");
         }
 
-        if (empty($rows)) {
-            return 0.0;
+        $value = $record[$aggregateColumn] ?? null;
+        if ($value !== null && is_numeric($value)) {
+            $state['sum'] += $value;
+            $state['count']++;
+        }
+        $state['column'] = $aggregateColumn;
+        
+        return $state;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $state
+     * @param string|null $aggregateColumn
+     * @return array<string, mixed>
+     */
+    private function processMinRecord(array $record, array $state, ?string $aggregateColumn): array
+    {
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'min' aggregate");
         }
 
-        $sum = 0;
-        $count = 0;
-        foreach ($rows as $row) {
-            $value = $row[$aggregateColumn] ?? null;
-            if ($value !== null && is_numeric($value)) {
-                $sum += $value;
-                $count++;
-            }
+        $value = $record[$aggregateColumn] ?? null;
+        if ($value !== null && ($state['minValue'] === null || $value < $state['minValue'])) {
+            $state['minValue'] = $value;
+            $state['minRow'] = $record;
+        }
+        $state['column'] = $aggregateColumn;
+        
+        return $state;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $state
+     * @param string|null $aggregateColumn
+     * @return array<string, mixed>
+     */
+    private function processMaxRecord(array $record, array $state, ?string $aggregateColumn): array
+    {
+        if ($aggregateColumn === null) {
+            throw new RuntimeException("aggregateColumn is required when using 'max' aggregate");
         }
 
-        return $count > 0 ? $sum / $count : 0.0;
+        $value = $record[$aggregateColumn] ?? null;
+        if ($value !== null && ($state['maxValue'] === null || $value > $state['maxValue'])) {
+            $state['maxValue'] = $value;
+            $state['maxRow'] = $record;
+        }
+        $state['column'] = $aggregateColumn;
+        
+        return $state;
+    }
+
+    /**
+     * Finalize aggregate state and extract the result
+     * @param array<string, mixed> $state
+     * @param string $aggregate
+     * @param array<string>|string $columns
+     * @return mixed
+     */
+    private function finalizeAggregate(array $state, string $aggregate, array|string $columns): mixed
+    {
+        return match ($aggregate) {
+            'first' => $state['found'] ? $this->extractColumns($state['row'], $columns) : null,
+            'last' => $state['found'] ? $this->extractColumns($state['row'], $columns) : null,
+            'count' => $state['count'] > 0 ? $state['count'] : null,
+            'sum' => $state['sum'] !== 0 || $state['column'] !== null ? $state['sum'] : null,
+            'avg' => $state['count'] > 0 ? $state['sum'] / $state['count'] : null,
+            'min' => $state['minRow'] !== null ? $this->extractColumns($state['minRow'], $columns) : null,
+            'max' => $state['maxRow'] !== null ? $this->extractColumns($state['maxRow'], $columns) : null,
+            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
+        };
     }
 
     /**
