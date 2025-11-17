@@ -18,7 +18,7 @@ final readonly class SymbolSource implements Source
 
     public function resolver(): Closure
     {
-        return fn(SymbolRegistry $registry, Resolver $resolver) => $registry->get($this->name)
+        return fn(SymbolRegistry $registry, Resolver $resolver) => $registry->get($this->name, $this->namespace)
             ->andThen(fn(Source $source) => $resolver->resolve($source)->transpose())->transpose();
     }
 }
