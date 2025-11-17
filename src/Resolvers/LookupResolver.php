@@ -307,13 +307,13 @@ final readonly class LookupResolver implements Resolver
     private function finalizeAggregate(array $state, string $aggregate, array|string|int $columns): mixed
     {
         return match ($aggregate) {
-            'first' => isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row']) 
+            'first' => (isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row'])) 
                 ? $this->extractColumns($this->ensureStringKeyedArray($state['row']), $columns) 
                 : null,
-            'last' => isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row']) 
+            'last' => (isset($state['found']) && $state['found'] && isset($state['row']) && is_array($state['row'])) 
                 ? $this->extractColumns($this->ensureStringKeyedArray($state['row']), $columns) 
                 : null,
-            'count' => isset($state['count']) && is_int($state['count']) && $state['count'] > 0 
+            'count' => (isset($state['count']) && is_int($state['count']) && $state['count'] > 0) 
                 ? $state['count'] 
                 : null,
             'sum' => (isset($state['sum']) && is_numeric($state['sum']) && ($state['sum'] !== 0 || isset($state['column']))) 
@@ -322,10 +322,10 @@ final readonly class LookupResolver implements Resolver
             'avg' => (isset($state['count']) && is_int($state['count']) && $state['count'] > 0 && isset($state['sum']) && is_numeric($state['sum'])) 
                 ? $state['sum'] / $state['count'] 
                 : null,
-            'min' => isset($state['minRow']) && is_array($state['minRow']) 
+            'min' => (isset($state['minRow']) && is_array($state['minRow'])) 
                 ? $this->extractColumns($this->ensureStringKeyedArray($state['minRow']), $columns) 
                 : null,
-            'max' => isset($state['maxRow']) && is_array($state['maxRow']) 
+            'max' => (isset($state['maxRow']) && is_array($state['maxRow'])) 
                 ? $this->extractColumns($this->ensureStringKeyedArray($state['maxRow']), $columns) 
                 : null,
             default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),

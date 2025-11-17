@@ -603,5 +603,95 @@ class LookupResolverTest extends TestCase
         // Cleanup
         unlink($csvPath);
     }
+
+    #[Test]
+    public function it_throws_exception_for_unknown_aggregate(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filters: [new ExactFilter('name', new StaticSource('Alice'))],
+            columns: 'age',
+            aggregate: 'unknown_aggregate',
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('Unknown aggregate', $result->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function it_returns_none_for_avg_when_count_is_zero(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filters: [new ExactFilter('name', new StaticSource('NonExistentPerson'))],
+            columns: 'age',
+            aggregate: 'avg',
+            aggregateColumn: 'age',
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isOk());
+        $this->assertTrue($result->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function it_returns_none_for_sum_when_no_matches(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            delimiter: ',',
+            filters: [new ExactFilter('name', new StaticSource('NonExistentPerson'))],
+            columns: 'age',
+            aggregate: 'sum',
+            aggregateColumn: 'age',
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isOk());
+        $this->assertTrue($result->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function it_returns_zero_for_sum_when_all_values_are_zero(): void
+    {
+        // Create a CSV file with zero values
+        $tempFile = tempnam(sys_get_temp_dir(), 'test');
+        if ($tempFile === false) {
+            $this->fail('Failed to create temp file');
+        }
+        
+        $handle = fopen($tempFile, 'w');
+        if ($handle === false) {
+            $this->fail('Failed to open temp file');
+        }
+        
+        fputcsv($handle, ['name', 'value'], escape: '\\');
+        fputcsv($handle, ['Item1', '0'], escape: '\\');
+        fputcsv($handle, ['Item2', '0'], escape: '\\');
+        fclose($handle);
+
+        $source = new LookupSource(
+            filePath: $tempFile,
+            delimiter: ',',
+            filters: [new ExactFilter('name', new StaticSource('Item1'))],
+            columns: 'value',
+            aggregate: 'sum',
+            aggregateColumn: 'value',
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        unlink($tempFile);
+
+        $this->assertTrue($result->isOk());
+        $this->assertTrue($result->unwrap()->isSome());
+        $this->assertEquals(0, $result->unwrap()->unwrap());
+    }
 }
 
