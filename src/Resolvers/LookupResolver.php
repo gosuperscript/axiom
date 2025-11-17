@@ -35,7 +35,7 @@ final readonly class LookupResolver implements Resolver
     {
         try {
             // Read and parse the CSV/TSV file
-            $reader = Reader::createFromPath($source->filePath);
+            $reader = Reader::from($source->filePath);
             $reader->setDelimiter($source->delimiter);
             
             if ($source->hasHeader) {

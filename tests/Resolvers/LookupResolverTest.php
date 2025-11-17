@@ -323,10 +323,10 @@ class LookupResolverTest extends TestCase
         // Create a large CSV file for testing streaming
         $largeCsvPath = $this->getFixturePath('large_test.csv');
         $handle = fopen($largeCsvPath, 'w');
-        fputcsv($handle, ['id', 'value']);
+        fputcsv($handle, ['id', 'value'], escape: '\\');
         
         for ($i = 1; $i <= 1000; $i++) {
-            fputcsv($handle, [$i, "value_{$i}"]);
+            fputcsv($handle, [$i, "value_{$i}"], escape: '\\');
         }
         fclose($handle);
 

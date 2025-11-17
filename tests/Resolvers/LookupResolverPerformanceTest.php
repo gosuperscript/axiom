@@ -309,7 +309,7 @@ class LookupResolverPerformanceTest extends TestCase
         $handle = fopen($path, 'w');
         
         // Write header
-        fputcsv($handle, ['id', 'name', 'category', 'price', 'stock']);
+        fputcsv($handle, ['id', 'name', 'category', 'price', 'stock'], escape: '\\');
         
         $categories = ['Electronics', 'Books', 'Clothing', 'Food', 'Toys'];
         
@@ -325,7 +325,7 @@ class LookupResolverPerformanceTest extends TestCase
                 $category,
                 $price,
                 $stock,
-            ]);
+            ], escape: '\\');
         }
         
         fclose($handle);
