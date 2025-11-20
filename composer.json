@@ -9,7 +9,7 @@
         "ext-intl": "*",
         "azjezz/psl": "^3.2 || ^4.0",
         "brick/math": "^0.12.0 || ^0.13.0",
-        "gosuperscript/monads": "dev-main",
+        "gosuperscript/monads": "^1.0.0",
         "illuminate/container": "^11.0 || ^12.0",
         "illuminate/support": "^11.0 || ^12.0",
         "sebastian/exporter": "^6.0 || ^7.0"
