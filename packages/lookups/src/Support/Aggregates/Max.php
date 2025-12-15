@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers\LookupResolver;
+namespace Superscript\Lookups\Support\Aggregates;
 
 use RuntimeException;
+use Superscript\Lookups\CsvRecord;
 
-final readonly class MinAggregateState implements AggregateState
+final readonly class Max implements Aggregate
 {
     /**
-     * @param mixed $minValue
+     * @param mixed $maxValue
      */
     private function __construct(
-        private ?CsvRecord $minRecord,
-        private mixed $minValue,
+        private ?CsvRecord $maxRecord,
+        private mixed $maxValue,
     ) {}
 
     public static function initial(): self
@@ -24,12 +25,12 @@ final readonly class MinAggregateState implements AggregateState
     public function process(CsvRecord $record, string|int|null $aggregateColumn): self
     {
         if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'min' aggregate");
+            throw new RuntimeException("aggregateColumn is required when using 'max' aggregate");
         }
 
         $value = $record->get($aggregateColumn);
         
-        if ($value !== null && ($this->minValue === null || $value < $this->minValue)) {
+        if ($value !== null && ($this->maxValue === null || $value > $this->maxValue)) {
             return new self($record, $value);
         }
         
@@ -38,7 +39,7 @@ final readonly class MinAggregateState implements AggregateState
 
     public function finalize(array|string|int $columns): mixed
     {
-        return $this->minRecord?->extract($columns);
+        return $this->maxRecord?->extract($columns);
     }
 
     public function canEarlyExit(): bool

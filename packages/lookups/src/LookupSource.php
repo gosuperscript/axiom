@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Sources;
+namespace Superscript\Lookups;
 
+use Superscript\Lookups\Support\Filters\ExactFilter;
+use Superscript\Lookups\Support\Filters\RangeFilter;
 use Superscript\Schema\Source;
 
 /**
@@ -19,18 +21,10 @@ use Superscript\Schema\Source;
  */
 final readonly class LookupSource implements Source
 {
-    /**
-     * @param string $filePath
-     * @param string $delimiter
-     * @param array<ExactFilter|RangeFilter> $filters
-     * @param array<string|int>|string|int $columns
-     * @param string $aggregate
-     * @param string|int|null $aggregateColumn
-     * @param bool $hasHeader
-     */
     public function __construct(
         public string $filePath,
         public string $delimiter = ',',
+        /** @var array<ExactFilter|RangeFilter> $filters */
         public array $filters = [],
         public array|string|int $columns = [],
         public string $aggregate = 'first',

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers;
+namespace Superscript\Lookups\Tests;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Lookups\LookupResolver;
+use Superscript\Lookups\LookupSource;
+use Superscript\Lookups\Support\Filters\ExactFilter;
 use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\LookupResolver;
 use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Sources\ExactFilter;
-use Superscript\Schema\Sources\LookupSource;
 use Superscript\Schema\Sources\StaticSource;
 
 #[CoversNothing]

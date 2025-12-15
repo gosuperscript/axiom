@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Benchmarks;
 
-use Illuminate\Container\Container;
 use PhpBench\Attributes\{BeforeMethods, Groups, Iterations, Revs, Warmup};
-use Superscript\Schema\Resolvers\{DelegatingResolver, LookupResolver, StaticResolver};
-use Superscript\Schema\Sources\{ExactFilter, LookupSource, RangeFilter, StaticSource};
+use Superscript\Lookups\{DelegatingResolver, StaticResolver, Superscript\Lookups\Aggregates};
+use Superscript\Lookups\Support\Filters\{ExactFilter, LookupSource, RangeFilter, StaticSource};
 use Superscript\Schema\SymbolRegistry;
 
 /**

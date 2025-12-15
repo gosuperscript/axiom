@@ -8,14 +8,12 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\Resolver;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\ValueDefinition;
-use Superscript\Schema\Types\NumberType;
-use Superscript\Schema\Types\StringType;
-use Superscript\Schema\Resolvers\ValueResolver;
+use Superscript\LookupResolver\Support\Filters\ValueDefinition;
+use Superscript\Lookups\Resolver;
+use Superscript\Lookups\ValueResolver;
 use Superscript\Monads\Result\Result;
-
+use Superscript\Schema\Source;
+use Superscript\Schema\Types\StringType;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 

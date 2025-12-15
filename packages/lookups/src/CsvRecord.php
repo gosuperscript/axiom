@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers\LookupResolver;
+namespace Superscript\Lookups;
 
 /**
  * Value object representing a single CSV record with type-safe accessors

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
+use Superscript\LookupResolver\Support\Filters\InfixExpression;
+use Superscript\Monads\Option\Option;
+use Superscript\Monads\Result\Result;
 use Superscript\Schema\Operators\DefaultOverloader;
 use Superscript\Schema\Operators\OperatorOverloader;
 use Superscript\Schema\Operators\OverloaderManager;
 use Superscript\Schema\Source;
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Monads\Option\Option;
-use Superscript\Monads\Result\Result;
 
 /**
  * @implements Resolver<InfixExpression>

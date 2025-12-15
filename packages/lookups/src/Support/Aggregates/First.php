@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers\LookupResolver;
+namespace Superscript\Lookups\Support\Aggregates;
 
-final readonly class LastAggregateState implements AggregateState
+
+use Superscript\Lookups\CsvRecord;
+
+final readonly class First implements Aggregate
 {
     private function __construct(
         private ?CsvRecord $record,
@@ -17,7 +20,11 @@ final readonly class LastAggregateState implements AggregateState
 
     public function process(CsvRecord $record, string|int|null $aggregateColumn): self
     {
-        // Always keep the latest record
+        // Keep the first record, ignore subsequent ones
+        if ($this->record !== null) {
+            return $this;
+        }
+        
         return new self($record);
     }
 
@@ -28,6 +35,6 @@ final readonly class LastAggregateState implements AggregateState
 
     public function canEarlyExit(): bool
     {
-        return false;
+        return $this->record !== null;
     }
 }

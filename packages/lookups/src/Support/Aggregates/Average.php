@@ -2,31 +2,32 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers\LookupResolver;
+namespace Superscript\Lookups\Support\Aggregates;
 
 use RuntimeException;
+use Superscript\Lookups\CsvRecord;
 
-final readonly class SumAggregateState implements AggregateState
+final readonly class Average implements Aggregate
 {
     private function __construct(
         private float $sum,
-        private bool $hasValues,
+        private int $count,
     ) {}
 
     public static function initial(): self
     {
-        return new self(0.0, false);
+        return new self(0.0, 0);
     }
 
     public function process(CsvRecord $record, string|int|null $aggregateColumn): self
     {
         if ($aggregateColumn === null) {
-            throw new RuntimeException("aggregateColumn is required when using 'sum' aggregate");
+            throw new RuntimeException("aggregateColumn is required when using 'avg' aggregate");
         }
 
         $value = $record->getNumeric($aggregateColumn);
         if ($value !== null) {
-            return new self($this->sum + $value, true);
+            return new self($this->sum + $value, $this->count + 1);
         }
         
         return $this;
@@ -34,7 +35,11 @@ final readonly class SumAggregateState implements AggregateState
 
     public function finalize(array|string|int $columns): mixed
     {
-        return $this->hasValues ? $this->sum : null;
+        if ($this->count === 0) {
+            return null;
+        }
+        
+        return $this->sum / $this->count;
     }
 
     public function canEarlyExit(): bool

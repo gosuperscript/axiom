@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\SymbolSource;
-use Superscript\Schema\SymbolRegistry;
+use Superscript\LookupResolver\Support\Filters\SymbolSource;
 use Superscript\Monads\Result\Result;
+use Superscript\Schema\Source;
+use Superscript\Schema\SymbolRegistry;
 
 final readonly class SymbolResolver implements Resolver
 {

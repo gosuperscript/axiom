@@ -3,10 +3,10 @@
 namespace Superscript\Schema\Resolvers;
 
 use InvalidArgumentException;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\UnaryExpression;
+use Superscript\LookupResolver\Support\Filters\UnaryExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
+use Superscript\Schema\Source;
 use function Psl\Type\num;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;

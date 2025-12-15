@@ -2,18 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers;
+namespace Superscript\Lookups\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Lookups\CsvRecord;
+use Superscript\Lookups\LookupResolver;
+use Superscript\Lookups\LookupSource;
+use Superscript\Lookups\Support\Aggregates;
+use Superscript\Lookups\Support\Filters\ExactFilter;
+use Superscript\Lookups\Support\Filters\RangeFilter;
 use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\LookupResolver;
 use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Sources\ExactFilter;
-use Superscript\Schema\Sources\LookupSource;
-use Superscript\Schema\Sources\RangeFilter;
 use Superscript\Schema\Sources\StaticSource;
 
 #[CoversClass(LookupResolver::class)]
@@ -23,14 +25,14 @@ use Superscript\Schema\Sources\StaticSource;
 #[UsesClass(DelegatingResolver::class)]
 #[UsesClass(StaticResolver::class)]
 #[UsesClass(StaticSource::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\CsvRecord::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\FirstAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\LastAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\CountAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\SumAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\AvgAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\MinAggregateState::class)]
-#[UsesClass(\Superscript\Schema\Resolvers\LookupResolver\MaxAggregateState::class)]
+#[UsesClass(CsvRecord::class)]
+#[UsesClass(Aggregates\First::class)]
+#[UsesClass(Aggregates\Last::class)]
+#[UsesClass(Aggregates\Count::class)]
+#[UsesClass(Aggregates\Sum::class)]
+#[UsesClass(Aggregates\Average::class)]
+#[UsesClass(Aggregates\Min::class)]
+#[UsesClass(Aggregates\Max::class)]
 class LookupResolverTest extends TestCase
 {
     private DelegatingResolver $resolver;
@@ -45,7 +47,7 @@ class LookupResolverTest extends TestCase
 
     private function getFixturePath(string $filename): string
     {
-        return __DIR__ . '/Fixtures/Lookup/' . $filename;
+        return __DIR__.'/Fixtures/'.$filename;
     }
 
     #[Test]
@@ -59,7 +61,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('30', $result->unwrap()->unwrap());
     }
@@ -75,7 +77,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $expected = [
             'name' => 'Bob',
@@ -96,7 +98,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('999.99', $result->unwrap()->unwrap());
     }
@@ -115,7 +117,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('Alice', $result->unwrap()->unwrap());
     }
@@ -132,7 +134,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('Alice', $result->unwrap()->unwrap());
     }
@@ -149,7 +151,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('Charlie', $result->unwrap()->unwrap());
     }
@@ -167,7 +169,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('75000', $result->unwrap()->unwrap());
     }
@@ -185,7 +187,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('85000', $result->unwrap()->unwrap());
     }
@@ -201,7 +203,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertTrue($result->unwrap()->isNone());
     }
@@ -217,7 +219,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $row = $result->unwrap()->unwrap();
         $this->assertIsArray($row);
@@ -238,7 +240,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('Bob', $result->unwrap()->unwrap());
     }
@@ -262,7 +264,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $matches = $result->unwrap()->unwrap();
         $this->assertIsArray($matches);
@@ -281,7 +283,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -298,7 +300,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $data = $result->unwrap()->unwrap();
         $this->assertEquals('Mouse', $data['product']);
@@ -318,7 +320,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $data = $result->unwrap()->unwrap();
         $this->assertEquals('Laptop', $data['product']);
@@ -332,7 +334,7 @@ class LookupResolverTest extends TestCase
         $largeCsvPath = $this->getFixturePath('large_test.csv');
         $handle = fopen($largeCsvPath, 'w');
         fputcsv($handle, ['id', 'value'], escape: '\\');
-        
+
         for ($i = 1; $i <= 1000; $i++) {
             fputcsv($handle, [$i, "value_{$i}"], escape: '\\');
         }
@@ -346,7 +348,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('value_500', $result->unwrap()->unwrap());
 
@@ -372,7 +374,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertTrue($result->unwrap()->isNone());
     }
@@ -388,7 +390,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         // Should return first row when no filters
         $this->assertEquals('Alice', $result->unwrap()->unwrap());
@@ -406,7 +408,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -422,7 +424,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -438,7 +440,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -453,7 +455,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals(2, $result->unwrap()->unwrap()); // Alice and Charlie are in NYC
     }
@@ -470,7 +472,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals(160000, $result->unwrap()->unwrap()); // 75000 + 85000
     }
@@ -487,7 +489,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals(80000.0, $result->unwrap()->unwrap()); // (75000 + 85000) / 2
     }
@@ -503,7 +505,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -518,7 +520,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isErr());
     }
 
@@ -533,7 +535,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('15', $result->unwrap()->unwrap()); // 150k falls in 100k-200k band
     }
@@ -549,7 +551,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('10', $result->unwrap()->unwrap()); // 50k falls in 0-100k band
     }
@@ -565,7 +567,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('25', $result->unwrap()->unwrap()); // 500k falls in 300k+ band
     }
@@ -581,7 +583,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('15', $result->unwrap()->unwrap()); // 100k falls in 100k-200k band (inclusive)
     }
@@ -604,7 +606,7 @@ class LookupResolverTest extends TestCase
         );
 
         $result = $this->resolver->resolve($source);
-        
+
         $this->assertTrue($result->isOk());
         $this->assertEquals('10', $result->unwrap()->unwrap()); // North region, 150 in 100-200 band
 
@@ -673,12 +675,12 @@ class LookupResolverTest extends TestCase
         if ($tempFile === false) {
             $this->fail('Failed to create temp file');
         }
-        
+
         $handle = fopen($tempFile, 'w');
         if ($handle === false) {
             $this->fail('Failed to open temp file');
         }
-        
+
         fputcsv($handle, ['name', 'value'], escape: '\\');
         fputcsv($handle, ['Item1', '0'], escape: '\\');
         fputcsv($handle, ['Item2', '0'], escape: '\\');
@@ -702,4 +704,3 @@ class LookupResolverTest extends TestCase
         $this->assertEquals(0, $result->unwrap()->unwrap());
     }
 }
-

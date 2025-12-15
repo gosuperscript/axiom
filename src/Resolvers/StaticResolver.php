@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\StaticSource;
+use Superscript\LookupResolver\Support\Filters\StaticSource;
 use Superscript\Monads\Result\Result;
-
+use Superscript\Schema\Source;
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;

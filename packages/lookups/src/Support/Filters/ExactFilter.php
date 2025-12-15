@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Sources;
+namespace Superscript\Lookups\Support\Filters;
 
 use Superscript\Schema\Source;
 

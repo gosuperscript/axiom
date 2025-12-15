@@ -16,13 +16,13 @@ A high-performance PHP library for querying CSV/TSV files with streaming, dynami
 ## Installation
 
 ```bash
-composer require gosuperscript/lookup-resolver
+composer require gosuperscript/lookups
 ```
 
 ## Quick Start
 
 ```php
-use Superscript\LookupResolver\{LookupSource, ExactFilter, StaticSource};
+use Superscript\Lookups\{LookupSource, ExactFilter, StaticSource};
 
 // Simple lookup
 $lookup = new LookupSource(

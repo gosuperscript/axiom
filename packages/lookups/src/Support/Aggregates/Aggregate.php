@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers\LookupResolver;
+namespace Superscript\Lookups\Support\Aggregates;
+
+use Superscript\Lookups\CsvRecord;
 
 /**
  * Base interface for aggregate state value objects
  */
-interface AggregateState
+interface Aggregate
 {
     /**
      * Process a matching record
@@ -16,7 +18,8 @@ interface AggregateState
 
     /**
      * Extract the final result
-     * @param array<string|int>|string|int $columns
+     *
+     * @param  array<string|int>|string|int  $columns
      */
     public function finalize(array|string|int $columns): mixed;
 

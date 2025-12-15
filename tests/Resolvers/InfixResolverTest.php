@@ -8,14 +8,13 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\LookupResolver\Support\Filters\InfixExpression;
+use Superscript\LookupResolver\Support\Filters\StaticSource;
+use Superscript\Lookups\InfixResolver;
+use Superscript\Lookups\StaticResolver;
 use Superscript\Schema\Operators\BinaryOverloader;
 use Superscript\Schema\Operators\DefaultOverloader;
 use Superscript\Schema\Operators\OverloaderManager;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Schema\Sources\StaticSource;
 
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(InfixResolver::class)]
