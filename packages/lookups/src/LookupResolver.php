@@ -7,6 +7,7 @@ namespace Superscript\Lookups;
 use League\Csv\Reader;
 use Superscript\Lookups\Support\Aggregates\Aggregate;
 use Superscript\Lookups\Support\Aggregates\AggregateEnum;
+use Superscript\Lookups\Support\Aggregates\All;
 use Superscript\Lookups\Support\Aggregates\Average;
 use Superscript\Lookups\Support\Aggregates\Count;
 use Superscript\Lookups\Support\Aggregates\First;
@@ -75,7 +76,7 @@ final readonly class LookupResolver implements Resolver
             // Finalize and extract result from aggregate state
             $result = $aggregateState->finalize($source->columns);
 
-            if ($result === null) {
+            if ($result === null || (is_array($result) && empty($result))) {
                 return Ok(None());
             }
 
@@ -98,6 +99,7 @@ final readonly class LookupResolver implements Resolver
             AggregateEnum::AVG => Average::initial(),
             AggregateEnum::MIN => Min::initial(),
             AggregateEnum::MAX => Max::initial(),
+            AggregateEnum::ALL => All::initial(),
         };
     }
 

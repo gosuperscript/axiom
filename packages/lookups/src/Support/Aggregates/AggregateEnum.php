@@ -13,6 +13,7 @@ enum AggregateEnum: string
     case SUM = 'sum';
     case MIN = 'min';
     case MAX = 'max';
+    case ALL = 'all';
 
     /**
      * @return list<AggregateEnum>

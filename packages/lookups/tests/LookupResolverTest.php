@@ -32,6 +32,7 @@ use Superscript\Schema\Sources\StaticSource;
 #[UsesClass(Aggregates\Average::class)]
 #[UsesClass(Aggregates\Min::class)]
 #[UsesClass(Aggregates\Max::class)]
+#[UsesClass(Aggregates\All::class)]
 class LookupResolverTest extends TestCase
 {
     private DelegatingResolver $resolver;
@@ -679,5 +680,48 @@ class LookupResolverTest extends TestCase
         $this->assertTrue($result->isOk());
         $this->assertTrue($result->unwrap()->isSome());
         $this->assertEquals(0, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_can_retrieve_all_results_using_in_operator(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            filters: [new ValueFilter(
+                value: new StaticSource(['Bob', 'Charlie', 'Eve']),
+                column: 'name',
+                operator: 'in'
+            )],
+            columns: ['salary'],
+            aggregate: AggregateEnum::ALL,
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isOk());
+        $this->assertEquals([
+            '65000',
+            '85000',
+            '80000',
+        ], $result->unwrap()->unwrap()); // 75000 + 85000
+    }
+
+    #[Test]
+    public function it_returns_none_when_no_results_are_found_for_all_aggregate(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            filters: [new ValueFilter(
+                value: new StaticSource('Fawaz'),
+                column: 'name',
+            )],
+            columns: ['salary'],
+            aggregate: AggregateEnum::ALL,
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isOk());
+        $this->assertTrue($result->unwrap()->isNone());
     }
 }
