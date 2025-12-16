@@ -14,8 +14,7 @@ use Superscript\Lookups\Support\Aggregates\Last;
 use Superscript\Lookups\Support\Aggregates\Max;
 use Superscript\Lookups\Support\Aggregates\Min;
 use Superscript\Lookups\Support\Aggregates\Sum;
-use Superscript\Lookups\Support\Filters\RangeFilter;
-use Superscript\Lookups\Support\Filters\ValueFilter;
+use Superscript\Lookups\Support\Filters\Filter;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
@@ -52,35 +51,6 @@ final readonly class LookupResolver implements Resolver
                 $reader->setHeaderOffset(0);
             }
 
-            // Resolve all filters
-            $resolvedExactFilters = [];
-            $resolvedRangeFilters = [];
-
-            foreach ($source->filters as $filter) {
-                $result = $this->resolver->resolve($filter->value);
-
-                if ($result->isErr()) {
-                    return $result;
-                }
-
-                $option = $result->unwrap();
-                if ($option->isNone()) {
-                    return Ok(None());
-                }
-
-                $resolvedValue = $option->unwrap();
-
-                if ($filter instanceof ValueFilter) {
-                    $resolvedExactFilters[$filter->column] = $resolvedValue;
-                } elseif ($filter instanceof RangeFilter) {
-                    $resolvedRangeFilters[] = [
-                        'value' => $resolvedValue,
-                        'minColumn' => $filter->minColumn,
-                        'maxColumn' => $filter->maxColumn,
-                    ];
-                }
-            }
-
             // Stream through records with memory-efficient processing
             $records = $source->hasHeader ? $reader->getRecords() : $reader->getRecords([]);
 
@@ -91,7 +61,7 @@ final readonly class LookupResolver implements Resolver
                 /** @var array<string, mixed> $record */
                 $csvRecord = CsvRecord::from($record);
 
-                if ($this->matchesExactFilters($csvRecord, $resolvedExactFilters) && $this->matchesRangeFilters($csvRecord, $resolvedRangeFilters)) {
+                if ($this->matchesFilters($csvRecord, $source->filters)) {
                     // Process record immediately with immutable value object
                     $aggregateState = $aggregateState->process($csvRecord, $source->aggregateColumn);
 
@@ -132,51 +102,10 @@ final readonly class LookupResolver implements Resolver
     }
 
     /**
-     * @param  array<string|int, mixed>  $filters
+     * @param  list<Filter>  $filters
      */
-    private function matchesExactFilters(CsvRecord $record, array $filters): bool
+    private function matchesFilters(CsvRecord $record, array $filters): bool
     {
-        foreach ($filters as $column => $value) {
-            $recordValue = $record->getString($column);
-            $compareValue = is_scalar($value) ? (string) $value : null;
-
-            if ($recordValue === null || $compareValue === null || $recordValue !== $compareValue) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param  array<array{value: mixed, minColumn: string|int, maxColumn: string|int}>  $rangeFilters
-     */
-    private function matchesRangeFilters(CsvRecord $record, array $rangeFilters): bool
-    {
-        return all(
-            $rangeFilters,
-            function (array $rangeConfig) use ($record): bool {
-                $value = $rangeConfig['value'];
-                $minColumn = $rangeConfig['minColumn'];
-                $maxColumn = $rangeConfig['maxColumn'];
-
-                if (! $record->has($minColumn) || ! $record->has($maxColumn)) {
-                    return false;
-                }
-
-                $minValue = $record->get($minColumn);
-                $maxValue = $record->get($maxColumn);
-
-                // Check if value falls within the range [min, max)
-                // Using min <= value < max for banding scenarios
-                // This prevents overlap at boundaries (e.g., 100k matches 100k-200k, not 0-100k)
-                if (is_numeric($value) && is_numeric($minValue) && is_numeric($maxValue)) {
-                    return $value >= $minValue && $value < $maxValue;
-                }
-
-                // String comparison fallback
-                return $value >= $minValue && $value < $maxValue;
-            },
-        );
+        return all($filters, fn (Filter $filter) => $filter->matches($record, $this->resolver->resolve($filter->value)->unwrapOr(false)->unwrapOr(false)));
     }
 }

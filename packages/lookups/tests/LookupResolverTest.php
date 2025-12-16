@@ -68,6 +68,26 @@ class LookupResolverTest extends TestCase
     }
 
     #[Test]
+    public function it_can_compare_lookup_values_using_filter_operator(): void
+    {
+        $source = new LookupSource(
+            filePath: $this->getFixturePath('users.csv'),
+            filters: [new ValueFilter(
+                value: new StaticSource('Charlie'),
+                column: 'name',
+                operator: '!='
+            )],
+            columns: ['age'],
+            aggregate: AggregateEnum::MAX,
+        );
+
+        $result = $this->resolver->resolve($source);
+
+        $this->assertTrue($result->isOk());
+        $this->assertEquals(32, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function it_can_lookup_multiple_columns_from_csv(): void
     {
         $source = new LookupSource(
