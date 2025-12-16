@@ -9,7 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Psl\Type\Exception\AssertException;
-use Superscript\LookupResolver\Support\Filters\StaticSource;
+use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\SymbolRegistry;
 
 #[CoversClass(SymbolRegistry::class)]

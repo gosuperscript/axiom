@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
-use Superscript\LookupResolver\Support\Filters\ValueDefinition;
+use Superscript\Schema\Sources\ValueDefinition;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\Source;

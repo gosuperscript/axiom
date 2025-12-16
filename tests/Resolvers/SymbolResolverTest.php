@@ -8,10 +8,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\LookupResolver\Support\Filters\StaticSource;
-use Superscript\LookupResolver\Support\Filters\SymbolSource;
-use Superscript\Lookups\StaticResolver;
-use Superscript\Lookups\SymbolResolver;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Sources\SymbolSource;
+use Superscript\Schema\Resolvers\StaticResolver;
+use Superscript\Schema\Resolvers\SymbolResolver;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\SymbolRegistry;
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
-use Superscript\LookupResolver\Support\Filters\StaticSource;
+use Superscript\Schema\Sources\StaticSource;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\Source;
 use function Superscript\Monads\Option\None;

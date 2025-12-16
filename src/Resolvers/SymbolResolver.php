@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Schema\Resolvers;
 
-use Superscript\LookupResolver\Support\Filters\SymbolSource;
+use Superscript\Schema\Sources\SymbolSource;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\Source;
 use Superscript\Schema\SymbolRegistry;

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Lookups\Tests\Fixtures;
+namespace Superscript\Schema\Tests\Resolvers\Fixtures;
 
-use Superscript\Lookups\Resolver;
+use Superscript\Schema\Resolvers\Resolver;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\Source;
 use function Superscript\Monads\Option\Some;

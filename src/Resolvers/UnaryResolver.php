@@ -3,7 +3,7 @@
 namespace Superscript\Schema\Resolvers;
 
 use InvalidArgumentException;
-use Superscript\LookupResolver\Support\Filters\UnaryExpression;
+use Superscript\Schema\Sources\UnaryExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Superscript\Schema\Source;
