@@ -6,13 +6,11 @@ namespace Superscript\Lookups\Support\Filters;
 
 use Superscript\Schema\Source;
 
-/**
- * Represents an exact match filter
- */
-final readonly class ExactFilter
+final readonly class ValueFilter implements Filter
 {
     public function __construct(
-        public string|int $column,
         public Source $value,
+        public string|int|null $column = null,
+        public string $operator = '=',
     ) {}
 }

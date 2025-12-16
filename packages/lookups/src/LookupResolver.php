@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Lookups;
 
 use League\Csv\Reader;
-use RuntimeException;
 use Superscript\Lookups\Support\Aggregates\Aggregate;
+use Superscript\Lookups\Support\Aggregates\AggregateEnum;
 use Superscript\Lookups\Support\Aggregates\Average;
 use Superscript\Lookups\Support\Aggregates\Count;
 use Superscript\Lookups\Support\Aggregates\First;
@@ -14,8 +14,8 @@ use Superscript\Lookups\Support\Aggregates\Last;
 use Superscript\Lookups\Support\Aggregates\Max;
 use Superscript\Lookups\Support\Aggregates\Min;
 use Superscript\Lookups\Support\Aggregates\Sum;
-use Superscript\Lookups\Support\Filters\ExactFilter;
 use Superscript\Lookups\Support\Filters\RangeFilter;
+use Superscript\Lookups\Support\Filters\ValueFilter;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
@@ -23,6 +23,7 @@ use Superscript\Schema\Resolvers\Resolver;
 use Superscript\Schema\Source;
 use Throwable;
 
+use function Psl\Iter\all;
 use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
@@ -69,7 +70,7 @@ final readonly class LookupResolver implements Resolver
 
                 $resolvedValue = $option->unwrap();
 
-                if ($filter instanceof ExactFilter) {
+                if ($filter instanceof ValueFilter) {
                     $resolvedExactFilters[$filter->column] = $resolvedValue;
                 } elseif ($filter instanceof RangeFilter) {
                     $resolvedRangeFilters[] = [
@@ -117,17 +118,16 @@ final readonly class LookupResolver implements Resolver
     /**
      * Create appropriate aggregate state value object
      */
-    private function createAggregateState(string $aggregate): Aggregate
+    private function createAggregateState(AggregateEnum $aggregate): Aggregate
     {
         return match ($aggregate) {
-            'first' => First::initial(),
-            'last' => Last::initial(),
-            'count' => Count::initial(),
-            'sum' => Sum::initial(),
-            'avg' => Average::initial(),
-            'min' => Min::initial(),
-            'max' => Max::initial(),
-            default => throw new RuntimeException("Unknown aggregate: {$aggregate}"),
+            AggregateEnum::FIRST => First::initial(),
+            AggregateEnum::LAST => Last::initial(),
+            AggregateEnum::COUNT => Count::initial(),
+            AggregateEnum::SUM => Sum::initial(),
+            AggregateEnum::AVG => Average::initial(),
+            AggregateEnum::MIN => Min::initial(),
+            AggregateEnum::MAX => Max::initial(),
         };
     }
 
@@ -153,33 +153,30 @@ final readonly class LookupResolver implements Resolver
      */
     private function matchesRangeFilters(CsvRecord $record, array $rangeFilters): bool
     {
-        foreach ($rangeFilters as $rangeConfig) {
-            $value = $rangeConfig['value'];
-            $minColumn = $rangeConfig['minColumn'];
-            $maxColumn = $rangeConfig['maxColumn'];
+        return all(
+            $rangeFilters,
+            function (array $rangeConfig) use ($record): bool {
+                $value = $rangeConfig['value'];
+                $minColumn = $rangeConfig['minColumn'];
+                $maxColumn = $rangeConfig['maxColumn'];
 
-            if (! $record->has($minColumn) || ! $record->has($maxColumn)) {
-                return false;
-            }
-
-            $minValue = $record->get($minColumn);
-            $maxValue = $record->get($maxColumn);
-
-            // Check if value falls within the range [min, max)
-            // Using min <= value < max for banding scenarios
-            // This prevents overlap at boundaries (e.g., 100k matches 100k-200k, not 0-100k)
-            if (is_numeric($value) && is_numeric($minValue) && is_numeric($maxValue)) {
-                if ($value < $minValue || $value >= $maxValue) {
+                if (! $record->has($minColumn) || ! $record->has($maxColumn)) {
                     return false;
                 }
-            } else {
+
+                $minValue = $record->get($minColumn);
+                $maxValue = $record->get($maxColumn);
+
+                // Check if value falls within the range [min, max)
+                // Using min <= value < max for banding scenarios
+                // This prevents overlap at boundaries (e.g., 100k matches 100k-200k, not 0-100k)
+                if (is_numeric($value) && is_numeric($minValue) && is_numeric($maxValue)) {
+                    return $value >= $minValue && $value < $maxValue;
+                }
+
                 // String comparison fallback
-                if ($value < $minValue || $value >= $maxValue) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+                return $value >= $minValue && $value < $maxValue;
+            },
+        );
     }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Lookups;
 
+use function Psl\Iter\first;
+
 /**
  * Value object representing a single CSV record with type-safe accessors
  */
@@ -80,6 +82,10 @@ final readonly class CsvRecord
         
         if (is_string($columns) || is_int($columns)) {
             return $this->data[$columns] ?? null;
+        }
+
+        if (count($columns) === 1) {
+            return $this->data[first($columns)] ?? null;
         }
         
         $result = [];
