@@ -2,7 +2,7 @@
     "name": "gosuperscript/schema",
     "description": "A PHP library for data transformation, type validation, and expression evaluation.",
     "type": "library",
-    "license": "proprietary",
+    "license": "MIT",
     "keywords": ["php", "schema", "validation", "coercion", "types"],
     "require": {
         "php": "^8.4",
