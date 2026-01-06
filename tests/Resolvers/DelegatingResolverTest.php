@@ -8,13 +8,13 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
 use Superscript\Schema\Sources\StaticSource;
 use Superscript\Schema\Sources\ValueDefinition;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\StaticResolver;
 use Superscript\Schema\Tests\Resolvers\Fixtures\Dependency;
 use Superscript\Schema\Tests\Resolvers\Fixtures\ResolverWithDependency;
+use Superscript\Schema\Resolvers\ValueResolver;
 use Superscript\Schema\Types\NumberType;
 
 #[CoversClass(DelegatingResolver::class)]

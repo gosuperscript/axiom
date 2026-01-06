@@ -7,9 +7,8 @@ namespace Superscript\Schema\Tests\Resolvers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Source;
 use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Resolvers\StaticResolver;
 
 #[CoversClass(StaticResolver::class)]
 #[CoversClass(StaticSource::class)]

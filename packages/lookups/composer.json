@@ -1,19 +1,14 @@
 {
-    "name": "gosuperscript/schema",
-    "description": "A PHP library for data transformation, type validation, and expression evaluation.",
+    "name": "gosuperscript/lookups",
+    "description": "A PHP library for querying CSV/TSV files with streaming, dynamic filtering, aggregate functions, and range-based banding.",
     "type": "library",
-    "license": "MIT",
-    "keywords": ["php", "schema", "validation", "coercion", "types"],
+    "license": "proprietary",
+    "keywords": ["php", "csv", "tsv", "lookup", "aggregation", "streaming", "filtering"],
     "require": {
         "php": "^8.4",
-        "ext-intl": "*",
-        "azjezz/psl": "^3.2 || ^4.0",
-        "brick/math": "^0.12.0 || ^0.13.0",
-        "gosuperscript/monads": "^1.0.0",
-        "illuminate/container": "^11.0 || ^12.0",
-        "illuminate/support": "^11.0 || ^12.0",
-        "league/csv": "^9.27.0",
-        "sebastian/exporter": "^6.0 || ^7.0"
+        "gosuperscript/monads": "dev-main",
+        "gosuperscript/schema": "dev-main",
+        "league/csv": "^9.27.0"
     },
     "require-dev": {
         "infection/infection": "^0.29.14",
@@ -25,12 +20,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Superscript\\Schema\\": "src/"
+            "Superscript\\Lookups\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Superscript\\Schema\\Tests\\": "tests/"
+            "Superscript\\Lookups\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -55,6 +50,12 @@
             "php": "8.4.0"
         }
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../../../schema"
+        }
+    ],
     "minimum-stability": "dev",
     "prefer-stable": true
 }

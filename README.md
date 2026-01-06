@@ -140,6 +140,143 @@ $registry->get('pi');                           // None (no global 'pi')
 $registry->get('c', 'math');                   // None (no 'c' in math namespace)
 ```
 
+### CSV/TSV Lookups
+
+The `LookupSource` enables powerful data lookups from CSV and TSV files with streaming support for large datasets:
+
+```php
+<?php
+
+use Superscript\Schema\Sources\ExactFilter;
+use Superscript\Schema\Sources\LookupSource;
+use Superscript\Schema\Sources\RangeFilter;
+use Superscript\Schema\Sources\StaticSource;
+use Superscript\Schema\Resolvers\DelegatingResolver;
+use Superscript\Schema\Resolvers\LookupResolver;
+use Superscript\Schema\Resolvers\StaticResolver;
+
+$resolver = new DelegatingResolver([
+    StaticSource::class => StaticResolver::class,
+    LookupSource::class => LookupResolver::class,
+]);
+
+// Basic lookup: Find price by product name using exact match filter
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    delimiter: ',',
+    filters: [new ExactFilter('product', new StaticSource('Laptop'))],
+    columns: 'price',
+);
+$result = $resolver->resolve($lookup);
+$price = $result->unwrap()->unwrap(); // "999.99"
+
+// Multi-column retrieval with exact filter
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    filters: [new ExactFilter('category', new StaticSource('Electronics'))],
+    columns: ['product', 'price', 'stock'],
+    aggregate: 'first', // or 'last', 'min', 'max'
+);
+
+// TSV files with tab delimiter
+$lookup = new LookupSource(
+    filePath: '/path/to/data.tsv',
+    delimiter: "\t",
+    filters: [new ExactFilter('id', new StaticSource('123'))],
+    columns: 'value',
+);
+
+// Multiple filter keys
+$lookup = new LookupSource(
+    filePath: '/path/to/users.csv',
+    filters: [
+        new ExactFilter('city', new StaticSource('NYC')),
+        new ExactFilter('status', new StaticSource('active')),
+    ],
+    columns: ['name', 'email'],
+);
+
+// Dynamic filter values (nested lookups)
+$cityLookup = new LookupSource(
+    filePath: '/path/to/users.csv',
+    filters: [new ExactFilter('user_id', new StaticSource('123'))],
+    columns: 'city',
+);
+$lookup = new LookupSource(
+    filePath: '/path/to/stores.csv',
+    filters: [new ExactFilter('city', $cityLookup)], // Resolves dynamically
+    columns: 'store_name',
+);
+
+// Aggregate functions
+// Row selection aggregates (return row data):
+// 'first' - returns first matching row (default)
+// 'last' - returns last matching row
+// 'min' - returns row with minimum value in aggregateColumn
+// 'max' - returns row with maximum value in aggregateColumn
+//
+// Computational aggregates (return computed values):
+// 'count' - returns count of matching rows
+// 'sum' - returns sum of values in aggregateColumn
+// 'avg' - returns average of values in aggregateColumn
+
+// Find user with highest salary in NYC (returns row data)
+$lookup = new LookupSource(
+    filePath: '/path/to/employees.csv',
+    filters: [new ExactFilter('city', new StaticSource('NYC'))],
+    columns: ['name', 'salary'],
+    aggregate: 'max',
+    aggregateColumn: 'salary',
+);
+
+// Count total employees in NYC (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/employees.csv',
+    filters: [new ExactFilter('city', new StaticSource('NYC'))],
+    aggregate: 'count',
+);
+
+// Calculate total revenue for a region (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/sales.csv',
+    filters: [new ExactFilter('region', new StaticSource('West'))],
+    aggregate: 'sum',
+    aggregateColumn: 'revenue',
+);
+
+// Calculate average price (returns number)
+$lookup = new LookupSource(
+    filePath: '/path/to/products.csv',
+    filters: [new ExactFilter('category', new StaticSource('Electronics'))],
+    aggregate: 'avg',
+    aggregateColumn: 'price',
+);
+
+// Range-based lookup for banding (e.g., premium based on turnover)
+// CSV structure: min_turnover,max_turnover,premium
+//                0,100000,10
+//                100000,200000,15
+//                200000,300000,20
+$lookup = new LookupSource(
+    filePath: '/path/to/premium_bands.csv',
+    filters: [new RangeFilter('min_turnover', 'max_turnover', new StaticSource('150000'))],
+    columns: 'premium',
+);
+// Returns: '15' (150k falls in the 100k-200k band)
+```
+
+**Features:**
+- Efficient streaming for large CSV/TSV files
+- Dynamic filter values using any Source
+- Multiple filtering keys with AND logic
+- Range-based lookups for banding scenarios
+- Single or multiple column retrieval
+- Seven aggregate functions:
+  - Row selection: first, last, min, max
+  - Computational: count, sum, avg
+- Explicit aggregateColumn for operations that need it
+- Optional header row support
+
 ## Core Concepts
 
 ### Types
@@ -207,6 +344,7 @@ Sources represent different ways to provide data:
 - **ValueDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
+- **LookupSource**: CSV/TSV file lookups with filtering and strategies
 
 ### Symbol Registry
 
@@ -243,6 +381,7 @@ Resolvers handle the evaluation of sources:
 - **ValueResolver**: Applies type coercion using the `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
 - **SymbolResolver**: Looks up named symbols
+- **LookupResolver**: Performs lookups in CSV/TSV files with dynamic filtering
 - **DelegatingResolver**: Chains multiple resolvers together
 
 ### Operators
