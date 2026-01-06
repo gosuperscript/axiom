@@ -2,10 +2,6 @@
 
 Thank you for your interest in contributing to the Schema Library! We welcome contributions from the community.
 
-## Code of Conduct
-
-This project adheres to a Code of Conduct. By participating, you are expected to uphold this code. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for details.
-
 ## How Can I Contribute?
 
 ### Reporting Bugs

@@ -386,8 +386,12 @@ This approach ensures:
 
 ## License
 
-Proprietary - See license terms in your agreement.
+This library is open-sourced software licensed under the [MIT license](LICENSE).
 
 ## Contributing
 
-This is a private library. Please follow the established patterns and ensure all tests pass before submitting changes.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
+
+## Security
+
+If you discover any security-related issues, please review our [Security Policy](SECURITY.md) for information on how to responsibly report vulnerabilities.
