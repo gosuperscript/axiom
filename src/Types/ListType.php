@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Types;
+namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
 use Superscript\Monads\Option\Option;
-use Superscript\Schema\Exceptions\TransformValueException;
+use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
 

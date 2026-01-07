@@ -1,10 +1,10 @@
 <?php
 
-namespace Superscript\Schema\Tests\Exceptions;
+namespace Superscript\Axiom\Tests\Exceptions;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
-use Superscript\Schema\Exceptions\TransformValueException;
+use Superscript\Axiom\Exceptions\TransformValueException;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(TransformValueException::class)]

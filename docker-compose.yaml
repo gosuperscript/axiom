@@ -1,6 +1,6 @@
 services:
   php:
-    image: superscript/schema
+    image: superscript/axiom
     build:
       context: .
     volumes:

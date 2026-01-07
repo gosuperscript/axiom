@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers\Fixtures;
+namespace Superscript\Axiom\Tests\Resolvers\Fixtures;
 
-use Superscript\Schema\Resolvers\Resolver;
-use Superscript\Schema\Source;
+use Superscript\Axiom\Resolvers\Resolver;
+use Superscript\Axiom\Source;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;

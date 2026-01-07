@@ -1,10 +1,10 @@
 <?php
 
-namespace Superscript\Schema\Resolvers;
+namespace Superscript\Axiom\Resolvers;
 
 use InvalidArgumentException;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\UnaryExpression;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use function Psl\Type\num;

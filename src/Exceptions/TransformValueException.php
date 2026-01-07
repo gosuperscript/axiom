@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Exceptions;
+namespace Superscript\Axiom\Exceptions;
 
 use RuntimeException;
 use SebastianBergmann\Exporter\Exporter;

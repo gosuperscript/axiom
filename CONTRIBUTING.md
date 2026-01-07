@@ -1,6 +1,6 @@
-# Contributing to Schema Library
+# Contributing to Axiom Library
 
-Thank you for your interest in contributing to the Schema Library! We welcome contributions from the community.
+Thank you for your interest in contributing to the Axiom Library! We welcome contributions from the community.
 
 ## How Can I Contribute?
 
@@ -36,8 +36,8 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/your-username/schema.git
-   cd schema
+   git clone https://github.com/your-username/axiom.git
+   cd axiom
    ```
 
 2. **Install dependencies**
@@ -152,7 +152,7 @@ This runs all three test suites in sequence.
 ```php
 <?php
 
-namespace Superscript\Schema\Tests;
+namespace Superscript\Axiom\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;

@@ -47,4 +47,4 @@ When using this library, we recommend:
 * Validate and sanitize all user input
 * Use type coercion methods appropriately
 
-Thank you for helping keep Schema Library and its users safe!
+Thank you for helping keep Axiom Library and its users safe!

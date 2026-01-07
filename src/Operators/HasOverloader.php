@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Operators;
+namespace Superscript\Axiom\Operators;
 
 use function Psl\Type\mixed_vec;
 

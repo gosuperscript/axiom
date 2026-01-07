@@ -6,15 +6,15 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Operators\BinaryOverloader;
-use Superscript\Schema\Operators\DefaultOverloader;
-use Superscript\Schema\Operators\OverloaderManager;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\UnaryResolver;
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\UnaryExpression;
+use Superscript\Axiom\Operators\BinaryOverloader;
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\UnaryResolver;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\UnaryExpression;
 
 #[CoversClass(UnaryExpression::class)]
 #[CoversClass(UnaryResolver::class)]

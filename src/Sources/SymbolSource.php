@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Sources;
+namespace Superscript\Axiom\Sources;
 
-use Superscript\Schema\Source;
+use Superscript\Axiom\Source;
 
 final readonly class SymbolSource implements Source
 {

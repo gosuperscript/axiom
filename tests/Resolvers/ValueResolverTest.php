@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers;
+namespace Superscript\Axiom\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\Resolver;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\ValueDefinition;
-use Superscript\Schema\Types\NumberType;
-use Superscript\Schema\Types\StringType;
-use Superscript\Schema\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\Resolver;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\StringType;
+use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;

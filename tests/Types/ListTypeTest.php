@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Types;
+namespace Superscript\Axiom\Tests\Types;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Superscript\Schema\Types\ListType;
-use Superscript\Schema\Types\NumberType;
-use Superscript\Schema\Types\StringType;
-use Superscript\Schema\Exceptions\TransformValueException;
+use Superscript\Axiom\Types\ListType;
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\StringType;
+use Superscript\Axiom\Exceptions\TransformValueException;
 use Stringable;
 
-use Superscript\Schema\Types\Type;
+use Superscript\Axiom\Types\Type;
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(ListType::class)]

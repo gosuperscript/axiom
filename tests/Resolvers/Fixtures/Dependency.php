@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers\Fixtures;
+namespace Superscript\Axiom\Tests\Resolvers\Fixtures;
 
 final readonly class Dependency
 {

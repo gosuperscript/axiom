@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers;
+namespace Superscript\Axiom\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\ValueDefinition;
-use Superscript\Schema\Tests\Resolvers\Fixtures\Dependency;
-use Superscript\Schema\Tests\Resolvers\Fixtures\ResolverWithDependency;
-use Superscript\Schema\Types\NumberType;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Tests\Resolvers\Fixtures\Dependency;
+use Superscript\Axiom\Tests\Resolvers\Fixtures\ResolverWithDependency;
+use Superscript\Axiom\Types\NumberType;
 
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]

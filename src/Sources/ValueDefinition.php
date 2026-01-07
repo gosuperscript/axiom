@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Sources;
+namespace Superscript\Axiom\Sources;
 
-use Superscript\Schema\Source;
-use Superscript\Schema\Types\Type;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Types\Type;
 
 final readonly class ValueDefinition implements Source
 {
