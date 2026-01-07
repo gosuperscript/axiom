@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Source system
   - StaticSource for direct values
   - SymbolSource for named references with namespace support
-  - ValueDefinition for type-aware transformations
+  - TypeDefinition for type-aware transformations
 - Resolver pattern implementation
   - DelegatingResolver for chaining resolvers
   - StaticResolver for static value resolution

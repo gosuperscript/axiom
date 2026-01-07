@@ -31,7 +31,7 @@ composer require gosuperscript/axiom
 
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
@@ -43,7 +43,7 @@ $resolver = new DelegatingResolver([
 ]);
 
 // Transform a string to a number
-$source = new ValueDefinition(
+$source = new TypeDefinition(
     type: new NumberType(),
     source: new StaticSource('42')
 );
@@ -204,7 +204,7 @@ Sources represent different ways to provide data:
 
 - **StaticSource**: Direct values
 - **SymbolSource**: Named references to other sources (with optional namespace support)
-- **ValueDefinition**: Combines a type with a source for validation and coercion
+- **TypeDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
 
