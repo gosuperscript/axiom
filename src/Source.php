@@ -2,6 +2,6 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema;
+namespace Superscript\Axiom;
 
 interface Source {}

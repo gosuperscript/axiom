@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\KitchenSink;
+namespace Superscript\Axiom\Tests\KitchenSink;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\SymbolResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\SymbolSource;
-use Superscript\Schema\Sources\ValueDefinition;
-use Superscript\Schema\SymbolRegistry;
-use Superscript\Schema\Types\NumberType;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\SymbolResolver;
+use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\SymbolRegistry;
+use Superscript\Axiom\Types\NumberType;
 
 #[CoversNothing]
 class KitchenSinkTest extends TestCase

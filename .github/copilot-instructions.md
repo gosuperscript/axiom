@@ -1,4 +1,4 @@
-# Copilot Agent Instructions for Schema Library
+# Copilot Agent Instructions for Axiom Library
 
 ## Repository Overview
 
@@ -7,7 +7,7 @@ This is a proprietary PHP library for **data transformation, type validation, an
 **Repository Stats:**
 - **Language:** PHP (100%)
 - **Size:** ~30 source files, ~20 test files
-- **Type:** Library package (`gosuperscript/schema`)
+- **Type:** Library package (`gosuperscript/axiom`)
 - **Architecture:** Functional programming with monadic error handling
 
 **Key Features:**

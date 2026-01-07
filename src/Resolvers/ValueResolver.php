@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers;
+namespace Superscript\Axiom\Resolvers;
 
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\ValueDefinition;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\ValueDefinition;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 

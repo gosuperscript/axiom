@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests;
+namespace Superscript\Axiom\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use Psl\Type\Exception\AssertException;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\SymbolRegistry;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\SymbolRegistry;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SymbolRegistry::class)]

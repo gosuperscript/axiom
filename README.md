@@ -1,4 +1,4 @@
-# Schema Library
+# Axiom Library
 
 A powerful PHP library for data transformation, type validation, and expression evaluation. This library provides a flexible framework for defining data schemas, transforming values, and evaluating complex expressions with type safety.
 
@@ -19,7 +19,7 @@ A powerful PHP library for data transformation, type validation, and expression 
 ## Installation
 
 ```bash
-composer require gosuperscript/schema
+composer require gosuperscript/axiom
 ```
 
 ## Quick Start
@@ -29,12 +29,12 @@ composer require gosuperscript/schema
 ```php
 <?php
 
-use Superscript\Schema\Types\NumberType;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\ValueDefinition;
-use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Resolvers\ValueResolver;
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\ValueResolver;
 
 // Create a resolver with basic capabilities
 $resolver = new DelegatingResolver([
@@ -57,13 +57,13 @@ $value = $result->unwrap()->unwrap(); // 42 (as integer)
 ```php
 <?php
 
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\SymbolSource;
-use Superscript\Schema\SymbolRegistry;
-use Superscript\Schema\Resolvers\DelegatingResolver;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\SymbolResolver;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\SymbolRegistry;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\SymbolResolver;
 
 // Set up resolver with symbol support
 $resolver = new DelegatingResolver([
@@ -100,9 +100,9 @@ The `SymbolRegistry` supports namespaces to organize related symbols:
 ```php
 <?php
 
-use Superscript\Schema\Sources\StaticSource;
-use Superscript\Schema\Sources\SymbolSource;
-use Superscript\Schema\SymbolRegistry;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\SymbolRegistry;
 
 // Create registry with namespaced symbols
 $registry = new SymbolRegistry([
@@ -263,10 +263,10 @@ Implement the `Type` interface to create custom data validations and coercions:
 ```php
 <?php
 
-use Superscript\Schema\Types\Type;
+use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
 use Superscript\Monads\Result\Err;
-use Superscript\Schema\Exceptions\TransformValueException;
+use Superscript\Axiom\Exceptions\TransformValueException;
 use function Superscript\Monads\Result\Ok;
 use function Superscript\Monads\Option\Some;
 
@@ -314,8 +314,8 @@ Create specialized resolvers for specific data sources:
 ```php
 <?php
 
-use Superscript\Schema\Resolvers\Resolver;
-use Superscript\Schema\Source;
+use Superscript\Axiom\Resolvers\Resolver;
+use Superscript\Axiom\Source;
 use Superscript\Monads\Result\Result;
 
 class DatabaseResolver implements Resolver

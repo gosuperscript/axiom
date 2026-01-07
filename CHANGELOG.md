@@ -55,5 +55,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Factory pattern for type creation
 - Functional programming with monadic error handling
 
-[Unreleased]: https://github.com/mannum/schema/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/mannum/schema/releases/tag/v1.0.0
+[Unreleased]: https://github.com/gosuperscript/axiom/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/gosuperscript/axiom/releases/tag/v1.0.0

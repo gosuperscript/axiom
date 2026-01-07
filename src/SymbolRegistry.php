@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema;
+namespace Superscript\Axiom;
 
 use Superscript\Monads\Option\Option;
 

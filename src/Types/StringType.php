@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Types;
+namespace Superscript\Axiom\Types;
 
 use Stringable;
-use Superscript\Schema\Exceptions\TransformValueException;
+use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Ok;
 use Superscript\Monads\Result\Result;

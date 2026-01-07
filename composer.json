@@ -1,9 +1,9 @@
 {
-    "name": "gosuperscript/schema",
+    "name": "gosuperscript/axiom",
     "description": "A PHP library for data transformation, type validation, and expression evaluation.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["php", "schema", "validation", "coercion", "types"],
+    "keywords": ["php", "axiom", "validation", "coercion", "types"],
     "require": {
         "php": "^8.4",
         "ext-intl": "*",
@@ -23,12 +23,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Superscript\\Schema\\": "src/"
+            "Superscript\\Axiom\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Superscript\\Schema\\Tests\\": "tests/"
+            "Superscript\\Axiom\\Tests\\": "tests/"
         }
     },
     "scripts": {

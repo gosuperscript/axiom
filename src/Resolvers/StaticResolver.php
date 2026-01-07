@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Resolvers;
+namespace Superscript\Axiom\Resolvers;
 
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\StaticSource;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\None;

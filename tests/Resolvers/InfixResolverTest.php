@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Schema\Tests\Resolvers;
+namespace Superscript\Axiom\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Schema\Operators\BinaryOverloader;
-use Superscript\Schema\Operators\DefaultOverloader;
-use Superscript\Schema\Operators\OverloaderManager;
-use Superscript\Schema\Resolvers\InfixResolver;
-use Superscript\Schema\Resolvers\StaticResolver;
-use Superscript\Schema\Source;
-use Superscript\Schema\Sources\InfixExpression;
-use Superscript\Schema\Sources\StaticSource;
+use Superscript\Axiom\Operators\BinaryOverloader;
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
 
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(InfixResolver::class)]
