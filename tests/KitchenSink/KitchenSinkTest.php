@@ -15,7 +15,7 @@ use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\SymbolRegistry;
 use Superscript\Axiom\Types\NumberType;
 
@@ -28,7 +28,7 @@ class KitchenSinkTest extends TestCase
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
             InfixExpression::class => InfixResolver::class,
-            ValueDefinition::class => ValueResolver::class,
+            TypeDefinition::class => ValueResolver::class,
             SymbolSource::class => SymbolResolver::class,
         ]);
 
@@ -42,7 +42,7 @@ class KitchenSinkTest extends TestCase
             right: new InfixExpression(
                 left: new SymbolSource('A'),
                 operator: '*',
-                right: new ValueDefinition(
+                right: new TypeDefinition(
                     type: new NumberType(),
                     source: new StaticSource('3'),
                 ),
@@ -58,10 +58,10 @@ class KitchenSinkTest extends TestCase
     {
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
-            ValueDefinition::class => ValueResolver::class,
+            TypeDefinition::class => ValueResolver::class,
         ]);
 
-        $source = new ValueDefinition(
+        $source = new TypeDefinition(
             type: new NumberType(),
             source: new StaticSource('5'),
         );

@@ -7,7 +7,7 @@ namespace Superscript\Axiom\Sources;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Types\Type;
 
-final readonly class ValueDefinition implements Source
+final readonly class TypeDefinition implements Source
 {
     public function __construct(
         public Type $type,

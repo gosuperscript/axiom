@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Source;
-use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Resolvers\ValueResolver;
@@ -20,7 +20,7 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(ValueResolver::class)]
-#[CoversClass(ValueDefinition::class)]
+#[CoversClass(TypeDefinition::class)]
 #[UsesClass(StringType::class)]
 class ValueResolverTest extends TestCase
 {
@@ -33,7 +33,7 @@ class ValueResolverTest extends TestCase
                 return Ok(Some('Hello, World!'));
             }
         });
-        $source = new ValueDefinition(new StringType(), new class implements Source {});
+        $source = new TypeDefinition(new StringType(), new class implements Source {});
 
         $result = $resolver->resolve($source);
         $this->assertInstanceOf(Result::class, $result);

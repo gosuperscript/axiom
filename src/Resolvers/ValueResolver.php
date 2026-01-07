@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use Superscript\Axiom\Source;
-use Superscript\Axiom\Sources\ValueDefinition;
+use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 /**
- * @implements Resolver<ValueDefinition>
+ * @implements Resolver<TypeDefinition>
  */
 final readonly class ValueResolver implements Resolver
 {
