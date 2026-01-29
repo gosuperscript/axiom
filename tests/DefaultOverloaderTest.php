@@ -17,6 +17,7 @@ use Superscript\Axiom\Operators\HasOverloader;
 use Superscript\Axiom\Operators\InOverloader;
 use Superscript\Axiom\Operators\LogicalOverloader;
 use Superscript\Axiom\Operators\IntersectsOverloader;
+use Superscript\Axiom\Operators\NullOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
 #[CoversClass(BinaryOverloader::class)]
@@ -25,6 +26,7 @@ use Superscript\Axiom\Operators\IntersectsOverloader;
 #[CoversClass(InOverloader::class)]
 #[CoversClass(LogicalOverloader::class)]
 #[CoversClass(IntersectsOverloader::class)]
+#[CoversClass(NullOverloader::class)]
 class DefaultOverloaderTest extends TestCase
 {
     #[Test]
@@ -103,6 +105,11 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'b'], 'intersects', ['c', 'd'], false];
         yield ['a', 'intersects', 'a', true];
         yield ['a', 'intersects', 'b', false];
+
+        yield [null, '+', null, null];
+        yield [null, '-', null, null];
+        yield [null, '*', null, null];
+        yield [null, '/', null, null];
     }
 
     #[Test]
@@ -112,6 +119,7 @@ class DefaultOverloaderTest extends TestCase
         $this->assertFalse($overloader->supportsOverloading(new stdClass(), new stdClass(), '+'));
         $this->assertFalse($overloader->supportsOverloading(1, new stdClass(), '+'));
         $this->assertFalse($overloader->supportsOverloading(new stdClass(), 1, '+'));
+        $this->assertFalse($overloader->supportsOverloading(new stdClass(), null, '+'));
     }
 
     #[Test]

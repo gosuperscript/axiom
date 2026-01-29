@@ -16,6 +16,7 @@ final readonly class DefaultOverloader implements OperatorOverloader
     public function __construct()
     {
         $this->overloaders = [
+            new NullOverloader(),
             new BinaryOverloader(),
             new ComparisonOverloader(),
             new HasOverloader(),

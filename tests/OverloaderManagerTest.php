@@ -11,12 +11,14 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
 use Webmozart\Assert\InvalidArgumentException;
 
 #[CoversClass(OverloaderManager::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
+#[UsesClass(NullOverloader::class)]
 class OverloaderManagerTest extends TestCase
 {
     #[Test]
