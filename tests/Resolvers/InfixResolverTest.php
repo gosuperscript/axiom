@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -24,6 +25,7 @@ use Superscript\Axiom\Sources\StaticSource;
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(OverloaderManager::class)]
 #[UsesClass(BinaryOverloader::class)]
+#[UsesClass(NullOverloader::class)]
 class InfixResolverTest extends TestCase
 {
     #[Test]
