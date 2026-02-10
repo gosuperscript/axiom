@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
@@ -25,15 +24,15 @@ final readonly class InfixResolver implements Resolver
     {
         return $this->resolver->resolve($source->left)
             ->andThen(fn(Option $left) => $this->resolver->resolve($source->right)->map(fn(Option $right) => [$left, $right]))
-            ->andThen(function (array $option) use ($source) {
+            ->andThen(/** @param array{Option, Option} $option */ function (array $option) use ($source) {
                 [$left, $right] = $option;
 
                 return $this->getOperatorOverloader()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
-                    ->map(fn ($result) => Option::from($result));
+                    ->map(fn (mixed $result) => Option::from($result));
             });
     }
 
-    private function getOperatorOverloader(): OperatorOverloader
+    private function getOperatorOverloader(): OverloaderManager
     {
         return new OverloaderManager([
             new DefaultOverloader(),
