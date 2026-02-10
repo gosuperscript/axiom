@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use stdClass;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
@@ -36,7 +37,10 @@ class OverloaderManagerTest extends TestCase
         ]);
 
         $this->assertTrue($manager->supportsOverloading(1, 1, '+'));
-        $this->assertEquals(2, $manager->evaluate(1, 1, '+'));
+
+        $result = $manager->evaluate(1, 1, '+');
+        $this->assertTrue($result->isOk());
+        $this->assertEquals(2, $result->unwrap());
     }
 
     #[Test]
@@ -44,7 +48,10 @@ class OverloaderManagerTest extends TestCase
     {
         $manager = new OverloaderManager([]);
         $this->assertFalse($manager->supportsOverloading(1, 1, '+'));
-        $this->expectExceptionMessage('No overloader found for [1] + [1]');
-        $manager->evaluate(1, 1, '+');
+
+        $result = $manager->evaluate(1, 1, '+');
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(RuntimeException::class, $result->unwrapErr());
+        $this->assertEquals('No overloader found for [1] + [1]', $result->unwrapErr()->getMessage());
     }
 }
