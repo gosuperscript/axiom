@@ -11,7 +11,7 @@ use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
-final readonly class DelegatingResolver implements Resolver
+final readonly class DelegatingResolver implements BindableResolver
 {
     protected Container $container;
 
