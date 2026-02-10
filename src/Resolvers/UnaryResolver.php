@@ -37,10 +37,6 @@ final readonly class UnaryResolver implements Resolver
                     default => Err(new InvalidArgumentException("Unsupported operator: {$source->operator}")),
                 })
             ->transpose())
-            ->map(function (Option $option) {
-                $option->map(fn(mixed $value) => $this->inspector?->annotate('result', $value));
-
-                return $option;
-            });
+            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
     }
 }

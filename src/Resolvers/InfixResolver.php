@@ -32,11 +32,8 @@ final readonly class InfixResolver implements Resolver
                 [$left, $right] = $option;
 
                 return $this->getOperatorOverloader()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
-                    ->map(function (mixed $result) {
-                        $this->inspector?->annotate('result', $result);
-
-                        return Option::from($result);
-                    });
+                    ->inspect(fn(mixed $result) => $this->inspector?->annotate('result', $result))
+                    ->map(fn(mixed $result) => Option::from($result));
             });
     }
 
