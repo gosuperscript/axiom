@@ -1,5 +1,5 @@
 {
-    "name": "gosuperscript/axiom",
+    "name": "gosuperscript/axiom-tracing",
     "description": "A PHP library for data transformation, type validation, and expression evaluation.",
     "type": "library",
     "license": "MIT",
