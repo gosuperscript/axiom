@@ -254,6 +254,70 @@ The library supports various operators through the overloader system:
 - **Logical**: `&&`, `||`
 - **Special**: `has`, `in`, `intersects`
 
+### Resolution Inspector
+
+The `ResolutionInspector` interface provides a zero-overhead observability primitive for resolution. Resolvers accept an optional `?ResolutionInspector` and annotate metadata about their work. When no inspector is registered, resolvers skip annotation entirely via null-safe calls.
+
+**Interface:**
+
+```php
+interface ResolutionInspector
+{
+    public function annotate(string $key, mixed $value): void;
+}
+```
+
+**Built-in annotations from first-party resolvers:**
+
+| Resolver | Annotations |
+|----------|-------------|
+| `StaticResolver` | `label`: `"static(int)"`, `"static(string)"`, etc. |
+| `ValueResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
+| `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`) |
+| `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`) |
+| `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`) |
+
+**Usage with DelegatingResolver:**
+
+```php
+<?php
+
+use Superscript\Axiom\ResolutionInspector;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+
+// Implement the interface to capture metadata
+final class ResolutionContext implements ResolutionInspector
+{
+    private array $annotations = [];
+
+    public function annotate(string $key, mixed $value): void
+    {
+        $this->annotations[$key] = $value;
+    }
+
+    public function get(string $key): mixed
+    {
+        return $this->annotations[$key] ?? null;
+    }
+}
+
+// Register it in the resolver
+$context = new ResolutionContext();
+$resolver = new DelegatingResolver([...]);
+$resolver->instance(ResolutionInspector::class, $context);
+
+$result = $resolver->resolve($source);
+// Annotations are now available via $context->get('label'), etc.
+```
+
+**Without an inspector (zero overhead):**
+
+```php
+$resolver = new DelegatingResolver([...]);
+// No ResolutionInspector registered — resolvers get null, skip annotation
+$result = $resolver->resolve($source);
+```
+
 ## Advanced Usage
 
 ### Custom Types

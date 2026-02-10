@@ -7,6 +7,7 @@ namespace Superscript\Axiom\Resolvers;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Monads\Option\Option;
@@ -19,10 +20,13 @@ final readonly class InfixResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
+        private ?ResolutionInspector $inspector = null,
     ) {}
 
     public function resolve(Source $source): Result
     {
+        $this->inspector?->annotate('label', $source->operator);
+
         return $this->resolver->resolve($source->left)
             ->andThen(fn(Option $left) => $this->resolver->resolve($source->right)->map(fn(Option $right) => [$left, $right]))
             ->map(function (array $option) use ($source) {
