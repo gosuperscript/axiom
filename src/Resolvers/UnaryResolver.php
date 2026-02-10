@@ -36,6 +36,11 @@ final readonly class UnaryResolver implements Resolver
                     '-' => num()->matches($value) ? Ok(-$value) : Err(new InvalidArgumentException("not numeric")),
                     default => Err(new InvalidArgumentException("Unsupported operator: {$source->operator}")),
                 })
-            ->transpose());
+            ->transpose())
+            ->map(function (Option $option) {
+                $option->map(fn(mixed $value) => $this->inspector?->annotate('result', $value));
+
+                return $option;
+            });
     }
 }
