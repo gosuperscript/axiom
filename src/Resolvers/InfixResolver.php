@@ -25,11 +25,11 @@ final readonly class InfixResolver implements Resolver
     {
         return $this->resolver->resolve($source->left)
             ->andThen(fn(Option $left) => $this->resolver->resolve($source->right)->map(fn(Option $right) => [$left, $right]))
-            ->map(function (array $option) use ($source) {
+            ->andThen(function (array $option) use ($source) {
                 [$left, $right] = $option;
 
-                $result = $this->getOperatorOverloader()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator);
-                return Option::from($result);
+                return $this->getOperatorOverloader()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
+                    ->map(fn ($result) => Option::from($result));
             });
     }
 
