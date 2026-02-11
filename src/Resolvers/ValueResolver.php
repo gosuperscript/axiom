@@ -34,14 +34,12 @@ final readonly class ValueResolver implements Resolver
                 fn(Option $option) => $option
                 ->andThen(function (mixed $result) use ($source) {
                     return $source->type->coerce($result)
-                        ->map(function (Option $coerced) use ($result) {
-                            $coerced->map(function (mixed $coercedValue) use ($result) {
+                        ->inspect(function (Option $coerced) use ($result) {
+                            $coerced->inspect(function (mixed $coercedValue) use ($result) {
                                 if ($coercedValue !== $result) {
                                     $this->inspector?->annotate('coercion', get_debug_type($result) . ' -> ' . get_debug_type($coercedValue));
                                 }
                             });
-
-                            return $coerced;
                         })
                         ->transpose();
                 })

@@ -8,6 +8,7 @@ use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\SymbolRegistry;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 final readonly class SymbolResolver implements Resolver
@@ -28,6 +29,8 @@ final readonly class SymbolResolver implements Resolver
             : $source->name);
 
         return $this->symbolRegistry->get($source->name, $source->namespace)
-            ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())->transpose();
+            ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())
+            ->transpose()
+            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
     }
 }
