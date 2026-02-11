@@ -35,7 +35,7 @@ class DefaultOverloaderTest extends TestCase
     {
         $overloader = new DefaultOverloader();
         $this->assertTrue($overloader->supportsOverloading(left: $left, right: $right, operator: $operator));
-        $this->assertEquals($expected, $overloader->evaluate(left: $left, right: $right, operator: $operator));
+        $this->assertEquals($expected, $overloader->evaluate(left: $left, right: $right, operator: $operator)->unwrap());
     }
 
     public static function cases(): Generator
@@ -123,9 +123,10 @@ class DefaultOverloaderTest extends TestCase
     }
 
     #[Test]
-    public function it_throws_error_for_unsupported_operators(): void
+    public function it_returns_error_for_unsupported_operators(): void
     {
-        $this->expectExceptionMessage('Operator [foo] is not supported.');
-        (new DefaultOverloader())->evaluate(1, 1, 'foo');
+        $result = (new DefaultOverloader())->evaluate(1, 1, 'foo');
+        $this->assertTrue($result->isErr());
+        $this->assertEquals('Operator [foo] is not supported.', $result->unwrapErr()->getMessage());
     }
 }

@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Resolvers;
 
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
@@ -19,6 +18,7 @@ final readonly class InfixResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
+        public OperatorOverloader $operatorOverloader,
         private ?ResolutionInspector $inspector = null,
     ) {}
 
@@ -31,16 +31,9 @@ final readonly class InfixResolver implements Resolver
             ->andThen(/** @param array{Option, Option} $option */ function (array $option) use ($source) {
                 [$left, $right] = $option;
 
-                return $this->getOperatorOverloader()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
-                    ->inspect(fn(mixed $result) => $this->inspector?->annotate('result', $result))
-                    ->map(fn(mixed $result) => Option::from($result));
+                return $this->operatorOverloader->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
+                    ->inspect(fn ($result) => $this->inspector?->annotate('result', $result))
+                    ->map(fn ($result) => Option::from($result));
             });
-    }
-
-    private function getOperatorOverloader(): OverloaderManager
-    {
-        return new OverloaderManager([
-            new DefaultOverloader(),
-        ]);
     }
 }

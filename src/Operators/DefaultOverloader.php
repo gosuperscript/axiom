@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Monads\Result\Result;
 use UnhandledMatchError;
+use function Superscript\Monads\Result\Err;
 
 final readonly class DefaultOverloader implements OperatorOverloader
 {
@@ -37,7 +39,8 @@ final readonly class DefaultOverloader implements OperatorOverloader
         return false;
     }
 
-    public function evaluate(mixed $left, mixed $right, string $operator): mixed
+    /** @return Result<mixed, \Throwable> */
+    public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         foreach ($this->overloaders as $overloader) {
             if ($overloader->supportsOverloading($left, $right, $operator)) {
@@ -45,6 +48,6 @@ final readonly class DefaultOverloader implements OperatorOverloader
             }
         }
 
-        throw new UnhandledMatchError("Operator [$operator] is not supported.");
+        return Err(new UnhandledMatchError("Operator [$operator] is not supported."));
     }
 }
