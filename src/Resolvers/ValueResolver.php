@@ -32,12 +32,12 @@ final readonly class ValueResolver implements Resolver
         return $this->resolver->resolve($source->source)
             ->andThen(
                 fn(Option $option) => $option
-                ->andThen(function (mixed $result) use ($source) {
-                    return $source->type->coerce($result)
-                        ->inspect(function (Option $coerced) use ($result) {
-                            $coerced->inspect(function (mixed $coercedValue) use ($result) {
-                                if ($coercedValue !== $result) {
-                                    $this->inspector?->annotate('coercion', get_debug_type($result) . ' -> ' . get_debug_type($coercedValue));
+                ->andThen(function (mixed $value) use ($source) {
+                    return $source->type->coerce($value)
+                        ->inspect(function (Option $coerced) use ($value) {
+                            $coerced->inspect(function (mixed $coercedValue) use ($value) {
+                                if ($coercedValue !== $value) {
+                                    $this->inspector?->annotate('coercion', get_debug_type($value) . ' -> ' . get_debug_type($coercedValue));
                                 }
                             });
                         })

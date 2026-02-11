@@ -36,10 +36,10 @@ use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
 
-// Create a resolver with basic capabilities
+// Create a resolver by mapping each Source to its Resolver
 $resolver = new DelegatingResolver([
-    StaticResolver::class,
-    ValueResolver::class,
+    StaticSource::class => StaticResolver::class,
+    TypeDefinition::class => ValueResolver::class,
 ]);
 
 // Transform a string to a number
@@ -63,13 +63,14 @@ use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\SymbolRegistry;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 
 // Set up resolver with symbol support
 $resolver = new DelegatingResolver([
-    StaticResolver::class,
-    InfixResolver::class,
-    SymbolResolver::class,
+    StaticSource::class => StaticResolver::class,
+    InfixExpression::class => InfixResolver::class,
+    SymbolSource::class => SymbolResolver::class,
 ]);
 
 // Register symbols
@@ -273,9 +274,9 @@ interface ResolutionInspector
 |----------|-------------|
 | `StaticResolver` | `label`: `"static(int)"`, `"static(string)"`, etc. |
 | `ValueResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
-| `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`) |
-| `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`) |
-| `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`) |
+| `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`); `result`: computed value |
+| `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`); `result`: computed value |
+| `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `result`: resolved value |
 
 **Usage with DelegatingResolver:**
 
@@ -373,7 +374,7 @@ class EmailType implements Type
 
 ### Custom Resolvers
 
-Create specialized resolvers for specific data sources:
+Create specialized resolvers for specific data sources and register them in the resolver map:
 
 ```php
 <?php
@@ -389,12 +390,13 @@ class DatabaseResolver implements Resolver
         // Custom resolution logic
         // Connect to database, fetch data, etc.
     }
-    
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof DatabaseSource;
-    }
 }
+
+// Register the resolver for your custom source type
+$resolver = new DelegatingResolver([
+    DatabaseSource::class => DatabaseResolver::class,
+    // ... other source/resolver mappings
+]);
 ```
 
 ## Development
