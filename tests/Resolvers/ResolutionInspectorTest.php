@@ -101,6 +101,21 @@ class ResolutionInspectorTest extends TestCase
         $this->assertSame('+', $inspector->annotations['label']);
     }
 
+    #[Test]
+    public function infix_resolver_annotates_result_with_computed_value(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new InfixResolver(new StaticResolver(), $inspector);
+
+        $resolver->resolve(new InfixExpression(
+            left: new StaticSource(3),
+            operator: '*',
+            right: new StaticSource(4),
+        ));
+
+        $this->assertSame(12, $inspector->annotations['result']);
+    }
+
     // -- UnaryResolver --
 
     #[Test]
@@ -115,6 +130,20 @@ class ResolutionInspectorTest extends TestCase
         ));
 
         $this->assertSame('!', $inspector->annotations['label']);
+    }
+
+    #[Test]
+    public function unary_resolver_annotates_result_with_computed_value(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new UnaryResolver(new StaticResolver(), $inspector);
+
+        $resolver->resolve(new UnaryExpression(
+            operator: '-',
+            operand: new StaticSource(7),
+        ));
+
+        $this->assertSame(-7, $inspector->annotations['result']);
     }
 
     // -- SymbolResolver --
@@ -147,6 +176,21 @@ class ResolutionInspectorTest extends TestCase
         $resolver->resolve(new SymbolSource('pi', 'math'));
 
         $this->assertSame('math.pi', $inspector->annotations['label']);
+    }
+
+    #[Test]
+    public function symbol_resolver_annotates_result_with_resolved_value(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new SymbolResolver(
+            new StaticResolver(),
+            new SymbolRegistry(['A' => new StaticSource(2)]),
+            $inspector,
+        );
+
+        $resolver->resolve(new SymbolSource('A'));
+
+        $this->assertSame(2, $inspector->annotations['result']);
     }
 
     // -- ValueResolver --
