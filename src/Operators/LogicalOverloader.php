@@ -18,6 +18,7 @@ final readonly class LogicalOverloader implements OperatorOverloader
 
     /**
      * @param value-of<self::operators> $operator
+     * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {

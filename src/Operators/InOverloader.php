@@ -17,6 +17,7 @@ class InOverloader implements OperatorOverloader
     /**
      * @param array<mixed> $right
      * @param 'in' $operator
+     * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {

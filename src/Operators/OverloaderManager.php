@@ -24,7 +24,7 @@ class OverloaderManager implements OperatorOverloader
         return (bool) $this->getOverloader($left, $right, $operator);
     }
 
-    /** @return Result<mixed, RuntimeException> */
+    /** @return Result<mixed, \Throwable> */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         if ($overloader = $this->getOverloader($left, $right, $operator)) {

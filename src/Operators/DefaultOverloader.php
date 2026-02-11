@@ -39,6 +39,7 @@ final readonly class DefaultOverloader implements OperatorOverloader
         return false;
     }
 
+    /** @return Result<mixed, \Throwable> */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         foreach ($this->overloaders as $overloader) {

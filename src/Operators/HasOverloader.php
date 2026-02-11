@@ -15,6 +15,7 @@ final readonly class HasOverloader implements OperatorOverloader
         return $operator === 'has' && is_array($left);
     }
 
+    /** @return Result<bool, never> */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         $left = mixed_vec()->coerce($left);

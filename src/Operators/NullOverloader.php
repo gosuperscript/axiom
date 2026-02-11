@@ -18,6 +18,7 @@ final readonly class NullOverloader implements OperatorOverloader
 
     /**
      * @param value-of<self::operators> $operator
+     * @return Result<null, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {

@@ -20,6 +20,7 @@ final readonly class BinaryOverloader implements OperatorOverloader
      * @param numeric $left
      * @param numeric $right
      * @param value-of<self::operators> $operator
+     * @return Result<int|float, \Throwable>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
