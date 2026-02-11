@@ -19,7 +19,7 @@ class LogicalOverloaderTest extends TestCase
     {
         $overloader = new LogicalOverloader();
         $this->assertTrue($overloader->supportsOverloading(left: $left, right: $right, operator: $operator));
-        $this->assertEquals($expected, $overloader->evaluate(left: $left, right: $right, operator: $operator));
+        $this->assertEquals($expected, $overloader->evaluate(left: $left, right: $right, operator: $operator)->unwrap());
     }
 
     public static function cases(): Generator

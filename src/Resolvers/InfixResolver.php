@@ -10,7 +10,6 @@ use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Resolver<InfixExpression>
@@ -32,10 +31,9 @@ final readonly class InfixResolver implements Resolver
             ->andThen(/** @param array{Option, Option} $option */ function (array $option) use ($source) {
                 [$left, $right] = $option;
 
-                $result = $this->operatorOverloader->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator);
-                $this->inspector?->annotate('result', $result);
-
-                return Ok(Option::from($result));
+                return $this->operatorOverloader->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
+                    ->inspect(fn ($result) => $this->inspector?->annotate('result', $result))
+                    ->map(fn ($result) => Option::from($result));
             });
     }
 }

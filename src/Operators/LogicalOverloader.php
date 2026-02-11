@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Monads\Result\Result;
+use function Superscript\Monads\Result\Ok;
+
 final readonly class LogicalOverloader implements OperatorOverloader
 {
     private const operators = ['&&', '||', 'xor'];
@@ -16,12 +19,12 @@ final readonly class LogicalOverloader implements OperatorOverloader
     /**
      * @param value-of<self::operators> $operator
      */
-    public function evaluate(mixed $left, mixed $right, string $operator): mixed
+    public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        return match ($operator) {
+        return Ok(match ($operator) {
             '&&' => $left && $right,
             '||' => $left || $right,
             'xor' => $left xor $right,
-        };
+        });
     }
 }

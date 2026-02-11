@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Monads\Result\Result;
+use function Superscript\Monads\Result\Ok;
+
 final readonly class NullOverloader implements OperatorOverloader
 {
     private const array operators = ['+', '-', '*', '/'];
@@ -16,8 +19,8 @@ final readonly class NullOverloader implements OperatorOverloader
     /**
      * @param value-of<self::operators> $operator
      */
-    public function evaluate(mixed $left, mixed $right, string $operator): mixed
+    public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        return null;
+        return Ok(null);
     }
 }

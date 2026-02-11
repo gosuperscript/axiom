@@ -9,7 +9,6 @@ use SebastianBergmann\Exporter\Exporter;
 use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 class OverloaderManager implements OperatorOverloader
 {
@@ -29,7 +28,7 @@ class OverloaderManager implements OperatorOverloader
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         if ($overloader = $this->getOverloader($left, $right, $operator)) {
-            return Ok($overloader->evaluate($left, $right, $operator));
+            return $overloader->evaluate($left, $right, $operator);
         }
 
         return Err(new RuntimeException(sprintf('No overloader found for [%s] %s [%s]', (new Exporter())->export($left), $operator, (new Exporter())->export($right))));
