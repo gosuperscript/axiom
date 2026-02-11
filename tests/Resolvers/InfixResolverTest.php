@@ -31,7 +31,7 @@ class InfixResolverTest extends TestCase
     #[Test]
     public function it_can_resolve_an_infix_expression()
     {
-        $resolver = new InfixResolver(new StaticResolver());
+        $resolver = new InfixResolver(new StaticResolver(), new OverloaderManager([new DefaultOverloader()]));
         $source = new InfixExpression(
             left: new StaticSource(1),
             operator: '+',

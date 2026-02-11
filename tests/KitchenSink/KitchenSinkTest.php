@@ -7,6 +7,9 @@ namespace Superscript\Axiom\Tests\KitchenSink;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\OperatorOverloaderManager;
+use Superscript\Axiom\Operators\OverloaderManager;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -32,6 +35,7 @@ class KitchenSinkTest extends TestCase
             SymbolSource::class => SymbolResolver::class,
         ]);
 
+        $resolver->instance(OperatorOverloaderManager::class, new OverloaderManager([new DefaultOverloader()]));
         $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
             'A' => new StaticSource(2),
         ]));

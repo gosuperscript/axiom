@@ -90,7 +90,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_label_with_operator(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new OverloaderManager([new DefaultOverloader()]), $inspector);
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(1),
@@ -105,7 +105,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_result_with_computed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new OverloaderManager([new DefaultOverloader()]), $inspector);
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),

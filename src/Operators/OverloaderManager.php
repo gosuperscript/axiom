@@ -11,7 +11,7 @@ use Webmozart\Assert\Assert;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
-class OverloaderManager implements OperatorOverloader
+class OverloaderManager implements OperatorOverloader, OperatorOverloaderManager
 {
     public function __construct(
         /** @var list<OperatorOverloader> */
