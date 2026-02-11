@@ -11,7 +11,6 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -44,7 +43,6 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(DefaultOverloader::class)]
-#[UsesClass(OverloaderManager::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(NullOverloader::class)]
 class ResolutionInspectorTest extends TestCase
@@ -90,7 +88,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_label_with_operator(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new OverloaderManager([new DefaultOverloader()]), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(1),
@@ -105,7 +103,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_result_with_computed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new OverloaderManager([new DefaultOverloader()]), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),
