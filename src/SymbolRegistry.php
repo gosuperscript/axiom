@@ -15,14 +15,10 @@ final readonly class SymbolRegistry
     /** @var array<string, Source> */
     private array $symbols;
 
-    /** @var array<string, string> */
-    private array $labels;
-
     /**
      * @param array<string, Source|array<string, Source>> $symbols
-     * @param array<string, string> $labels
      */
-    public function __construct(array $symbols = [], array $labels = [])
+    public function __construct(array $symbols = [])
     {
         // Transform the array into internal storage format
         $internalSymbols = [];
@@ -49,14 +45,6 @@ final readonly class SymbolRegistry
         }
 
         $this->symbols = $internalSymbols;
-        $this->labels = $labels;
-    }
-
-    public function getLabel(string $name, ?string $namespace = null): ?string
-    {
-        $key = $namespace !== null ? $namespace . '.' . $name : $name;
-
-        return $this->labels[$key] ?? null;
     }
 
     /**

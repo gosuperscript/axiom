@@ -209,39 +209,6 @@ class ResolutionInspectorTest extends TestCase
     }
 
     #[Test]
-    public function symbol_resolver_annotates_description_when_registry_has_label(): void
-    {
-        $inspector = new SpyInspector();
-        $resolver = new SymbolResolver(
-            new StaticResolver(),
-            new SymbolRegistry(
-                ['A' => new StaticSource(2)],
-                ['A' => 'Customer age'],
-            ),
-            $inspector,
-        );
-
-        $resolver->resolve(new SymbolSource('A'));
-
-        $this->assertSame('Customer age', $inspector->annotations['description']);
-    }
-
-    #[Test]
-    public function symbol_resolver_does_not_annotate_description_when_no_label(): void
-    {
-        $inspector = new SpyInspector();
-        $resolver = new SymbolResolver(
-            new StaticResolver(),
-            new SymbolRegistry(['A' => new StaticSource(2)]),
-            $inspector,
-        );
-
-        $resolver->resolve(new SymbolSource('A'));
-
-        $this->assertArrayNotHasKey('description', $inspector->annotations);
-    }
-
-    #[Test]
     public function symbol_resolver_annotates_result_with_resolved_value(): void
     {
         $inspector = new SpyInspector();
