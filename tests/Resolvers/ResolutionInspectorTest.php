@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\BinaryOverloader;
+use Superscript\Axiom\Operators\ComparisonOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
@@ -44,6 +45,7 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(StringType::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
+#[UsesClass(ComparisonOverloader::class)]
 #[UsesClass(NullOverloader::class)]
 class ResolutionInspectorTest extends TestCase
 {
@@ -112,6 +114,38 @@ class ResolutionInspectorTest extends TestCase
         ));
 
         $this->assertSame(12, $inspector->annotations['result']);
+    }
+
+    #[Test]
+    public function infix_resolver_annotates_left_and_right_with_resolved_operand_values(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+
+        $resolver->resolve(new InfixExpression(
+            left: new StaticSource(3),
+            operator: '+',
+            right: new StaticSource(4),
+        ));
+
+        $this->assertSame(3, $inspector->annotations['left']);
+        $this->assertSame(4, $inspector->annotations['right']);
+    }
+
+    #[Test]
+    public function infix_resolver_annotates_left_and_right_with_null_for_none_values(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+
+        $resolver->resolve(new InfixExpression(
+            left: new StaticSource(null),
+            operator: '==',
+            right: new StaticSource(null),
+        ));
+
+        $this->assertNull($inspector->annotations['left']);
+        $this->assertNull($inspector->annotations['right']);
     }
 
     // -- UnaryResolver --
