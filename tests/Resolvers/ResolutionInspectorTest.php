@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\BinaryOverloader;
+use Superscript\Axiom\Operators\ComparisonOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
@@ -44,6 +45,7 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(StringType::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
+#[UsesClass(ComparisonOverloader::class)]
 #[UsesClass(NullOverloader::class)]
 class ResolutionInspectorTest extends TestCase
 {
