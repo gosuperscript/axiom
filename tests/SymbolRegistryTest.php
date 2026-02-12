@@ -132,6 +132,49 @@ final class SymbolRegistryTest extends TestCase
     }
 
     #[Test]
+    public function it_returns_null_label_when_no_labels_are_set(): void
+    {
+        $registry = new SymbolRegistry([
+            'A' => new StaticSource(1),
+        ]);
+
+        $this->assertNull($registry->getLabel('A'));
+    }
+
+    #[Test]
+    public function it_returns_the_label_when_set(): void
+    {
+        $registry = new SymbolRegistry(
+            ['A' => new StaticSource(1)],
+            ['A' => 'The A variable'],
+        );
+
+        $this->assertSame('The A variable', $registry->getLabel('A'));
+    }
+
+    #[Test]
+    public function it_returns_null_label_for_unknown_names(): void
+    {
+        $registry = new SymbolRegistry(
+            ['A' => new StaticSource(1)],
+            ['A' => 'The A variable'],
+        );
+
+        $this->assertNull($registry->getLabel('B'));
+    }
+
+    #[Test]
+    public function it_returns_the_label_for_namespaced_symbol(): void
+    {
+        $registry = new SymbolRegistry(
+            ['math' => ['pi' => new StaticSource(3.14)]],
+            ['math.pi' => 'The ratio of circumference to diameter'],
+        );
+
+        $this->assertSame('The ratio of circumference to diameter', $registry->getLabel('pi', 'math'));
+    }
+
+    #[Test]
     public function it_must_validate_namespaced_array_contains_only_sources(): void
     {
         $this->expectException(AssertException::class);

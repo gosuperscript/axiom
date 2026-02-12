@@ -28,6 +28,11 @@ final readonly class SymbolResolver implements Resolver
             ? "{$source->namespace}.{$source->name}"
             : $source->name);
 
+        $label = $this->symbolRegistry->getLabel($source->name, $source->namespace);
+        if ($label !== null) {
+            $this->inspector?->annotate('description', $label);
+        }
+
         return $this->symbolRegistry->get($source->name, $source->namespace)
             ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())
             ->transpose()
