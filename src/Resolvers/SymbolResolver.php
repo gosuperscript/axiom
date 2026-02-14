@@ -11,8 +11,11 @@ use Superscript\Axiom\SymbolRegistry;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
-final readonly class SymbolResolver implements Resolver
+final class SymbolResolver implements Resolver
 {
+    /** @var array<string, Result<Option<mixed>, \Throwable>> */
+    private array $cache = [];
+
     public function __construct(
         public Resolver $resolver,
         public SymbolRegistry $symbolRegistry,
@@ -24,13 +27,27 @@ final readonly class SymbolResolver implements Resolver
      */
     public function resolve(Source $source): Result
     {
-        $this->inspector?->annotate('label', $source->namespace !== null
+        $key = $source->namespace !== null
             ? "{$source->namespace}.{$source->name}"
-            : $source->name);
+            : $source->name;
 
-        return $this->symbolRegistry->get($source->name, $source->namespace)
+        if (array_key_exists($key, $this->cache)) {
+            $this->inspector?->annotate('label', $key);
+            $this->inspector?->annotate('cache', 'hit');
+
+            return $this->cache[$key];
+        }
+
+        $this->inspector?->annotate('label', $key);
+        $this->inspector?->annotate('cache', 'miss');
+
+        $result = $this->symbolRegistry->get($source->name, $source->namespace)
             ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())
             ->transpose()
             ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
+
+        $this->cache[$key] = $result;
+
+        return $result;
     }
 }
