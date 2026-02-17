@@ -14,7 +14,7 @@ use Superscript\Monads\Result\Result;
 final class SymbolResolver implements Resolver
 {
     /** @var array<string, Result<Option<mixed>, \Throwable>> */
-    private array $cache = [];
+    private array $memo = [];
 
     public function __construct(
         public Resolver $resolver,
@@ -31,22 +31,22 @@ final class SymbolResolver implements Resolver
             ? "{$source->namespace}.{$source->name}"
             : $source->name;
 
-        if (array_key_exists($key, $this->cache)) {
+        if (array_key_exists($key, $this->memo)) {
             $this->inspector?->annotate('label', $key);
-            $this->inspector?->annotate('cache', 'hit');
+            $this->inspector?->annotate('memo', 'hit');
 
-            return $this->cache[$key];
+            return $this->memo[$key];
         }
 
         $this->inspector?->annotate('label', $key);
-        $this->inspector?->annotate('cache', 'miss');
+        $this->inspector?->annotate('memo', 'miss');
 
         $result = $this->symbolRegistry->get($source->name, $source->namespace)
             ->andThen(fn(Source $source) => $this->resolver->resolve($source)->transpose())
             ->transpose()
             ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
 
-        $this->cache[$key] = $result;
+        $this->memo[$key] = $result;
 
         return $result;
     }
