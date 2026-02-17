@@ -32,6 +32,9 @@
     <logging>
         <junit outputFile="build/report.junit.xml"/>
     </logging>
+    <extensions>
+        <bootstrap class="RobinIngelbrecht\PHPUnitCoverageTools\PhpUnitExtension"/>
+    </extensions>
     <source>
         <include>
             <directory suffix=".php">./src</directory>
