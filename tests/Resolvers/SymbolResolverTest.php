@@ -107,7 +107,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_caches_resolved_values(): void
+    public function it_memoizes_resolved_values(): void
     {
         $callCount = 0;
         $innerResolver = $this->createStub(Resolver::class);
@@ -132,7 +132,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_caches_namespaced_symbols(): void
+    public function it_memoizes_namespaced_symbols(): void
     {
         $callCount = 0;
         $innerResolver = $this->createStub(Resolver::class);
@@ -157,7 +157,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_caches_different_symbols_separately(): void
+    public function it_memoizes_different_symbols_separately(): void
     {
         $callCount = 0;
         $innerResolver = $this->createStub(Resolver::class);
@@ -189,7 +189,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_caches_none_results_for_unknown_symbols(): void
+    public function it_memoizes_none_results_for_unknown_symbols(): void
     {
         $callCount = 0;
         $innerResolver = $this->createStub(Resolver::class);
@@ -214,7 +214,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_annotates_cache_miss_on_first_resolve(): void
+    public function it_annotates_memo_miss_on_first_resolve(): void
     {
         $inspector = new SpyInspector();
         $resolver = new SymbolResolver(
@@ -225,11 +225,11 @@ class SymbolResolverTest extends TestCase
 
         $resolver->resolve(new SymbolSource('A'));
 
-        $this->assertSame('miss', $inspector->annotations['cache']);
+        $this->assertSame('miss', $inspector->annotations['memo']);
     }
 
     #[Test]
-    public function it_annotates_cache_hit_on_subsequent_resolves(): void
+    public function it_annotates_memo_hit_on_subsequent_resolves(): void
     {
         $inspector = new SpyInspector();
         $resolver = new SymbolResolver(
@@ -241,11 +241,11 @@ class SymbolResolverTest extends TestCase
         $resolver->resolve(new SymbolSource('A'));
         $resolver->resolve(new SymbolSource('A'));
 
-        $this->assertSame('hit', $inspector->annotations['cache']);
+        $this->assertSame('hit', $inspector->annotations['memo']);
     }
 
     #[Test]
-    public function it_annotates_label_on_cache_hit(): void
+    public function it_annotates_label_on_memo_hit(): void
     {
         $inspector = new SpyInspector();
         $resolver = new SymbolResolver(
@@ -261,7 +261,7 @@ class SymbolResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_annotates_namespaced_label_on_cache_hit(): void
+    public function it_annotates_namespaced_label_on_memo_hit(): void
     {
         $inspector = new SpyInspector();
         $resolver = new SymbolResolver(
@@ -274,6 +274,6 @@ class SymbolResolverTest extends TestCase
         $resolver->resolve(new SymbolSource('pi', 'math'));
 
         $this->assertSame('math.pi', $inspector->annotations['label']);
-        $this->assertSame('hit', $inspector->annotations['cache']);
+        $this->assertSame('hit', $inspector->annotations['memo']);
     }
 }
