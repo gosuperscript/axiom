@@ -24,7 +24,7 @@ final readonly class DelegatingResolver implements BindableResolver
         $this->container->instance(Resolver::class, $this);
 
         foreach ($this->resolverMap as $resolver) {
-            $this->container->bind($resolver, $resolver);
+            $this->container->singleton($resolver, $resolver);
         }
     }
 

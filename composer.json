@@ -18,7 +18,7 @@
         "infection/infection": "^0.29.14",
         "laravel/pint": "^1.22",
         "phpstan/phpstan": "^2.1",
-        "phpunit/phpunit": "^12.0",
+        "phpunit/phpunit": "12.5.11",
         "robiningelbrecht/phpunit-coverage-tools": "^1.9"
     },
     "autoload": {
@@ -33,7 +33,7 @@
     },
     "scripts": {
         "test:types": "vendor/bin/phpstan analyse",
-        "test:unit": "vendor/bin/phpunit -d --min-coverage=100",
+        "test:unit": "vendor/bin/phpunit -d --min-coverage=100", 
         "test:infection": "vendor/bin/infection --threads=max --show-mutations",
         "test": [
             "@test:types",
