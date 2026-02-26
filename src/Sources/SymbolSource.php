@@ -16,10 +16,8 @@ final readonly class SymbolSource implements Source, Describable
 
     public function describe(): string
     {
-        $symbol = $this->namespace !== null
+        return $this->namespace !== null
             ? sprintf('%s.%s', $this->namespace, $this->name)
             : $this->name;
-
-        return sprintf("the symbol '%s'", $symbol);
     }
 }

@@ -16,6 +16,6 @@ final readonly class StaticSource implements Source, Describable
 
     public function describe(): string
     {
-        return sprintf('the value %s', (new Exporter())->shortenedExport($this->value));
+        return (new Exporter())->shortenedExport($this->value);
     }
 }
