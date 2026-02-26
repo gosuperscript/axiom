@@ -20,12 +20,6 @@ final readonly class UnaryExpression implements Source, Describable
             ? $this->operand->describe()
             : (new \ReflectionClass($this->operand))->getShortName();
 
-        $prefix = match ($this->operator) {
-            '!' => 'the negation of',
-            '-' => 'the negative of',
-            default => $this->operator,
-        };
-
-        return sprintf('%s %s', $prefix, $operand);
+        return sprintf('%s%s', $this->operator, $operand);
     }
 }

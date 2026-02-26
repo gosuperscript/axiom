@@ -20,25 +20,7 @@ final readonly class InfixExpression implements Source, Describable
         $left = $this->describeOperand($this->left);
         $right = $this->describeOperand($this->right);
 
-        $operatorWord = match ($this->operator) {
-            '+' => 'plus',
-            '-' => 'minus',
-            '*' => 'multiplied by',
-            '/' => 'divided by',
-            '==' => 'equal to',
-            '===' => 'identical to',
-            '!=' => 'not equal to',
-            '!==' => 'not identical to',
-            '<' => 'less than',
-            '<=' => 'less than or equal to',
-            '>' => 'greater than',
-            '>=' => 'greater than or equal to',
-            '&&' => 'and',
-            '||' => 'or',
-            default => $this->operator,
-        };
-
-        return sprintf('%s %s %s', $left, $operatorWord, $right);
+        return sprintf('%s %s %s', $left, $this->operator, $right);
     }
 
     private function describeOperand(Source $source): string

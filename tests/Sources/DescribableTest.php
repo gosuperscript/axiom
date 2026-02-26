@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Tests\Sources;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -35,70 +34,70 @@ class DescribableTest extends TestCase
     public function static_source_describes_string_value(): void
     {
         $source = new StaticSource('hello');
-        $this->assertSame("the value 'hello'", $source->describe());
+        $this->assertSame("'hello'", $source->describe());
     }
 
     #[Test]
     public function static_source_describes_integer_value(): void
     {
         $source = new StaticSource(42);
-        $this->assertSame('the value 42', $source->describe());
+        $this->assertSame('42', $source->describe());
     }
 
     #[Test]
     public function static_source_describes_null_value(): void
     {
         $source = new StaticSource(null);
-        $this->assertSame('the value null', $source->describe());
+        $this->assertSame('null', $source->describe());
     }
 
     #[Test]
     public function static_source_describes_boolean_value(): void
     {
         $source = new StaticSource(true);
-        $this->assertSame('the value true', $source->describe());
+        $this->assertSame('true', $source->describe());
     }
 
     #[Test]
     public function symbol_source_describes_name(): void
     {
         $source = new SymbolSource('price');
-        $this->assertSame("the symbol 'price'", $source->describe());
+        $this->assertSame('price', $source->describe());
     }
 
     #[Test]
     public function symbol_source_describes_namespaced_name(): void
     {
         $source = new SymbolSource('pi', 'math');
-        $this->assertSame("the symbol 'math.pi'", $source->describe());
+        $this->assertSame('math.pi', $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_as_type(): void
     {
         $source = new TypeDefinition(new NumberType(), new SymbolSource('price'));
-        $this->assertSame("the symbol 'price' as a number", $source->describe());
+        $this->assertSame('price (as number)', $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_string_type(): void
     {
         $source = new TypeDefinition(new StringType(), new StaticSource('hello'));
-        $this->assertSame("the value 'hello' as a string", $source->describe());
+        $this->assertSame("'hello' (as string)", $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_boolean_type(): void
     {
         $source = new TypeDefinition(new BooleanType(), new SymbolSource('active'));
-        $this->assertSame("the symbol 'active' as a boolean", $source->describe());
+        $this->assertSame('active (as boolean)', $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_list_type(): void
     {
         $source = new TypeDefinition(new ListType(new NumberType()), new SymbolSource('values'));
-        $this->assertSame("the symbol 'values' as a list", $source->describe());
+        $this->assertSame('values (as list)', $source->describe());
     }
 
     #[Test]
@@ -109,29 +108,18 @@ class DescribableTest extends TestCase
         $source = new TypeDefinition(new NumberType(), $anonymous);
 
         $description = $source->describe();
-        $this->assertStringEndsWith('as a number', $description);
+        $this->assertStringEndsWith('(as number)', $description);
     }
 
     #[Test]
-    public function infix_expression_describes_addition(): void
+    public function infix_expression_describes_operation(): void
     {
         $source = new InfixExpression(
             new StaticSource(1),
             '+',
             new StaticSource(2),
         );
-        $this->assertSame('the value 1 plus the value 2', $source->describe());
-    }
-
-    #[Test]
-    public function infix_expression_describes_multiplication(): void
-    {
-        $source = new InfixExpression(
-            new SymbolSource('price'),
-            '*',
-            new SymbolSource('quantity'),
-        );
-        $this->assertSame("the symbol 'price' multiplied by the symbol 'quantity'", $source->describe());
+        $this->assertSame('1 + 2', $source->describe());
     }
 
     #[Test]
@@ -142,43 +130,7 @@ class DescribableTest extends TestCase
             '>=',
             new StaticSource(18),
         );
-        $this->assertSame("the symbol 'age' greater than or equal to the value 18", $source->describe());
-    }
-
-    #[DataProvider('operatorProvider')]
-    #[Test]
-    public function infix_expression_describes_all_operators(string $operator, string $expectedWord): void
-    {
-        $source = new InfixExpression(
-            new StaticSource(1),
-            $operator,
-            new StaticSource(2),
-        );
-        $this->assertSame(
-            sprintf('the value 1 %s the value 2', $expectedWord),
-            $source->describe(),
-        );
-    }
-
-    public static function operatorProvider(): array
-    {
-        return [
-            'addition' => ['+', 'plus'],
-            'subtraction' => ['-', 'minus'],
-            'multiplication' => ['*', 'multiplied by'],
-            'division' => ['/', 'divided by'],
-            'equality' => ['==', 'equal to'],
-            'identity' => ['===', 'identical to'],
-            'inequality' => ['!=', 'not equal to'],
-            'non-identity' => ['!==', 'not identical to'],
-            'less than' => ['<', 'less than'],
-            'less than or equal' => ['<=', 'less than or equal to'],
-            'greater than' => ['>', 'greater than'],
-            'greater than or equal' => ['>=', 'greater than or equal to'],
-            'logical and' => ['&&', 'and'],
-            'logical or' => ['||', 'or'],
-            'custom operator' => ['intersects', 'intersects'],
-        ];
+        $this->assertSame('age >= 18', $source->describe());
     }
 
     #[Test]
@@ -189,7 +141,7 @@ class DescribableTest extends TestCase
             'has',
             new StaticSource('featured'),
         );
-        $this->assertSame("the symbol 'tags' has the value 'featured'", $source->describe());
+        $this->assertSame("tags has 'featured'", $source->describe());
     }
 
     #[Test]
@@ -205,7 +157,7 @@ class DescribableTest extends TestCase
             ),
         );
         $this->assertSame(
-            "the symbol 'price' multiplied by (the value 1 minus the symbol 'discount')",
+            'price * (1 - discount)',
             $source->describe(),
         );
     }
@@ -222,7 +174,7 @@ class DescribableTest extends TestCase
         );
 
         $description = $source->describe();
-        $this->assertStringEndsWith('plus the value 1', $description);
+        $this->assertStringEndsWith('+ 1', $description);
     }
 
     #[Test]
@@ -237,28 +189,21 @@ class DescribableTest extends TestCase
         );
 
         $description = $source->describe();
-        $this->assertStringStartsWith('the value 1 plus ', $description);
+        $this->assertStringStartsWith('1 + ', $description);
     }
 
     #[Test]
     public function unary_expression_describes_negation(): void
     {
         $source = new UnaryExpression('!', new SymbolSource('active'));
-        $this->assertSame("the negation of the symbol 'active'", $source->describe());
+        $this->assertSame('!active', $source->describe());
     }
 
     #[Test]
     public function unary_expression_describes_negative(): void
     {
         $source = new UnaryExpression('-', new StaticSource(5));
-        $this->assertSame('the negative of the value 5', $source->describe());
-    }
-
-    #[Test]
-    public function unary_expression_describes_unknown_operator(): void
-    {
-        $source = new UnaryExpression('~', new StaticSource(5));
-        $this->assertSame('~ the value 5', $source->describe());
+        $this->assertSame('-5', $source->describe());
     }
 
     #[Test]
@@ -269,7 +214,7 @@ class DescribableTest extends TestCase
         $source = new UnaryExpression('!', $anonymous);
 
         $description = $source->describe();
-        $this->assertStringStartsWith('the negation of ', $description);
+        $this->assertStringStartsWith('!', $description);
     }
 
     #[Test]
@@ -292,7 +237,7 @@ class DescribableTest extends TestCase
         );
 
         $this->assertSame(
-            "the symbol 'price' as a number multiplied by (the value 1 minus the symbol 'rates.discount' as a number)",
+            'price (as number) * (1 - rates.discount (as number))',
             $source->describe(),
         );
     }
