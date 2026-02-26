@@ -23,6 +23,6 @@ final readonly class TypeDefinition implements Source, Describable
             ? $this->source->describe()
             : (new \ReflectionClass($this->source))->getShortName();
 
-        return sprintf('%s(%s)', $typeName, $sourceDescription);
+        return sprintf('%s as a %s', $sourceDescription, $typeName);
     }
 }

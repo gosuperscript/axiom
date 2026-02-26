@@ -20,6 +20,6 @@ final readonly class SymbolSource implements Source, Describable
             ? sprintf('%s.%s', $this->namespace, $this->name)
             : $this->name;
 
-        return sprintf("symbol '%s'", $symbol);
+        return sprintf("the symbol '%s'", $symbol);
     }
 }
