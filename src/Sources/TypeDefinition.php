@@ -17,7 +17,8 @@ final readonly class TypeDefinition implements Source, Describable
 
     public function describe(): string
     {
-        $typeName = lcfirst(preg_replace('/Type$/', '', (new \ReflectionClass($this->type))->getShortName()));
+        $shortName = (new \ReflectionClass($this->type))->getShortName();
+        $typeName = lcfirst(str_ends_with($shortName, 'Type') ? substr($shortName, 0, -4) : $shortName);
         $sourceDescription = $this->source instanceof Describable
             ? $this->source->describe()
             : (new \ReflectionClass($this->source))->getShortName();
