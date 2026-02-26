@@ -6,8 +6,8 @@ namespace Superscript\Axiom\Tests\Sources;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Describable;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
@@ -24,6 +24,10 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(TypeDefinition::class)]
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(UnaryExpression::class)]
+#[UsesClass(NumberType::class)]
+#[UsesClass(StringType::class)]
+#[UsesClass(BooleanType::class)]
+#[UsesClass(ListType::class)]
 class DescribableTest extends TestCase
 {
     #[Test]
@@ -97,6 +101,18 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function type_definition_with_non_describable_source_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $source = new TypeDefinition(new NumberType(), $anonymous);
+
+        $description = $source->describe();
+        $this->assertStringStartsWith('number(', $description);
+        $this->assertStringEndsWith(')', $description);
+    }
+
+    #[Test]
     public function infix_expression_describes_operation(): void
     {
         $source = new InfixExpression(
@@ -119,6 +135,36 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function infix_with_non_describable_left_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $source = new InfixExpression(
+            $anonymous,
+            '+',
+            new StaticSource(1),
+        );
+
+        $description = $source->describe();
+        $this->assertStringEndsWith('+ static value 1)', $description);
+    }
+
+    #[Test]
+    public function infix_with_non_describable_right_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $source = new InfixExpression(
+            new StaticSource(1),
+            '+',
+            $anonymous,
+        );
+
+        $description = $source->describe();
+        $this->assertStringStartsWith('(static value 1 + ', $description);
+    }
+
+    #[Test]
     public function unary_expression_describes_negation(): void
     {
         $source = new UnaryExpression('!', new SymbolSource('active'));
@@ -133,18 +179,15 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
-    public function infix_with_non_describable_source_falls_back_to_class_name(): void
+    public function unary_with_non_describable_source_falls_back_to_class_name(): void
     {
         $anonymous = new class implements Source {};
 
-        $source = new InfixExpression(
-            new StaticSource(1),
-            '+',
-            $anonymous,
-        );
+        $source = new UnaryExpression('!', $anonymous);
 
         $description = $source->describe();
-        $this->assertStringStartsWith('(static value 1 + ', $description);
+        $this->assertStringStartsWith('(!', $description);
+        $this->assertStringEndsWith(')', $description);
     }
 
     #[Test]
