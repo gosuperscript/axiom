@@ -61,6 +61,29 @@ class DelegatingResolverTest extends TestCase
     }
 
     #[Test]
+    public function it_can_retrieve_a_registered_instance_via_get(): void
+    {
+        $resolver = new DelegatingResolver([]);
+        $dependency = new Dependency('hello');
+
+        $resolver->instance(Dependency::class, $dependency);
+
+        $this->assertSame($dependency, $resolver->get(Dependency::class));
+    }
+
+    #[Test]
+    public function it_can_check_if_an_instance_is_registered_via_has(): void
+    {
+        $resolver = new DelegatingResolver([]);
+
+        $this->assertFalse($resolver->has(Dependency::class));
+
+        $resolver->instance(Dependency::class, new Dependency('hello'));
+
+        $this->assertTrue($resolver->has(Dependency::class));
+    }
+
+    #[Test]
     public function it_throws_an_exception_if_no_resolver_can_handle_the_source(): void
     {
         $this->expectException(\RuntimeException::class);

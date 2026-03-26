@@ -36,6 +36,16 @@ final readonly class DelegatingResolver implements BindableResolver
         $this->container->instance($key, $concrete);
     }
 
+    public function get(string $id): mixed
+    {
+        return $this->container->get($id);
+    }
+
+    public function has(string $id): bool
+    {
+        return $this->container->has($id);
+    }
+
     /**
      * @return Result<Option<mixed>, Throwable>
      */
