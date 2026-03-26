@@ -21,6 +21,10 @@ class InOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        return Ok(is_array($left) ? array_intersect($left, $right) === $left : in_array($left, $right));
+        if (is_array($left)) {
+            return Ok(array_all($left, fn (mixed $item): bool => in_array($item, $right)));
+        }
+
+        return Ok(in_array($left, $right));
     }
 }

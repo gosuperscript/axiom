@@ -20,9 +20,9 @@ class IntersectsOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        $left = is_array($left) ? $left : [$left];
-        $right = is_array($right) ? $right : [$right];
+        $leftArr = is_array($left) ? $left : [$left];
+        $rightArr = is_array($right) ? $right : [$right];
 
-        return Ok(count(array_intersect($left, $right)) > 0);
+        return Ok(array_any($leftArr, fn (mixed $item): bool => in_array($item, $rightArr)));
     }
 }

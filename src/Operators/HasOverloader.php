@@ -19,6 +19,11 @@ final readonly class HasOverloader implements OperatorOverloader
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         $left = mixed_vec()->coerce($left);
-        return Ok(is_array($right) ? array_intersect($right, $left) === $right : in_array($right, $left));
+
+        if (is_array($right)) {
+            return Ok(array_all($right, fn (mixed $item): bool => in_array($item, $left)));
+        }
+
+        return Ok(in_array($right, $left));
     }
 }

@@ -83,6 +83,9 @@ class DictType implements Type
 
     public function format(mixed $value): string
     {
-        return implode(', ', Arr::map($value, fn(mixed $item, string|int $key) => sprintf("%s: %s", $key, $this->type->format($item))));
+        /** @var array<string> $parts */
+        $parts = Arr::map($value, fn(mixed $item, string|int $key) => sprintf("%s: %s", $key, $this->type->format($item)));
+
+        return implode(', ', $parts);
     }
 }
