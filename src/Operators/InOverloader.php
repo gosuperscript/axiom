@@ -23,12 +23,9 @@ class InOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        if (is_array($left)) {
-            $left = vec(string())->coerce($left);
+        $left = vec(string())->coerce(is_array($left) ? $left : [$left]);
+        $right = vec(string())->coerce($right);
 
-            return Ok(array_intersect($left, vec(string())->coerce($right)) === $left);
-        }
-
-        return Ok(in_array($left, $right));
+        return Ok(array_intersect($left, $right) === $left);
     }
 }
