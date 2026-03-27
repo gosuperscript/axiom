@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
+use function Psl\Type\vec;
+use function Psl\Type\string;
 use function Superscript\Monads\Result\Ok;
 
 class InOverloader implements OperatorOverloader
@@ -21,6 +23,9 @@ class InOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        return Ok(is_array($left) ? array_intersect($left, $right) === $left : in_array($left, $right));
+        $left = vec(string())->coerce(is_array($left) ? $left : [$left]);
+        $right = vec(string())->coerce($right);
+
+        return Ok(array_intersect($left, $right) === $left);
     }
 }
