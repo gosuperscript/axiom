@@ -18,7 +18,7 @@
     "require-dev": {
         "infection/infection": "^0.29.14",
         "laravel/pint": "^1.22",
-        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan": "2.1.40",
         "phpunit/phpunit": "12.5.11",
         "robiningelbrecht/phpunit-coverage-tools": "^1.9"
     },
