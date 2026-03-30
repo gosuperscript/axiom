@@ -470,7 +470,7 @@ class MatchResolverTest extends TestCase
         );
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('No matcher found for pattern type:');
+        $this->expectExceptionMessage('No matcher found for pattern type: ' . get_class($unknownPattern));
 
         $resolver->resolve($source);
     }
