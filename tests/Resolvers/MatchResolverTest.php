@@ -455,7 +455,7 @@ class MatchResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_throws_for_unsupported_pattern_type(): void
+    public function it_returns_error_for_unsupported_pattern_type(): void
     {
         $inner = new StaticResolver();
         $resolver = new MatchResolver($inner, []);
@@ -469,10 +469,11 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('No matcher found for pattern type: ' . get_class($unknownPattern));
+        $result = $resolver->resolve($source);
 
-        $resolver->resolve($source);
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(RuntimeException::class, $result->unwrapErr());
+        $this->assertStringContainsString('No matcher found for pattern type: ' . get_class($unknownPattern), $result->unwrapErr()->getMessage());
     }
 
     #[Test]

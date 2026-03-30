@@ -15,6 +15,7 @@ use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\None;
+use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
@@ -83,6 +84,6 @@ final readonly class MatchResolver implements Resolver
             }
         }
 
-        throw new RuntimeException('No matcher found for pattern type: ' . get_class($pattern));
+        return Err(new RuntimeException('No matcher found for pattern type: ' . get_class($pattern)));
     }
 }
