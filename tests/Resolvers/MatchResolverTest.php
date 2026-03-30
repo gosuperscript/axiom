@@ -35,6 +35,7 @@ use Superscript\Axiom\SymbolRegistry;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 use Superscript\Monads\Result\Result;
 
+use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(MatchResolver::class)]
@@ -54,6 +55,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(SymbolResolver::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(SymbolRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
 #[UsesClass(WildcardMatcher::class)]
 #[UsesClass(LiteralMatcher::class)]
 #[UsesClass(ExpressionMatcher::class)]
@@ -471,6 +473,40 @@ class MatchResolverTest extends TestCase
         $this->expectExceptionMessage('No matcher found for pattern type:');
 
         $resolver->resolve($source);
+    }
+
+    #[Test]
+    public function it_propagates_error_from_matcher(): void
+    {
+        $errorPattern = new class implements MatchPattern {};
+
+        $errorMatcher = new class ($errorPattern) implements PatternMatcher {
+            public function __construct(private readonly MatchPattern $target) {}
+
+            public function supports(MatchPattern $pattern): bool
+            {
+                return $pattern === $this->target;
+            }
+
+            public function matches(MatchPattern $pattern, mixed $subjectValue): Result
+            {
+                return Err(new RuntimeException('matcher failed'));
+            }
+        };
+
+        $inner = new StaticResolver();
+        $resolver = new MatchResolver($inner, [$errorMatcher]);
+
+        $source = new MatchExpression(
+            subject: new StaticSource('anything'),
+            arms: [
+                new MatchArm($errorPattern, new StaticSource('result')),
+            ],
+        );
+
+        $result = $resolver->resolve($source);
+
+        $this->assertTrue($result->isErr());
     }
 
     #[Test]
