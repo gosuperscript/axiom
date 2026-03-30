@@ -47,6 +47,71 @@ class UnaryResolverTest extends TestCase
     }
 
     #[Test]
+    public function it_can_resolve_not_true_to_false(): void
+    {
+        $resolver = new UnaryResolver(new StaticResolver());
+        $source = new UnaryExpression(
+            operator: 'not',
+            operand: new StaticSource(true)
+        );
+
+        $this->assertFalse($resolver->resolve($source)->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_can_resolve_not_false_to_true(): void
+    {
+        $resolver = new UnaryResolver(new StaticResolver());
+        $source = new UnaryExpression(
+            operator: 'not',
+            operand: new StaticSource(false)
+        );
+
+        $this->assertTrue($resolver->resolve($source)->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_can_resolve_not_on_truthy_value(): void
+    {
+        $resolver = new UnaryResolver(new StaticResolver());
+        $source = new UnaryExpression(
+            operator: 'not',
+            operand: new StaticSource(1)
+        );
+
+        $this->assertFalse($resolver->resolve($source)->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_can_resolve_not_on_falsy_value(): void
+    {
+        $resolver = new UnaryResolver(new StaticResolver());
+        $source = new UnaryExpression(
+            operator: 'not',
+            operand: new StaticSource(0)
+        );
+
+        $this->assertTrue($resolver->resolve($source)->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function not_and_bang_produce_identical_results(): void
+    {
+        $resolver = new UnaryResolver(new StaticResolver());
+
+        foreach ([true, false, 1, 0, 'hello', ''] as $input) {
+            $bang = new UnaryExpression(operator: '!', operand: new StaticSource($input));
+            $not = new UnaryExpression(operator: 'not', operand: new StaticSource($input));
+
+            $this->assertEquals(
+                $resolver->resolve($bang)->unwrap()->unwrap(),
+                $resolver->resolve($not)->unwrap()->unwrap(),
+                sprintf('not and ! should produce identical results for input: %s', var_export($input, true))
+            );
+        }
+    }
+
+    #[Test]
     public function it_returns_err_for_unsupported_operators(): void
     {
         $resolver = new UnaryResolver(new StaticResolver());

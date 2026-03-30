@@ -32,7 +32,7 @@ final readonly class UnaryResolver implements Resolver
         return $this->resolver->resolve($source->operand)
             ->andThen(fn(Option $option) => $option
                 ->map(fn(mixed $value) => match ($source->operator) {
-                    '!' => Ok(!$value),
+                    '!', 'not' => Ok(!$value),
                     '-' => num()->matches($value) ? Ok(-$value) : Err(new InvalidArgumentException("not numeric")),
                     default => Err(new InvalidArgumentException("Unsupported operator: {$source->operator}")),
                 })
