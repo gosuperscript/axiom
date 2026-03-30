@@ -12,7 +12,6 @@ use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\None;
-use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
@@ -30,7 +29,6 @@ final readonly class MemberAccessResolver implements Resolver
     {
         $this->inspector?->annotate('label', ".{$source->property}");
 
-        /** @var Result<Option<mixed>, \Throwable> */
         return $this->resolver->resolve($source->object)
             ->andThen(fn (Option $option) => $option
                 ->mapOr(Ok(None()), fn (mixed $value) => $this->access($value, $source->property)))
@@ -43,11 +41,11 @@ final readonly class MemberAccessResolver implements Resolver
     private function access(mixed $value, string $property): Result
     {
         if (is_array($value) && array_key_exists($property, $value)) {
-            return Ok(is_null($value[$property]) ? None() : Some($value[$property]));
+            return Ok(Option::from($value[$property]));
         }
 
         if (is_object($value) && property_exists($value, $property)) {
-            return Ok(is_null($value->{$property}) ? None() : Some($value->{$property}));
+            return Ok(Option::from($value->{$property}));
         }
 
         if (is_array($value) || is_object($value)) {

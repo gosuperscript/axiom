@@ -79,6 +79,36 @@ class MemberAccessResolverTest extends TestCase
     }
 
     #[Test]
+    public function it_returns_none_for_null_object_property(): void
+    {
+        $object = new \stdClass();
+        $object->name = null;
+
+        $resolver = new MemberAccessResolver(new StaticResolver());
+        $source = new MemberAccessSource(
+            object: new StaticSource($object),
+            property: 'name',
+        );
+
+        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function it_returns_err_for_missing_object_property(): void
+    {
+        $object = new \stdClass();
+        $object->name = 'John';
+
+        $resolver = new MemberAccessResolver(new StaticResolver());
+        $source = new MemberAccessSource(
+            object: new StaticSource($object),
+            property: 'age',
+        );
+
+        $this->assertTrue($resolver->resolve($source)->isErr());
+    }
+
+    #[Test]
     public function it_can_resolve_chained_access_through_delegating_resolver(): void
     {
         $resolver = new DelegatingResolver([
