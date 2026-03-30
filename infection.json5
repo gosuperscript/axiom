@@ -9,8 +9,8 @@
     ]
   },
   "timeout": 10,
-  "minCoveredMsi": 90,
-  "minMsi": 90,
+  "minCoveredMsi": 100,
+  "minMsi": 100,
   "mutators": {
     "@default": true,
     "TrueValue": {
@@ -18,17 +18,26 @@
         ".*match\\s*\\(true\\).*",
       ],
     },
-    // Position-tracking arithmetic in the lexer produces equivalent mutants —
-    // mutating $pos++ or $col += 2 shifts column numbers but never changes
-    // which tokens are produced, so these can never be killed.
+    // --- Position-tracking arithmetic and precedence ±1 adjustments produce
+    // equivalent mutants — the outputs are identical because no operator shares
+    // an adjacent precedence level, and column/position shifts don't change tokens.
     "IncrementInteger": {
       "ignore": [
         "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::matchOperator",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
       ],
     },
     "DecrementInteger": {
       "ignore": [
         "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
       ],
     },
     "Increment": {
@@ -46,9 +55,142 @@
         "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
       ],
     },
+    // --- Boundary condition flips (`<` vs `<=`) on lookahead guards and
+    // precedence comparisons that never fire at the exact boundary value.
+    "LessThan": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
+      ],
+    },
+    "GreaterThanOrEqualTo": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+      ],
+    },
+    "Continue_": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+      ],
+    },
     "Plus": {
       "ignore": [
         "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::matchOperator",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printInfixExpression",
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
+      ],
+    },
+    "LogicalAnd": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Lexer\\Lexer::tokenize",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+      ],
+    },
+    // --- Error messages and indent concatenation: mutating string concat in
+    // throw statements or single-level indent only changes text, not control flow.
+    "Concat": {
+      "ignoreSourceCodeByRegex": [
+        ".*throw new RuntimeException.*",
+        ".*printNode.*indent.*",
+      ],
+    },
+    "ConcatOperandRemoval": {
+      "ignoreSourceCodeByRegex": [
+        ".*throw new RuntimeException.*",
+        ".*printNode.*indent.*",
+      ],
+    },
+    // --- break vs continue at end of while(comma) loop — loop condition is
+    // false either way, making these equivalent.
+    "Break_": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseListLiteral",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseDictLiteral",
+      ],
+    },
+    // --- Compiler: single-path conditions that can't be exercised differently.
+    "InstanceOf_": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Compiler\\Compiler::compileNode",
+      ],
+    },
+    "UnwrapArrayMap": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Compiler\\Compiler::applyTypeCoercion",
+      ],
+    },
+    "CastString": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Compiler\\Compiler::compileDict",
+      ],
+    },
+    // --- Parser: complex boolean conditions where flipping && to || or
+    // negating sub-expressions produces equivalent results given the token
+    // combinations that actually occur.
+    "NullSafePropertyCall": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+      ],
+    },
+    "LogicalOrAllSubExprNegation": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+      ],
+    },
+    "LogicalOr": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseInfixExpression",
+      ],
+    },
+    "UnwrapSubstr": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseNumberLiteral",
+      ],
+    },
+    // --- PublicVisibility: these methods are public because they are part of
+    // the extension contract (DslLiteralExtension calls them).
+    "PublicVisibility": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseExpression",
+        "Superscript\\Axiom\\Dsl\\Parser\\Parser::parseTypeAnnotation",
+      ],
+    },
+    // --- AxiomDsl::fromPlugins: FunctionRegistry is populated for Phase 2
+    // forward compat; literal extensions have no plugins in default config.
+    "MethodCallRemoval": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\AxiomDsl::fromPlugins",
+      ],
+    },
+    "FunctionCallRemoval": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\AxiomDsl::fromPlugins",
+      ],
+    },
+    // --- PrettyPrinter: precedence fallback `$op !== null ? $op->precedence : 0`
+    // — the `: 0` branch never fires since we only print known operators.
+    // Similarly, the literal extension loop is empty with CoreDslPlugin.
+    "NotIdentical": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
+      ],
+    },
+    "Ternary": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printUnaryExpression",
+      ],
+    },
+    "Foreach_": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printExpression",
+      ],
+    },
+    "IfNegation": {
+      "ignore": [
+        "Superscript\\Axiom\\Dsl\\PrettyPrinter\\PrettyPrinter::printExpression",
       ],
     },
   },

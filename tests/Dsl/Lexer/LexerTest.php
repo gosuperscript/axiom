@@ -701,4 +701,118 @@ class LexerTest extends TestCase
         $this->assertSame(TokenType::Number, $tokens[0]->type);
         $this->assertSame(TokenType::Eof, $tokens[1]->type);
     }
+
+    #[Test]
+    public function it_tokenizes_digit_zero(): void
+    {
+        $tokens = $this->lexer->tokenize('0');
+
+        $this->assertSame(TokenType::Number, $tokens[0]->type);
+        $this->assertSame('0', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_digit_nine(): void
+    {
+        $tokens = $this->lexer->tokenize('9');
+
+        $this->assertSame(TokenType::Number, $tokens[0]->type);
+        $this->assertSame('9', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_decimal_starting_with_zero(): void
+    {
+        $tokens = $this->lexer->tokenize('0.5');
+
+        $this->assertSame(TokenType::Number, $tokens[0]->type);
+        $this->assertSame('0.5', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_decimal_ending_with_nine(): void
+    {
+        $tokens = $this->lexer->tokenize('1.9');
+
+        $this->assertSame(TokenType::Number, $tokens[0]->type);
+        $this->assertSame('1.9', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_stops_decimal_at_single_dot(): void
+    {
+        // 3.14.5 should be Number(3.14) Dot Number(5) — no double decimal
+        $tokens = $this->lexer->tokenize('3.14.5');
+
+        $this->assertSame(TokenType::Number, $tokens[0]->type);
+        $this->assertSame('3.14', $tokens[0]->value);
+        $this->assertSame(TokenType::Dot, $tokens[1]->type);
+        $this->assertSame(TokenType::Number, $tokens[2]->type);
+        $this->assertSame('5', $tokens[2]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_identifier_starting_with_uppercase_a(): void
+    {
+        $tokens = $this->lexer->tokenize('Abc');
+
+        $this->assertSame(TokenType::Ident, $tokens[0]->type);
+        $this->assertSame('Abc', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_identifier_with_uppercase_z(): void
+    {
+        $tokens = $this->lexer->tokenize('Z');
+
+        $this->assertSame(TokenType::Ident, $tokens[0]->type);
+        $this->assertSame('Z', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_identifier_with_digit_zero(): void
+    {
+        $tokens = $this->lexer->tokenize('x0');
+
+        $this->assertSame(TokenType::Ident, $tokens[0]->type);
+        $this->assertSame('x0', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_tokenizes_identifier_with_digit_nine(): void
+    {
+        $tokens = $this->lexer->tokenize('x9');
+
+        $this->assertSame(TokenType::Ident, $tokens[0]->type);
+        $this->assertSame('x9', $tokens[0]->value);
+    }
+
+    #[Test]
+    public function it_handles_backslash_at_end_of_string(): void
+    {
+        // Backslash followed by closing quote — the backslash escapes the quote
+        // so the string is unterminated
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unterminated string');
+
+        $this->lexer->tokenize('"test\\');
+    }
+
+    #[Test]
+    public function it_tokenizes_dotdot_at_end_of_input(): void
+    {
+        $tokens = $this->lexer->tokenize('..');
+
+        $this->assertSame(TokenType::DotDot, $tokens[0]->type);
+        $this->assertSame(TokenType::Eof, $tokens[1]->type);
+    }
+
+    #[Test]
+    public function it_tokenizes_dot_at_end_of_input(): void
+    {
+        $tokens = $this->lexer->tokenize('.');
+
+        $this->assertSame(TokenType::Dot, $tokens[0]->type);
+        $this->assertSame(TokenType::Eof, $tokens[1]->type);
+    }
 }

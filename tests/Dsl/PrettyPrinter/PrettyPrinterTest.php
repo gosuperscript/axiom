@@ -415,4 +415,57 @@ class PrettyPrinterTest extends TestCase
 
         $this->assertSame('(not x)', $output);
     }
+
+    #[Test]
+    public function it_does_not_parenthesize_at_same_precedence(): void
+    {
+        // a + b should NOT have parens when parent precedence equals its own
+        $node = new InfixExpressionNode(
+            new IdentifierNode('a'),
+            '+',
+            new IdentifierNode('b'),
+        );
+
+        // + has precedence 50; printing at exactly 50 should NOT parenthesize
+        $output = $this->printer->printExpression($node, 50);
+        $this->assertSame('a + b', $output);
+
+        // But at 51, it should
+        $output = $this->printer->printExpression($node, 51);
+        $this->assertSame('(a + b)', $output);
+    }
+
+    #[Test]
+    public function it_prints_right_side_of_infix_at_higher_precedence(): void
+    {
+        // 1 - 2 - 3 round-trips as left-associative: (1 - 2) - 3
+        $this->assertRoundTrip('x: number = 1 - 2 - 3');
+
+        $output = $this->roundTrip('x: number = 1 - 2 - 3');
+        $this->assertSame('x: number = 1 - 2 - 3', $output);
+    }
+
+    #[Test]
+    public function it_parenthesizes_right_associative_sub_expression(): void
+    {
+        // Verify (1 + 2) + 3 does not get extra parens but 1 + (2 - 3) does not either
+        // Both + and - are precedence 50, left-assoc. So 1 + 2 - 3 = (1 + 2) - 3.
+        $this->assertRoundTrip('x: number = 1 + 2 - 3');
+    }
+
+    #[Test]
+    public function it_round_trips_nested_namespace_indentation(): void
+    {
+        $source = "namespace ns {\n    a: number = 1\n    b: number = 2\n}";
+        $tokens = $this->lexer->tokenize($source);
+        $program = $this->parser->parse($tokens);
+        $output = $this->printer->print($program);
+
+        // Verify indentation is correct
+        $lines = explode("\n", $output);
+        $this->assertSame('namespace ns {', $lines[0]);
+        $this->assertSame('    a: number = 1', $lines[1]);
+        $this->assertSame('    b: number = 2', $lines[2]);
+        $this->assertSame('}', $lines[3]);
+    }
 }

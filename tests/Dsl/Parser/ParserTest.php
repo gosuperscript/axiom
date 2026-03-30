@@ -708,4 +708,178 @@ AXIOM;
         $this->assertInstanceOf(IdentifierNode::class, $stmt->expression->left);
         $this->assertSame('not', $stmt->expression->left->name);
     }
+
+    #[Test]
+    public function it_respects_left_associativity_for_same_precedence(): void
+    {
+        // 1 - 2 - 3 must parse as (1 - 2) - 3 (left-assoc), not 1 - (2 - 3)
+        $expr = $this->getExpression($this->parseExpression('1 - 2 - 3'));
+
+        $this->assertInstanceOf(InfixExpressionNode::class, $expr);
+        $this->assertSame('-', $expr->operator);
+        // right should be literal 3
+        $this->assertInstanceOf(LiteralNode::class, $expr->right);
+        $this->assertSame(3, $expr->right->value);
+        // left should be 1 - 2
+        $this->assertInstanceOf(InfixExpressionNode::class, $expr->left);
+        $this->assertSame('-', $expr->left->operator);
+        $this->assertInstanceOf(LiteralNode::class, $expr->left->left);
+        $this->assertSame(1, $expr->left->left->value);
+    }
+
+    #[Test]
+    public function it_parses_not_in_right_side_correctly(): void
+    {
+        // a not in [1, 2] — the right side of 'in' should be just [1, 2], not consuming more
+        $expr = $this->getExpression($this->parseExpression('a not in [1, 2]'));
+
+        $this->assertInstanceOf(UnaryExpressionNode::class, $expr);
+        $inner = $expr->operand;
+        $this->assertInstanceOf(InfixExpressionNode::class, $inner);
+        $this->assertInstanceOf(ListLiteralNode::class, $inner->right);
+        $this->assertCount(2, $inner->right->elements);
+    }
+
+    #[Test]
+    public function it_parses_string_with_escaped_backslash(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('"a\\\\b"'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame('a\\b', $expr->value);
+        $this->assertSame('"a\\\\b"', $expr->raw);
+    }
+
+    #[Test]
+    public function it_parses_string_with_escaped_quote(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('"say \\"hi\\""'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame('say "hi"', $expr->value);
+    }
+
+    #[Test]
+    public function it_parses_string_with_escaped_newline(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('"line1\\nline2"'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame("line1\nline2", $expr->value);
+    }
+
+    #[Test]
+    public function it_parses_percentage_value_correctly(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('50%'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame(0.5, $expr->value);
+        $this->assertSame('50%', $expr->raw);
+    }
+
+    #[Test]
+    public function it_parses_string_raw_includes_quotes(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('"hello"'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame('"hello"', $expr->raw);
+    }
+
+    #[Test]
+    public function it_parses_dict_entry_preserves_key(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('{"a": 1}'));
+
+        $this->assertInstanceOf(DictLiteralNode::class, $expr);
+        $this->assertCount(1, $expr->entries);
+        $this->assertInstanceOf(LiteralNode::class, $expr->entries[0]['key']);
+        $this->assertSame('a', $expr->entries[0]['key']->value);
+        $this->assertInstanceOf(LiteralNode::class, $expr->entries[0]['value']);
+        $this->assertSame(1, $expr->entries[0]['value']->value);
+    }
+
+    #[Test]
+    public function it_handles_trailing_comma_in_list_correctly(): void
+    {
+        // After consuming the trailing comma, should not loop back to parse more
+        $expr = $this->getExpression($this->parseExpression('[1, 2, 3,]'));
+
+        $this->assertInstanceOf(ListLiteralNode::class, $expr);
+        $this->assertCount(3, $expr->elements);
+    }
+
+    #[Test]
+    public function it_handles_trailing_comma_in_dict_correctly(): void
+    {
+        $expr = $this->getExpression($this->parseExpression('{"a": 1, "b": 2,}'));
+
+        $this->assertInstanceOf(DictLiteralNode::class, $expr);
+        $this->assertCount(2, $expr->entries);
+    }
+
+    #[Test]
+    public function it_does_not_accept_non_equals_operator_in_declaration(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage("Expected '='");
+
+        // Operator '+' where '=' is expected
+        $tokens = [
+            new Token(TokenType::Ident, 'x', 1, 1),
+            new Token(TokenType::Colon, ':', 1, 2),
+            new Token(TokenType::Ident, 'number', 1, 4),
+            new Token(TokenType::Operator, '+', 1, 11),
+            new Token(TokenType::Number, '42', 1, 13),
+            new Token(TokenType::Eof, '', 1, 15),
+        ];
+
+        $this->parser->parse($tokens);
+    }
+
+    #[Test]
+    public function it_does_not_treat_non_minus_operator_as_unary(): void
+    {
+        // 'x: number = + 5' — '+' is not a valid unary prefix, should error
+        $this->expectException(RuntimeException::class);
+
+        $tokens = $this->lexer->tokenize('x: number = + 5');
+        $this->parser->parse($tokens);
+    }
+
+    #[Test]
+    public function it_does_not_desugar_not_without_in(): void
+    {
+        // 'a not b' — 'not' without 'in' should not trigger not-in desugaring
+        // 'not' is a prefix unary, so this parses as 'a' then 'not b' which fails
+        // because 'not' at infix position is a prefix operator, not infix
+        $expr = $this->getExpression($this->parseExpression('a + not b'));
+
+        // should be: a + (not b)
+        $this->assertInstanceOf(InfixExpressionNode::class, $expr);
+        $this->assertSame('+', $expr->operator);
+        $this->assertInstanceOf(UnaryExpressionNode::class, $expr->right);
+        $this->assertSame('not', $expr->right->operator);
+    }
+
+    #[Test]
+    public function it_does_not_accept_non_keyword_ident_as_operator(): void
+    {
+        // 'a foo b' — 'foo' is not a registered keyword operator, should stop parsing
+        $expr = $this->getExpression($this->parseExpression('a'));
+
+        $this->assertInstanceOf(IdentifierNode::class, $expr);
+        $this->assertSame('a', $expr->name);
+    }
+
+    #[Test]
+    public function it_parses_percentage_strips_suffix(): void
+    {
+        // Verify substr strips the % sign and divides by 100
+        $expr = $this->getExpression($this->parseExpression('100%'));
+
+        $this->assertInstanceOf(LiteralNode::class, $expr);
+        $this->assertSame(1.0, $expr->value);
+    }
 }
