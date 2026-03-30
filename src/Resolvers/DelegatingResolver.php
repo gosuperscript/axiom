@@ -52,7 +52,7 @@ final readonly class DelegatingResolver implements BindableResolver
     public function resolve(Source $source): Result
     {
         $sourceClass = get_class($source);
-        
+
         if (isset($this->resolverMap[$sourceClass]) && $this->container->has($this->resolverMap[$sourceClass])) {
             return $this->container->make($this->resolverMap[$sourceClass])->resolve($source);
         }

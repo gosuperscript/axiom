@@ -27,6 +27,6 @@ final readonly class ExpressionMatcher implements PatternMatcher
     public function matches(MatchPattern $pattern, mixed $subjectValue): Result
     {
         return $this->resolver->resolve($pattern->source)
-            ->map(fn (Option $option) => $option->unwrapOr(null) === $subjectValue);
+            ->map(fn(Option $option) => $option->unwrapOr(null) === $subjectValue);
     }
 }

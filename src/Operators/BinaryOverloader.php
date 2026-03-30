@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
+
 use function Superscript\Monads\Result\attempt;
 
 final readonly class BinaryOverloader implements OperatorOverloader
@@ -24,7 +25,7 @@ final readonly class BinaryOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        return attempt(fn () => match ($operator) {
+        return attempt(fn() => match ($operator) {
             '+' => $left + $right,
             '-' => $left - $right,
             '*' => $left * $right,

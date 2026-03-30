@@ -79,30 +79,30 @@ class NumberTypeTest extends TestCase
     public function it_handles_empty_and_null_strings_in_coerce()
     {
         $type = new NumberType();
-        
+
         // Test that empty string returns None (null when unwrapped)
         $result = $type->coerce('');
         $this->assertTrue($result->isOk());
         $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
-        
+
         // Test that 'null' string returns None (null when unwrapped)
         $result = $type->coerce('null');
         $this->assertTrue($result->isOk());
         $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
-        
+
         // Test that these specific cases are different from error cases
         $result = $type->coerce('invalid');
         $this->assertTrue($result->isErr());
-        
+
         // Test that actual numbers still work
         $result = $type->coerce(42);
         $this->assertTrue($result->isOk());
         $this->assertSame(42, $result->unwrapOr(None())->unwrapOr(null));
-        
+
         // Critical test: ensure empty string doesn't throw error (would fail if is_string check was negated)
         $emptyResult = $type->coerce('');
         $this->assertTrue($emptyResult->isOk(), 'Empty string should return Ok(None), not an error');
-        
+
         $nullStringResult = $type->coerce('null');
         $this->assertTrue($nullStringResult->isOk(), 'String "null" should return Ok(None), not an error');
     }

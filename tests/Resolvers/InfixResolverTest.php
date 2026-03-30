@@ -13,7 +13,6 @@ use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 

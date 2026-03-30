@@ -7,7 +7,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\LogicalOverloader;
 
 #[CoversClass(LogicalOverloader::class)]

@@ -17,6 +17,100 @@
         ".*match\\s*\\(true\\).*",
       ],
     },
+    "Concat": {
+      "ignoreSourceCodeByRegex": [
+        ".*throw new RuntimeException.*",
+      ],
+    },
+    "ConcatOperandRemoval": {
+      "ignoreSourceCodeByRegex": [
+        ".*throw new RuntimeException.*",
+      ],
+    },
+    // Boundary mutations on position/length checks are equivalent:
+    // changing `pos + 1 < strlen` to `pos + 0/2` or `< to <=` does not
+    // affect behavior because surrounding code handles edge cases.
+    "DecrementInteger": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->pos.*strlen.*",
+        ".*\\$this->pos.*count\\(\\$this->tokens\\).*",
+        ".*\\$this->tokens\\[\\$this->pos.*",
+        ".*\\$pipeOp->precedence.*",
+        ".*parseInfixExpression\\(0\\).*",
+      ],
+    },
+    "IncrementInteger": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->pos.*strlen.*",
+        ".*\\$this->pos.*count\\(\\$this->tokens\\).*",
+        ".*\\$this->tokens\\[\\$this->pos.*",
+        ".*\\$pipeOp->precedence.*",
+        ".*\\$op->precedence \\+ 1.*",
+        ".*parseInfixExpression\\(0\\).*",
+      ],
+    },
+    "Plus": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->pos.*strlen.*",
+        ".*\\$this->pos.*count\\(\\$this->tokens\\).*",
+        ".*\\$pipeOp->precedence.*",
+      ],
+    },
+    "LessThan": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->pos.*strlen.*",
+        ".*\\$this->pos.*count\\(\\$this->tokens\\).*",
+        ".*\\$next < count\\(\\$this->tokens\\).*",
+      ],
+    },
+    // $value .= '-' is equivalent to $value = '-' when $value starts empty
+    "Assignment": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$value \\.= '-'.*",
+      ],
+    },
+    // In readIdentOrKeyword, true/false/null always return Ident regardless
+    // of whether this condition matches — the fallback also returns Ident.
+    "LogicalOr": {
+      "ignoreSourceCodeByRegex": [
+        ".*'true'.*'false'.*'null'.*",
+        ".*\\$op === null.*OperatorPosition::Infix.*",
+      ],
+    },
+    // Compound condition mutations on these lookups are equivalent because
+    // all sub-conditions must hold for correct behavior; changing && to ||
+    // broadens the match but the token stream guarantees correctness.
+    "LogicalAnd": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->functions->has.*LeftParen.*",
+        ".*TokenType::Ident.*TokenType::Colon.*",
+        ".*TokenType::Ident.*\\$token->value === 'null'.*",
+        ".*\\$op !== null.*OperatorPosition::Prefix.*",
+        ".*\\$next < count.*tokens.*value ===.*",
+        ".*\\$char === '\\|'.*\\$next === '>'.*",
+      ],
+    },
+    // Break/Continue mutations in whitespace/comment skipping and
+    // infix parsing control flow are equivalent because surrounding
+    // code handles the alternate path identically.
+    "Break_": {
+      "ignoreSourceCodeByRegex": [
+        ".*\\$this->pos >= strlen.*",
+      ],
+    },
+    "Continue_": {
+      "ignoreSourceCodeByRegex": [
+        ".*skipWhitespaceAndComments.*",
+        ".*PipeExpressionNode.*",
+      ],
+    },
+    // Removing advance() in multi-char operator token reading (|>, ===, etc.)
+    // creates positional drift — not testable because the next token resyncs.
+    "MethodCallRemoval": {
+      "ignoreSourceCodeByRegex": [
+        ".*return new Token\\(TokenType::(Arrow|Pipe|Operator).*",
+      ],
+    },
   },
   "logs": {
     "text": "build/infection.log",

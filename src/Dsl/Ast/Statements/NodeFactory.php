@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Dsl\Ast\Statements;
 
 use RuntimeException;
-use Superscript\Axiom\Dsl\Ast\Node;
 
 final class NodeFactory
 {
     /**
      * @param mixed[] $data
      */
-    public static function fromArray(array $data): Node
+    public static function fromArray(array $data): StatementNode
     {
         $type = $data['type'] ?? null;
         if (!is_string($type)) {

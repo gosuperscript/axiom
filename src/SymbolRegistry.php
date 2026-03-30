@@ -22,7 +22,7 @@ final readonly class SymbolRegistry
     {
         // Transform the array into internal storage format
         $internalSymbols = [];
-        
+
         foreach ($symbols as $key => $value) {
             // If value is a Source, add it without namespace
             if ($value instanceof Source) {
@@ -32,14 +32,14 @@ final readonly class SymbolRegistry
             elseif (is_array($value)) {
                 // Validate that the array contains only Sources
                 dict(string(), instance_of(Source::class))->assert($value);
-                
+
                 foreach ($value as $name => $source) {
                     $namespacedKey = $key . '.' . $name;
                     $internalSymbols[$namespacedKey] = $source;
                 }
             } else {
                 throw new \InvalidArgumentException(
-                    'Symbol values must be either Source instances or arrays of Sources'
+                    'Symbol values must be either Source instances or arrays of Sources',
                 );
             }
         }

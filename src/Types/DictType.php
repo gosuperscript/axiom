@@ -77,7 +77,7 @@ class DictType implements Type
     {
         return array_keys($a) === array_keys($b) && array_all(
             array_keys($a),
-            fn(int|string $key) => $this->type->compare($a[$key], $b[$key])
+            fn(int|string $key) => $this->type->compare($a[$key], $b[$key]),
         );
     }
 

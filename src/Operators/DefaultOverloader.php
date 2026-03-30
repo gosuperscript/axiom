@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
 use UnhandledMatchError;
+
 use function Superscript\Monads\Result\Err;
 
 final readonly class DefaultOverloader implements OperatorOverloader

@@ -30,9 +30,9 @@ final readonly class MemberAccessResolver implements Resolver
         $this->inspector?->annotate('label', ".{$source->property}");
 
         return $this->resolver->resolve($source->object)
-            ->andThen(fn (Option $option) => $option
-                ->mapOr(Ok(None()), fn (mixed $value) => $this->access($value, $source->property)))
-            ->inspect(fn (Option $option) => $option->inspect(fn (mixed $value) => $this->inspector?->annotate('result', $value)));
+            ->andThen(fn(Option $option) => $option
+                ->mapOr(Ok(None()), fn(mixed $value) => $this->access($value, $source->property)))
+            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
     }
 
     /**

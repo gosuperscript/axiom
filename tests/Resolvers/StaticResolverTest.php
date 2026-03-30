@@ -8,7 +8,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\StaticSource;
 
 #[CoversClass(StaticResolver::class)]

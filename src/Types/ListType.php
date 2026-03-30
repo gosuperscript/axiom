@@ -66,7 +66,7 @@ class ListType implements Type
     {
         return count($a) === count($b) && array_all(
             array_keys($a),
-            fn(int|string $key) => $this->type->compare($a[$key], $b[$key])
+            fn(int|string $key) => $this->type->compare($a[$key], $b[$key]),
         );
     }
 

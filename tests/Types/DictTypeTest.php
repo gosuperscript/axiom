@@ -14,9 +14,8 @@ use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Exceptions\TransformValueException;
-use Stringable;
-
 use Superscript\Axiom\Types\Type;
+
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(DictType::class)]
@@ -61,6 +60,24 @@ class DictTypeTest extends TestCase
             [new NumberType(), ['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 3]],
             [new StringType(), ['x' => 'hello', 'y' => 'world'], ['x' => 'hello', 'y' => 'world']],
         ];
+    }
+
+    #[Test]
+    public function it_returns_none_for_empty_dict_assert(): void
+    {
+        $type = new DictType(new NumberType());
+        $result = $type->assert([]);
+        $this->assertTrue($result->isOk());
+        $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
+    }
+
+    #[Test]
+    public function it_returns_none_for_empty_dict_coerce(): void
+    {
+        $type = new DictType(new NumberType());
+        $result = $type->coerce([]);
+        $this->assertTrue($result->isOk());
+        $this->assertNull($result->unwrapOr(None())->unwrapOr(null));
     }
 
     #[Test]
