@@ -23,7 +23,6 @@ use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MatchPattern;
-use Superscript\Axiom\Sources\RangePattern;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\WildcardPattern;
@@ -35,7 +34,6 @@ use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 #[CoversClass(MatchArm::class)]
 #[CoversClass(LiteralPattern::class)]
 #[CoversClass(WildcardPattern::class)]
-#[CoversClass(RangePattern::class)]
 #[CoversClass(ExpressionPattern::class)]
 #[UsesClass(StaticResolver::class)]
 #[UsesClass(StaticSource::class)]
@@ -146,102 +144,6 @@ class MatchResolverTest extends TestCase
         );
 
         $this->assertEquals('no', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function it_matches_value_within_range(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource(50000),
-            arms: [
-                new MatchArm(new RangePattern(0, 100000), new StaticSource('micro')),
-                new MatchArm(new RangePattern(100001, 500000), new StaticSource('small')),
-            ],
-        );
-
-        $this->assertEquals('micro', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function range_is_inclusive_on_lower_bound(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource(0),
-            arms: [
-                new MatchArm(new RangePattern(0, 100), new StaticSource('matched')),
-                new MatchArm(new WildcardPattern(), new StaticSource('not matched')),
-            ],
-        );
-
-        $this->assertEquals('matched', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function range_is_inclusive_on_upper_bound(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource(100),
-            arms: [
-                new MatchArm(new RangePattern(0, 100), new StaticSource('matched')),
-                new MatchArm(new WildcardPattern(), new StaticSource('not matched')),
-            ],
-        );
-
-        $this->assertEquals('matched', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function range_falls_through_when_out_of_range(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource(200),
-            arms: [
-                new MatchArm(new RangePattern(0, 100), new StaticSource('in range')),
-                new MatchArm(new WildcardPattern(), new StaticSource('out of range')),
-            ],
-        );
-
-        $this->assertEquals('out of range', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function range_rejects_non_numeric_subject(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource('not a number'),
-            arms: [
-                new MatchArm(new RangePattern(0, 100), new StaticSource('in range')),
-                new MatchArm(new WildcardPattern(), new StaticSource('fallback')),
-            ],
-        );
-
-        $this->assertEquals('fallback', $resolver->resolve($source)->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function range_matches_float_values(): void
-    {
-        $resolver = new MatchResolver(new StaticResolver());
-
-        $source = new MatchExpression(
-            subject: new StaticSource(3.14),
-            arms: [
-                new MatchArm(new RangePattern(0.0, 5.0), new StaticSource('matched')),
-                new MatchArm(new WildcardPattern(), new StaticSource('not matched')),
-            ],
-        );
-
-        $this->assertEquals('matched', $resolver->resolve($source)->unwrap()->unwrap());
     }
 
     #[Test]
@@ -519,7 +421,6 @@ class MatchResolverTest extends TestCase
             arms: [
                 new MatchArm(new LiteralPattern(99), new StaticSource('literal')),
                 new MatchArm(new ExpressionPattern(new StaticSource(50)), new StaticSource('expression')),
-                new MatchArm(new RangePattern(0, 100), new StaticSource('range')),
                 new MatchArm(new WildcardPattern(), new StaticSource('wildcard')),
             ],
         );

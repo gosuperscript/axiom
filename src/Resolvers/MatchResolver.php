@@ -9,7 +9,6 @@ use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchExpression;
-use Superscript\Axiom\Sources\RangePattern;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -85,7 +84,6 @@ final readonly class MatchResolver implements Resolver
         return match (true) {
             $pattern instanceof WildcardPattern => true,
             $pattern instanceof LiteralPattern => $pattern->value === $subjectValue,
-            $pattern instanceof RangePattern => is_numeric($subjectValue) && $subjectValue >= $pattern->from && $subjectValue <= $pattern->to,
             $pattern instanceof ExpressionPattern => $this->matchesExpression($pattern, $subjectValue),
             default => false,
         };
