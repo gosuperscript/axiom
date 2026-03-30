@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests\Resolvers;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -60,7 +61,10 @@ class MemberAccessResolverTest extends TestCase
             property: 'age',
         );
 
-        $this->assertTrue($resolver->resolve($source)->isErr());
+        $result = $resolver->resolve($source);
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
+        $this->assertSame("Property 'age' does not exist", $result->unwrapErr()->getMessage());
     }
 
     #[Test]
@@ -105,7 +109,10 @@ class MemberAccessResolverTest extends TestCase
             property: 'age',
         );
 
-        $this->assertTrue($resolver->resolve($source)->isErr());
+        $result = $resolver->resolve($source);
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
+        $this->assertSame("Property 'age' does not exist", $result->unwrapErr()->getMessage());
     }
 
     #[Test]
@@ -155,7 +162,10 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertTrue($resolver->resolve($source)->isErr());
+        $result = $resolver->resolve($source);
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
+        $this->assertSame("Cannot access property 'name' on string", $result->unwrapErr()->getMessage());
     }
 
     #[Test]
@@ -167,6 +177,9 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertTrue($resolver->resolve($source)->isErr());
+        $result = $resolver->resolve($source);
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
+        $this->assertSame("Cannot access property 'name' on int", $result->unwrapErr()->getMessage());
     }
 }
