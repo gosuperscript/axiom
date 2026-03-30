@@ -13,8 +13,8 @@ use Superscript\Axiom\Dsl\FunctionParam;
 use Superscript\Axiom\Dsl\FunctionRegistry;
 
 #[CoversClass(FunctionRegistry::class)]
-#[UsesClass(FunctionEntry::class)]
-#[UsesClass(FunctionParam::class)]
+#[CoversClass(FunctionEntry::class)]
+#[CoversClass(FunctionParam::class)]
 class FunctionRegistryTest extends TestCase
 {
     #[Test]

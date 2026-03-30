@@ -92,6 +92,30 @@ class CoreDslPluginTest extends TestCase
         $this->assertTrue($registry->isKeywordOperator('intersects'));
         $this->assertTrue($registry->isKeywordOperator('xor'));
         $this->assertTrue($registry->isKeywordOperator('not'));
+
+        // Verify specific precedence values for all operators
+        $this->assertSame(10, $registry->get('||')->precedence);
+        $this->assertSame(20, $registry->get('&&')->precedence);
+        $this->assertSame(15, $registry->get('xor')->precedence);
+        $this->assertSame(30, $registry->get('=')->precedence);
+        $this->assertSame(30, $registry->get('==')->precedence);
+        $this->assertSame(30, $registry->get('===')->precedence);
+        $this->assertSame(30, $registry->get('!=')->precedence);
+        $this->assertSame(30, $registry->get('!==')->precedence);
+        $this->assertSame(40, $registry->get('<')->precedence);
+        $this->assertSame(40, $registry->get('<=')->precedence);
+        $this->assertSame(40, $registry->get('>')->precedence);
+        $this->assertSame(40, $registry->get('>=')->precedence);
+        $this->assertSame(40, $registry->get('in')->precedence);
+        $this->assertSame(40, $registry->get('has')->precedence);
+        $this->assertSame(40, $registry->get('intersects')->precedence);
+        $this->assertSame(50, $registry->get('+')->precedence);
+        $this->assertSame(50, $registry->get('-')->precedence);
+        $this->assertSame(60, $registry->get('*')->precedence);
+        $this->assertSame(60, $registry->get('/')->precedence);
+        $this->assertSame(70, $registry->get('!')->precedence);
+        $this->assertSame(70, $registry->get('not')->precedence);
+        $this->assertSame(5, $registry->get('|>')->precedence);
     }
 
     #[Test]
@@ -112,6 +136,58 @@ class CoreDslPluginTest extends TestCase
         $this->assertInstanceOf(BooleanType::class, $types->resolve('bool'));
         $this->assertInstanceOf(ListType::class, $types->resolve('list'));
         $this->assertInstanceOf(DictType::class, $types->resolve('dict'));
+    }
+
+    #[Test]
+    public function it_resolves_list_with_default_string_type(): void
+    {
+        $plugin = new CoreDslPlugin();
+        $types = new TypeRegistry();
+        $plugin->types($types);
+
+        $list = $types->resolve('list');
+
+        $this->assertInstanceOf(ListType::class, $list);
+        $this->assertInstanceOf(StringType::class, $list->type);
+    }
+
+    #[Test]
+    public function it_resolves_list_with_parameterized_type(): void
+    {
+        $plugin = new CoreDslPlugin();
+        $types = new TypeRegistry();
+        $plugin->types($types);
+
+        $list = $types->resolve('list', 'number');
+
+        $this->assertInstanceOf(ListType::class, $list);
+        $this->assertInstanceOf(NumberType::class, $list->type);
+    }
+
+    #[Test]
+    public function it_resolves_dict_with_default_string_type(): void
+    {
+        $plugin = new CoreDslPlugin();
+        $types = new TypeRegistry();
+        $plugin->types($types);
+
+        $dict = $types->resolve('dict');
+
+        $this->assertInstanceOf(DictType::class, $dict);
+        $this->assertInstanceOf(StringType::class, $dict->type);
+    }
+
+    #[Test]
+    public function it_resolves_dict_with_parameterized_type(): void
+    {
+        $plugin = new CoreDslPlugin();
+        $types = new TypeRegistry();
+        $plugin->types($types);
+
+        $dict = $types->resolve('dict', 'number');
+
+        $this->assertInstanceOf(DictType::class, $dict);
+        $this->assertInstanceOf(NumberType::class, $dict->type);
     }
 
     #[Test]

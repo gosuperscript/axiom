@@ -45,7 +45,7 @@ final class OperatorRegistry
      */
     public function byPrecedence(): array
     {
-        $entries = array_values($this->operators);
+        $entries = $this->operators;
 
         usort($entries, fn(OperatorEntry $a, OperatorEntry $b) => $a->precedence <=> $b->precedence);
 

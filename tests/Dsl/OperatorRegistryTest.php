@@ -15,7 +15,7 @@ use Superscript\Axiom\Dsl\OperatorPosition;
 use Superscript\Axiom\Dsl\OperatorRegistry;
 
 #[CoversClass(OperatorRegistry::class)]
-#[UsesClass(OperatorEntry::class)]
+#[CoversClass(OperatorEntry::class)]
 #[UsesClass(Associativity::class)]
 #[UsesClass(OperatorPosition::class)]
 class OperatorRegistryTest extends TestCase
@@ -128,5 +128,13 @@ class OperatorRegistryTest extends TestCase
         $this->assertNotNull($entry);
         $this->assertSame(OperatorPosition::Prefix, $entry->position);
         $this->assertSame(Associativity::Right, $entry->associativity);
+    }
+
+    #[Test]
+    public function it_defaults_is_keyword_to_false(): void
+    {
+        $entry = new OperatorEntry('+', 50, Associativity::Left, OperatorPosition::Infix);
+
+        $this->assertFalse($entry->isKeyword);
     }
 }
