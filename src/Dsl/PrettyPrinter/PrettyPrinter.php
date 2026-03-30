@@ -70,7 +70,6 @@ final class PrettyPrinter
 
     public function printExpression(ExprNode $node, int $parentPrecedence = 0): string
     {
-        // Check literal extensions first
         foreach ($this->literalExtensions as $ext) {
             if ($ext->handles($node)) {
                 return $ext->prettyPrint($node, $this, $parentPrecedence);
@@ -80,11 +79,11 @@ final class PrettyPrinter
         return match (true) {
             $node instanceof LiteralNode => $this->printLiteral($node),
             $node instanceof IdentifierNode => $node->name,
-            $node instanceof MemberExpressionNode => $this->printMemberExpression($node, $parentPrecedence),
-            $node instanceof IndexExpressionNode => $this->printIndexExpression($node, $parentPrecedence),
+            $node instanceof MemberExpressionNode => $this->printMemberExpression($node),
+            $node instanceof IndexExpressionNode => $this->printIndexExpression($node),
             $node instanceof InfixExpressionNode => $this->printInfixExpression($node, $parentPrecedence),
             $node instanceof UnaryExpressionNode => $this->printUnaryExpression($node, $parentPrecedence),
-            $node instanceof CoercionExpressionNode => $this->printCoercionExpression($node, $parentPrecedence),
+            $node instanceof CoercionExpressionNode => $this->printCoercionExpression($node),
             $node instanceof ListLiteralNode => $this->printListLiteral($node),
             $node instanceof DictLiteralNode => $this->printDictLiteral($node),
             default => throw new RuntimeException('Cannot print expression of type ' . $node::class),
@@ -96,14 +95,14 @@ final class PrettyPrinter
         return $node->raw;
     }
 
-    private function printMemberExpression(MemberExpressionNode $node, int $parentPrecedence): string
+    private function printMemberExpression(MemberExpressionNode $node): string
     {
         $object = $this->printExpression($node->object, PHP_INT_MAX);
 
         return "{$object}.{$node->property}";
     }
 
-    private function printIndexExpression(IndexExpressionNode $node, int $parentPrecedence): string
+    private function printIndexExpression(IndexExpressionNode $node): string
     {
         $object = $this->printExpression($node->object, PHP_INT_MAX);
         $index = $this->printExpression($node->index);
@@ -130,7 +129,6 @@ final class PrettyPrinter
 
     private function printUnaryExpression(UnaryExpressionNode $node, int $parentPrecedence): string
     {
-        // Detect 'not in' pattern: UnaryExpression('not', InfixExpression(left, 'in', right))
         if ($node->operator === 'not' && $node->operand instanceof InfixExpressionNode && $node->operand->operator === 'in') {
             $inOp = $this->operatorRegistry->get('in');
             $precedence = $inOp !== null ? $inOp->precedence : 0;
@@ -162,7 +160,7 @@ final class PrettyPrinter
         return $result;
     }
 
-    private function printCoercionExpression(CoercionExpressionNode $node, int $parentPrecedence): string
+    private function printCoercionExpression(CoercionExpressionNode $node): string
     {
         $expr = $this->printExpression($node->expression, PHP_INT_MAX);
         $type = $this->printTypeAnnotation($node->targetType);

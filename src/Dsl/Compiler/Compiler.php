@@ -43,7 +43,6 @@ final class Compiler
 
     public function compile(ExprNode $node): Source
     {
-        // Check literal extensions first
         foreach ($this->literalExtensions as $ext) {
             if ($ext->handles($node)) {
                 return $ext->compile($node, $this);
@@ -90,8 +89,6 @@ final class Compiler
     {
         if ($node instanceof SymbolDeclarationNode) {
             $source = $this->compile($node->expression);
-
-            // Apply type coercion if needed
             $source = $this->applyTypeCoercion($node->type, $source);
 
             if ($namespace !== null) {
@@ -147,7 +144,6 @@ final class Compiler
             return new SymbolSource($node->property, $node->object->name);
         }
 
-        // Three or more levels → chained MemberAccessSource
         return new MemberAccessSource(
             $this->compile($node->object),
             $node->property,
@@ -236,7 +232,6 @@ final class Compiler
             return $node->value;
         }
 
-        // For non-literal expressions in list/dict context, compile to Source
         return $this->compile($node);
     }
 }

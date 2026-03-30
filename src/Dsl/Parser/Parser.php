@@ -71,7 +71,6 @@ final class Parser
     {
         $current = $this->stream->current();
 
-        // namespace keyword
         if ($current->type === TokenType::Ident && $current->value === 'namespace') {
             return $this->parseNamespaceDeclaration();
         }
@@ -85,7 +84,6 @@ final class Parser
         $this->stream->expect(TokenType::Colon);
         $type = $this->parseTypeAnnotation();
 
-        // Expect = (as Assign token or as Operator '=')
         $current = $this->stream->current();
         if ($current->type === TokenType::Assign) {
             $this->stream->advance();
@@ -135,7 +133,6 @@ final class Parser
             $current = $this->stream->current();
             $opSymbol = $current->value;
 
-            // Handle 'not in' desugaring
             if ($opSymbol === 'not' && $this->stream->peek()?->value === 'in') {
                 $inOp = $this->operatorRegistry->get('in');
                 if ($inOp === null || $inOp->precedence < $minPrecedence) {
@@ -152,7 +149,6 @@ final class Parser
                 continue;
             }
 
-            // Get operator from registry
             $isOp = ($current->type === TokenType::Operator)
                 || ($current->type === TokenType::Ident && $this->operatorRegistry->isKeywordOperator($opSymbol));
 
@@ -182,16 +178,14 @@ final class Parser
     {
         $current = $this->stream->current();
 
-        // Prefix ! operator
         if ($current->type === TokenType::Operator && $current->value === '!') {
             $this->stream->advance();
 
             return new UnaryExpressionNode('!', $this->parseUnary());
         }
 
-        // Prefix 'not' keyword
         if ($current->type === TokenType::Ident && $current->value === 'not') {
-            // Make sure the next token is not 'in' — that's handled in parseInfixExpression
+            // 'not in' is handled as a compound operator in parseInfixExpression
             $next = $this->stream->peek();
             if ($next !== null && $next->value === 'in') {
                 return $this->parsePostfix();
@@ -202,7 +196,6 @@ final class Parser
             return new UnaryExpressionNode('not', $this->parseUnary());
         }
 
-        // Prefix - (unary negation)
         if ($current->type === TokenType::Operator && $current->value === '-') {
             $this->stream->advance();
 
@@ -226,7 +219,7 @@ final class Parser
                 $index = $this->parseExpression();
                 $this->stream->expect(TokenType::RightBracket);
                 $expr = new IndexExpressionNode($expr, $index);
-            } elseif ($this->stream->current()->type === TokenType::Ident && $this->stream->current()->value === 'as') {
+            } elseif (($current = $this->stream->current())->type === TokenType::Ident && $current->value === 'as') {
                 $this->stream->advance();
                 $type = $this->parseTypeAnnotation();
                 $expr = new CoercionExpressionNode($expr, $type);
@@ -240,7 +233,6 @@ final class Parser
 
     private function parsePrimary(): ExprNode
     {
-        // Check literal extensions first
         foreach ($this->literalExtensions as $ext) {
             if ($ext->canParse($this->stream->current(), $this->stream)) {
                 return $ext->parse($this);
@@ -285,7 +277,6 @@ final class Parser
     private function parseStringLiteral(): LiteralNode
     {
         $token = $this->stream->advance();
-        // Unescape the string value
         $value = str_replace(
             ['\\\\', '\\"', '\\n', '\\t', '\\r'],
             ['\\', '"', "\n", "\t", "\r"],
@@ -393,7 +384,6 @@ final class Parser
         /** @var list<TypeAnnotationNode> $args */
         $args = [];
 
-        // Check for parameterized types: type<arg, arg>
         if ($this->stream->current()->type === TokenType::Operator && $this->stream->current()->value === '<') {
             $this->stream->advance(); // <
             $args[] = $this->parseTypeAnnotation();
@@ -403,7 +393,6 @@ final class Parser
                 $args[] = $this->parseTypeAnnotation();
             }
 
-            // Expect >
             $current = $this->stream->current();
             if ($current->type === TokenType::Operator && $current->value === '>') {
                 $this->stream->advance();

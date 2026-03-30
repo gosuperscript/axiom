@@ -55,7 +55,7 @@ final class AxiomDsl
             $plugin->operators($operatorRegistry);
             $plugin->types($typeRegistry);
             $plugin->functions($functionRegistry);
-            $literalExtensions = [...$literalExtensions, ...$plugin->literals()];
+            array_push($literalExtensions, ...$plugin->literals());
         }
 
         return new self(

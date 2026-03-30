@@ -27,7 +27,6 @@ final class Lexer
         while ($pos < $length) {
             $char = $source[$pos];
 
-            // Skip whitespace
             if ($char === ' ' || $char === "\t" || $char === "\r") {
                 $pos++;
                 $col++;
@@ -35,7 +34,6 @@ final class Lexer
                 continue;
             }
 
-            // Newlines
             if ($char === "\n") {
                 $pos++;
                 $line++;
@@ -44,39 +42,34 @@ final class Lexer
                 continue;
             }
 
-            // Skip line comments
             if ($char === '/' && $pos + 1 < $length && $source[$pos + 1] === '/') {
-                $pos += 2;
                 while ($pos < $length && $source[$pos] !== "\n") {
                     $pos++;
                 }
+                $col = 1;
 
                 continue;
             }
 
-            // Numbers
             if ($char >= '0' && $char <= '9') {
                 $startCol = $col;
-                $num = '';
+                $startPos = $pos;
                 $hasDecimal = false;
 
                 while ($pos < $length && (($source[$pos] >= '0' && $source[$pos] <= '9') || ($source[$pos] === '.' && !$hasDecimal && $pos + 1 < $length && $source[$pos + 1] >= '0' && $source[$pos + 1] <= '9'))) {
                     if ($source[$pos] === '.') {
                         $hasDecimal = true;
                     }
-                    $num .= $source[$pos];
                     $pos++;
                     $col++;
                 }
 
-                // % suffix is part of the number token
                 if ($pos < $length && $source[$pos] === '%') {
-                    $num .= '%';
                     $pos++;
                     $col++;
                 }
 
-                $tokens[] = new Token(TokenType::Number, $num, $line, $startCol);
+                $tokens[] = new Token(TokenType::Number, substr($source, $startPos, $pos - $startPos), $line, $startCol);
 
                 continue;
             }
@@ -116,16 +109,16 @@ final class Lexer
                 continue;
             }
 
-            // Identifiers and keywords
             if ($this->isIdentStart($char)) {
                 $startCol = $col;
-                $ident = '';
+                $startPos = $pos;
 
                 while ($pos < $length && $this->isIdentPart($source[$pos])) {
-                    $ident .= $source[$pos];
                     $pos++;
                     $col++;
                 }
+
+                $ident = substr($source, $startPos, $pos - $startPos);
 
                 $type = match ($ident) {
                     'true' => TokenType::True,
@@ -139,10 +132,8 @@ final class Lexer
                 continue;
             }
 
-            // Structural tokens and operators
             $startCol = $col;
 
-            // Single-character structural tokens
             $structuralType = match ($char) {
                 '(' => TokenType::LeftParen,
                 ')' => TokenType::RightParen,
@@ -163,7 +154,6 @@ final class Lexer
                 continue;
             }
 
-            // Dot and DotDot
             if ($char === '.') {
                 if ($pos + 1 < $length && $source[$pos + 1] === '.') {
                     $tokens[] = new Token(TokenType::DotDot, '..', $line, $startCol);
@@ -178,7 +168,6 @@ final class Lexer
                 continue;
             }
 
-            // Arrow and Assign
             if ($char === '=') {
                 if ($pos + 1 < $length && $source[$pos + 1] === '>') {
                     $tokens[] = new Token(TokenType::Arrow, '=>', $line, $startCol);
@@ -188,7 +177,6 @@ final class Lexer
                     continue;
                 }
 
-                // Check for ==, ===
                 if ($pos + 1 < $length && $source[$pos + 1] === '=') {
                     if ($pos + 2 < $length && $source[$pos + 2] === '=') {
                         $tokens[] = new Token(TokenType::Operator, '===', $line, $startCol);
@@ -205,7 +193,6 @@ final class Lexer
                     continue;
                 }
 
-                // Check if = is a registered operator
                 if ($this->operatorRegistry->isOperator('=')) {
                     $tokens[] = new Token(TokenType::Operator, '=', $line, $startCol);
                     $pos++;
@@ -221,7 +208,6 @@ final class Lexer
                 continue;
             }
 
-            // Pipe |> and |
             if ($char === '|') {
                 if ($pos + 1 < $length && $source[$pos + 1] === '>') {
                     $tokens[] = new Token(TokenType::Operator, '|>', $line, $startCol);
@@ -240,12 +226,12 @@ final class Lexer
                 continue;
             }
 
-            // Multi-character operators: greedy matching
             $token = $this->matchOperator($source, $pos, $length, $line, $startCol);
             if ($token !== null) {
                 $tokens[] = $token;
-                $pos += strlen($token->value);
-                $col += strlen($token->value);
+                $tokenLen = strlen($token->value);
+                $pos += $tokenLen;
+                $col += $tokenLen;
 
                 continue;
             }
@@ -260,14 +246,14 @@ final class Lexer
 
     private function matchOperator(string $source, int $pos, int $length, int $line, int $col): ?Token
     {
-        // Try greedy matching: longest first (up to 3 chars)
         for ($len = 3; $len >= 1; $len--) {
             if ($pos + $len > $length) {
                 continue;
             }
 
             $candidate = substr($source, $pos, $len);
-            if ($this->operatorRegistry->isOperator($candidate) && !$this->operatorRegistry->isKeywordOperator($candidate)) {
+            $entry = $this->operatorRegistry->get($candidate);
+            if ($entry !== null && !$entry->isKeyword) {
                 return new Token(TokenType::Operator, $candidate, $line, $col);
             }
         }
