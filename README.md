@@ -6,6 +6,7 @@ A powerful PHP library for data transformation, type validation, and expression 
 
 - **Type System**: Robust type validation and transformation for numbers, strings, booleans, lists, and dictionaries
 - **Expression Evaluation**: Support for infix expressions with custom operators
+- **Match Expressions**: Unified conditional logic — if/then/else, dispatch tables, and cond-style matching
 - **Resolver Pattern**: Pluggable resolver system for different data sources
 - **Symbol Registry**: Named value resolution and reuse
 - **Operator Overloading**: Extensible operator system for custom evaluation logic
@@ -207,6 +208,7 @@ Sources represent different ways to provide data:
 - **TypeDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
+- **MatchExpression**: Conditional matching with ordered arms (see below)
 
 ### Symbol Registry
 
@@ -235,6 +237,75 @@ new SymbolRegistry([
 - Create clear separation between different symbol contexts
 - Improve code maintainability with logical grouping
 
+### Match Expressions
+
+`MatchExpression` provides a unified way to express conditionals, dispatch tables, and cond-style matching. A match expression has a **subject** and an ordered list of **arms**. Each arm pairs a pattern with a result expression. The first matching arm wins.
+
+**Patterns:**
+
+- **LiteralPattern**: Matches via strict equality (`===`)
+- **WildcardPattern**: Always matches (the default/catch-all arm)
+- **ExpressionPattern**: Wraps a Source — resolves it and compares to the subject
+
+**If/then/else:**
+
+```php
+// if claims > 2 then 100 * 0.25 else 0
+new MatchExpression(
+    subject: new StaticSource(true),
+    arms: [
+        new MatchArm(
+            new ExpressionPattern(
+                new InfixExpression(new SymbolSource('claims'), '>', new StaticSource(2)),
+            ),
+            new InfixExpression(new StaticSource(100), '*', new StaticSource(0.25)),
+        ),
+        new MatchArm(new WildcardPattern(), new StaticSource(0)),
+    ],
+);
+```
+
+**Dispatch table:**
+
+```php
+// match tier { "micro" => 1.3, "small" => 1.1, _ => 1.0 }
+new MatchExpression(
+    subject: new SymbolSource('tier'),
+    arms: [
+        new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
+        new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),
+        new MatchArm(new WildcardPattern(), new StaticSource(1.0)),
+    ],
+);
+```
+
+**Cond-style (subjectless):**
+
+```php
+// match { claims > 3 => 0.5, turnover > 500000 => 0.35, _ => 0.1 }
+new MatchExpression(
+    subject: new StaticSource(true),
+    arms: [
+        new MatchArm(new ExpressionPattern(/* claims > 3 */), new StaticSource(0.5)),
+        new MatchArm(new ExpressionPattern(/* turnover > 500000 */), new StaticSource(0.35)),
+        new MatchArm(new WildcardPattern(), new StaticSource(0.1)),
+    ],
+);
+```
+
+**Extensible pattern matching:** The `MatchResolver` delegates pattern evaluation to a registry of `PatternMatcher` implementations. Extension packages can register their own pattern types (e.g. `IntervalPattern` from `axiom-interval`) without modifying core axiom:
+
+```php
+$matchers = [
+    new WildcardMatcher(),
+    new LiteralMatcher(),
+    new ExpressionMatcher($resolver),
+    // Add custom matchers from extension packages here
+];
+
+$resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
+```
+
 ### Resolvers
 
 Resolvers handle the evaluation of sources:
@@ -243,6 +314,7 @@ Resolvers handle the evaluation of sources:
 - **ValueResolver**: Applies type coercion using the `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
 - **SymbolResolver**: Looks up named symbols
+- **MatchResolver**: Evaluates match expressions with extensible pattern matching
 - **DelegatingResolver**: Chains multiple resolvers together
 
 ### Operators
@@ -276,6 +348,7 @@ interface ResolutionInspector
 | `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`) |
 | `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`) |
 | `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`) |
+| `MatchResolver` | `label`: `"match"`; `subject`: resolved subject value; `matched_arm`: index of matched arm; `result`: final value |
 
 **Usage with DelegatingResolver:**
 
