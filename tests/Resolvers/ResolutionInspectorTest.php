@@ -14,12 +14,14 @@ use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\MemberAccessResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\TypeDefinition;
@@ -33,9 +35,11 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(InfixResolver::class)]
 #[CoversClass(UnaryResolver::class)]
 #[CoversClass(SymbolResolver::class)]
+#[CoversClass(MemberAccessResolver::class)]
 #[CoversClass(ValueResolver::class)]
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]
+#[UsesClass(MemberAccessSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(UnaryExpression::class)]
 #[UsesClass(SymbolSource::class)]
@@ -280,6 +284,36 @@ class ResolutionInspectorTest extends TestCase
         $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')));
 
         $this->assertSame(42, $result->unwrap()->unwrap());
+    }
+
+    // -- MemberAccessResolver --
+
+    #[Test]
+    public function member_access_resolver_annotates_label_with_dot_prefixed_property(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new MemberAccessResolver(new StaticResolver(), $inspector);
+
+        $resolver->resolve(new MemberAccessSource(
+            object: new StaticSource(['name' => 'John']),
+            property: 'name',
+        ));
+
+        $this->assertSame('.name', $inspector->annotations['label']);
+    }
+
+    #[Test]
+    public function member_access_resolver_annotates_result_with_accessed_value(): void
+    {
+        $inspector = new SpyInspector();
+        $resolver = new MemberAccessResolver(new StaticResolver(), $inspector);
+
+        $resolver->resolve(new MemberAccessSource(
+            object: new StaticSource(['age' => 30]),
+            property: 'age',
+        ));
+
+        $this->assertSame(30, $inspector->annotations['result']);
     }
 
     // -- DelegatingResolver integration --
