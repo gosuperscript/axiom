@@ -8,6 +8,7 @@ use RuntimeException;
 use SebastianBergmann\Exporter\Exporter;
 use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
+
 use function Superscript\Monads\Result\Err;
 
 class OverloaderManager implements OperatorOverloader

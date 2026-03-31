@@ -11,7 +11,6 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\TypeDefinition;
-use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Monads\Result\Result;

@@ -37,7 +37,7 @@ final readonly class MatchResolver implements Resolver
         $this->inspector?->annotate('label', 'match');
 
         return $this->resolver->resolve($source->subject)
-            ->andThen(fn (Option $subjectOption) => $this->evaluateArms(
+            ->andThen(fn(Option $subjectOption) => $this->evaluateArms(
                 $subjectOption->unwrapOr(null),
                 $source->arms,
             ));
@@ -65,8 +65,8 @@ final readonly class MatchResolver implements Resolver
             $this->inspector?->annotate('matched_arm', $index);
 
             return $this->resolver->resolve($arm->expression)
-                ->inspect(fn (Option $option) => $option->inspect(
-                    fn (mixed $value) => $this->inspector?->annotate('result', $value),
+                ->inspect(fn(Option $option) => $option->inspect(
+                    fn(mixed $value) => $this->inspector?->annotate('result', $value),
                 ));
         }
 

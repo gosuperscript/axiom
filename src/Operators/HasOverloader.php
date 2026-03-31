@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
+
 use function Psl\Type\mixed_vec;
 use function Psl\Type\vec;
 use function Psl\Type\string;

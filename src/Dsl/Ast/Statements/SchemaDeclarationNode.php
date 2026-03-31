@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Dsl\Ast\Statements;
 
 use Superscript\Axiom\Dsl\Ast\Location;
-use Superscript\Axiom\Dsl\Ast\TypeAnnotationNode;
+use Superscript\Axiom\Dsl\Ast\Node;
 
 final readonly class SchemaDeclarationNode implements StatementNode
 {
     /**
-     * @param array<string, TypeAnnotationNode> $fields
+     * @param list<StatementNode> $members
      */
     public function __construct(
         public string $name,
-        public array $fields,
+        public array $members,
         public ?Location $loc = null,
     ) {}
 
@@ -23,7 +23,7 @@ final readonly class SchemaDeclarationNode implements StatementNode
         return [
             'type' => 'SchemaDeclaration',
             'name' => $this->name,
-            'fields' => array_map(fn(TypeAnnotationNode $field) => $field->toArray(), $this->fields),
+            'members' => array_map(fn(Node $member) => $member->toArray(), $this->members),
             ...($this->loc ? ['loc' => $this->loc->toArray()] : []),
         ];
     }
@@ -35,25 +35,25 @@ final readonly class SchemaDeclarationNode implements StatementNode
             throw new \RuntimeException('Expected string for name');
         }
 
-        $rawFields = $data['fields'] ?? [];
-        if (!is_array($rawFields)) {
-            throw new \RuntimeException('Expected array for fields');
+        $rawMembers = $data['members'] ?? [];
+        if (!is_array($rawMembers)) {
+            throw new \RuntimeException('Expected array for members');
         }
 
         $loc = $data['loc'] ?? null;
 
-        /** @var array<string, TypeAnnotationNode> $fieldNodes */
-        $fieldNodes = [];
-        foreach ($rawFields as $key => $field) {
-            if (!is_string($key) || !is_array($field)) {
-                throw new \RuntimeException('Expected string key and array value for field');
+        /** @var list<StatementNode> $memberNodes */
+        $memberNodes = [];
+        foreach ($rawMembers as $member) {
+            if (!is_array($member)) {
+                throw new \RuntimeException('Expected array for member');
             }
-            $fieldNodes[$key] = TypeAnnotationNode::fromArray($field);
+            $memberNodes[] = NodeFactory::fromArray($member);
         }
 
         return new self(
             name: $name,
-            fields: $fieldNodes,
+            members: $memberNodes,
             loc: is_array($loc) ? Location::fromArray($loc) : null,
         );
     }

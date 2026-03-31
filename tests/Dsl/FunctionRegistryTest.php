@@ -6,7 +6,6 @@ namespace Superscript\Axiom\Tests\Dsl;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
-use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Dsl\FunctionEntry;
 use Superscript\Axiom\Dsl\FunctionParam;

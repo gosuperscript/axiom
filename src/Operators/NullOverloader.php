@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
+
 use function Superscript\Monads\Result\Ok;
 
 final readonly class NullOverloader implements OperatorOverloader

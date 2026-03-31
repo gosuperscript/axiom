@@ -13,9 +13,8 @@ use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Exceptions\TransformValueException;
-use Stringable;
-
 use Superscript\Axiom\Types\Type;
+
 use function Superscript\Monads\Option\None;
 
 #[CoversClass(ListType::class)]

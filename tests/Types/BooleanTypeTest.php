@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Axiom\Types\BooleanType;
-use Superscript\Axiom\Types\StringType;
 
 use function Superscript\Monads\Option\None;
 
@@ -22,7 +21,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function it_can_coerce_value(mixed $value, ?bool $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $result = $type->coerce($value);
 
         $this->assertTrue($result->isOk());
@@ -52,7 +51,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function it_can_assert_value(bool $value, bool $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $result = $type->assert($value);
 
         $this->assertTrue($result->isOk());
@@ -70,7 +69,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function it_returns_err_if_it_fails_to_coerce()
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $result = $type->coerce($value = 'foobar');
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'boolean', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
@@ -79,7 +78,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function it_returns_err_if_it_fails_to_assert()
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $result = $type->assert($value = 'foobar');
         $this->assertEquals($result->unwrapErr(), new TransformValueException(type: 'boolean', value: $value));
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
@@ -89,7 +88,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function test_can_compare_two_values(bool $a, bool $b, bool $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $this->assertSame($expected, $type->compare($a, $b));
     }
 
@@ -105,7 +104,7 @@ final class BooleanTypeTest extends TestCase
     #[Test]
     public function test_can_format_value(bool $value, string $expected): void
     {
-        $type = new BooleanType;
+        $type = new BooleanType();
         $this->assertSame($expected, $type->format($value));
     }
 
