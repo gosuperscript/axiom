@@ -81,6 +81,8 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'b'], 'has', [null], false];
         yield [[null, 'a'], 'has', 'a', true];
         yield [[null], 'has', 'a', false];
+        yield [[null], 'has', '', false];
+        yield [[''], 'has', null, false];
 
         yield ['a', 'in', ['a', 'b'], true];
         yield ['c', 'in', ['a', 'b'], false];
@@ -92,6 +94,7 @@ class DefaultOverloaderTest extends TestCase
         yield [null, 'in', ['a', 'b'], false];
         yield [[null], 'in', ['a', 'b'], false];
         yield [[null, 'a'], 'in', ['a', 'b'], true];
+        yield ['', 'in', [null, 'a'], false];
 
         yield [true, '&&', true, true];
         yield [true, '&&', false, false];
@@ -117,6 +120,8 @@ class DefaultOverloaderTest extends TestCase
         yield [null, 'intersects', null, false];
         yield [[null, 'a'], 'intersects', ['a', 'b'], true];
         yield [[null], 'intersects', ['a'], false];
+        yield [[null], 'intersects', [''], false];
+        yield [[''], 'intersects', [null], false];
 
         yield [null, '+', null, null];
         yield [null, '-', null, null];
