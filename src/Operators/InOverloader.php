@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
-use function Psl\Type\vec;
-use function Psl\Type\string;
+
+use Psl\Vec;
+
 use function Superscript\Monads\Result\Ok;
 
 class InOverloader implements OperatorOverloader
@@ -17,14 +18,19 @@ class InOverloader implements OperatorOverloader
     }
 
     /**
-     * @param array<mixed> $right
+     * @param list<string|null>|string|null $left
+     * @param list<string|null> $right
      * @param 'in' $operator
      * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        $left = vec(string())->coerce(is_array($left) ? $left : [$left]);
-        $right = vec(string())->coerce($right);
+        $left = Vec\filter_nulls(is_array($left) ? $left : [$left]);
+        $right = Vec\filter_nulls($right);
+
+        if ($left === []) {
+            return Ok(false);
+        }
 
         return Ok(array_intersect($left, $right) === $left);
     }

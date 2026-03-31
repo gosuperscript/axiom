@@ -77,6 +77,12 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'b'], 'has', ['a', 'b'], true];
         yield [['a', 'b'], 'has', ['a', 'c'], false];
         yield [['a', 'b', 'c'], 'has', ['a', 'c'], true];
+        yield [['a', 'b'], 'has', null, false];
+        yield [['a', 'b'], 'has', [null], false];
+        yield [[null, 'a'], 'has', 'a', true];
+        yield [[null], 'has', 'a', false];
+        yield [[null], 'has', '', false];
+        yield [[''], 'has', null, false];
 
         yield ['a', 'in', ['a', 'b'], true];
         yield ['c', 'in', ['a', 'b'], false];
@@ -85,6 +91,10 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'c'], 'in', ['a', 'b', 'c'], true];
         yield [['a', 'b', 'c'], 'in', ['a', 'c'], false];
         yield [['a', 'b', 'd'], 'in', ['a', 'b', 'c'], false];
+        yield [null, 'in', ['a', 'b'], false];
+        yield [[null], 'in', ['a', 'b'], false];
+        yield [[null, 'a'], 'in', ['a', 'b'], true];
+        yield ['', 'in', [null, 'a'], false];
 
         yield [true, '&&', true, true];
         yield [true, '&&', false, false];
@@ -105,6 +115,13 @@ class DefaultOverloaderTest extends TestCase
         yield [['a', 'b'], 'intersects', ['c', 'd'], false];
         yield ['a', 'intersects', 'a', true];
         yield ['a', 'intersects', 'b', false];
+        yield [null, 'intersects', ['a', 'b'], false];
+        yield [['a', 'b'], 'intersects', null, false];
+        yield [null, 'intersects', null, false];
+        yield [[null, 'a'], 'intersects', ['a', 'b'], true];
+        yield [[null], 'intersects', ['a'], false];
+        yield [[null], 'intersects', [''], false];
+        yield [[''], 'intersects', [null], false];
 
         yield [null, '+', null, null];
         yield [null, '-', null, null];
