@@ -6,6 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use Superscript\Monads\Result\Result;
 
+use Psl\Vec;
+
 use function Superscript\Monads\Result\Ok;
 
 class InOverloader implements OperatorOverloader
@@ -23,8 +25,8 @@ class InOverloader implements OperatorOverloader
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
-        $left = array_filter(is_array($left) ? $left : [$left], is_string(...));
-        $right = array_filter($right, is_string(...));
+        $left = Vec\filter_nulls(is_array($left) ? $left : [$left]);
+        $right = Vec\filter_nulls($right);
 
         if ($left === []) {
             return Ok(false);
