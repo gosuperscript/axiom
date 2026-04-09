@@ -1,0 +1,9 @@
+code,buildings_fire_class,contents_fire_class,contents_theft_class,stock_theft_class,bi_fire_class,pl_class,pl_severity,el_class,el_severity,flood_banding,loss_of_licence_class,deep_frying_rate,min_premium_claims_free,min_premium_default
+DRI-945,B,B,B,C,C,A,1,A,1,A,High,0.2,400,500
+DRI-946,B,B,B,C,C,A,1,A,1,A,High,0.2,400,500
+DRI-1955,Y,Y,F,V,I,B,2,C,3,C,High,0.35,600,750
+DRI-1956,Y,Y,F,V,I,B,2,C,3,C,High,0.35,600,750
+DRI-1957,Y,Y,F,V,I,C,3,C,3,D,High,0.35,600,750
+DRI-1958,Y,Y,F,V,I,C,3,C,3,D,High,0.35,350,500
+DRI-2857,Y,Y,F,V,I,B,2,C,3,C,High,0.35,600,750
+DRI-2858,Y,Y,F,V,I,B,2,B,2,B,High,0.2,600,750

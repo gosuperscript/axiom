@@ -32,3 +32,10 @@ testbench.yaml
 /docs
 /coverage
 infection.log
+
+# Playground
+playground/dist
+playground/node_modules
+
+# Claude Code
+.claude/
