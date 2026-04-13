@@ -23,24 +23,19 @@ final class UnboundSymbols
     public static function in(Source $source): array
     {
         $symbols = [];
-        $seen = [];
 
-        self::walk($source, $symbols, $seen);
+        self::walk($source, $symbols);
 
         return $symbols;
     }
 
     /**
      * @param list<SymbolSource> $symbols
-     * @param array<string, true> $seen
      */
-    private static function walk(mixed $node, array &$symbols, array &$seen): void
+    private static function walk(mixed $node, array &$symbols): void
     {
         if ($node instanceof SymbolSource) {
-            $key = ($node->namespace ?? '') . "\0" . $node->name;
-
-            if (! isset($seen[$key])) {
-                $seen[$key] = true;
+            if (! self::contains($symbols, $node)) {
                 $symbols[] = $node;
             }
 
@@ -49,7 +44,7 @@ final class UnboundSymbols
 
         if (is_array($node)) {
             foreach ($node as $child) {
-                self::walk($child, $symbols, $seen);
+                self::walk($child, $symbols);
             }
 
             return;
@@ -62,7 +57,21 @@ final class UnboundSymbols
         $reflection = new ReflectionObject($node);
 
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            self::walk($property->getValue($node), $symbols, $seen);
+            self::walk($property->getValue($node), $symbols);
         }
+    }
+
+    /**
+     * @param list<SymbolSource> $symbols
+     */
+    private static function contains(array $symbols, SymbolSource $needle): bool
+    {
+        foreach ($symbols as $existing) {
+            if ($existing->name === $needle->name && $existing->namespace === $needle->namespace) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

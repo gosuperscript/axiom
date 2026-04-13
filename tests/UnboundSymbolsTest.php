@@ -100,6 +100,21 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
+    public function different_names_within_the_same_namespace_are_distinct(): void
+    {
+        $pi = new SymbolSource('pi', 'math');
+        $e = new SymbolSource('e', 'math');
+
+        $source = new InfixExpression(
+            left: $pi,
+            operator: '+',
+            right: $e,
+        );
+
+        $this->assertSame([$pi, $e], UnboundSymbols::in($source));
+    }
+
+    #[Test]
     public function walks_into_unary_expressions(): void
     {
         $n = new SymbolSource('n');

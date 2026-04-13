@@ -114,6 +114,21 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
+    public function parameters_lists_every_uncovered_free_variable(): void
+    {
+        $expression = new Expression(
+            source: new InfixExpression(
+                left: new SymbolSource('height'),
+                operator: '*',
+                right: new SymbolSource('width'),
+            ),
+            resolver: $this->fullResolver(),
+        );
+
+        $this->assertSame(['height', 'width'], $expression->parameters());
+    }
+
+    #[Test]
     public function parameters_renders_namespaced_symbols_with_dot(): void
     {
         $expression = new Expression(

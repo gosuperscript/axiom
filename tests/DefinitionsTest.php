@@ -56,10 +56,14 @@ final class DefinitionsTest extends TestCase
                 'pi' => new StaticSource(3.14),
                 'e' => new StaticSource(2.71),
             ],
+            'physics' => [
+                'c' => new StaticSource(299792458),
+            ],
         ]);
 
         $this->assertSame(3.14, $definitions->get('pi', 'math')->unwrap()->value);
         $this->assertSame(2.71, $definitions->get('e', 'math')->unwrap()->value);
+        $this->assertSame(299792458, $definitions->get('c', 'physics')->unwrap()->value);
     }
 
     #[Test]
