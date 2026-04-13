@@ -73,7 +73,7 @@ $area(['radius' => 5]);  // ~78.54
 $area(['radius' => 10]); // ~314.16
 ```
 
-The key idea: the expression's inputs are its **parameters**. You pass them at the call site, not by mutating shared state on the resolver.
+The key idea: the expression's inputs are its **parameters**, passed at the call site.
 
 ### Basic Type Transformation
 
@@ -357,7 +357,7 @@ final class ResolutionContext implements ResolutionInspector
 $inspector = new ResolutionContext();
 $expression->withInspector($inspector)(['radius' => 5]);
 
-// Annotations are now available via $inspector->get('label'), etc.
+// Annotations are available via $inspector->get('label'), etc.
 ```
 
 ## Advanced Usage
