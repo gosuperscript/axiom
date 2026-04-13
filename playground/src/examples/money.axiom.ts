@@ -3,6 +3,15 @@ export const MONEY_EXAMPLE = `// Money Type Plugin Demo
 
 // --- Premium calculation with money types ---
 
+type MoneyBreakdown = {
+    base_premium: money(GBP),
+    discount: money(GBP),
+    admin_fee: money(GBP),
+    ipt: money(GBP),
+    total: money(GBP),
+    affordable: bool,
+}
+
 BasePremium(risk_score: number): money(GBP) {
     match risk_score {
         [1..3] => £500,
@@ -12,7 +21,7 @@ BasePremium(risk_score: number): money(GBP) {
     }
 }
 
-AdminFee: money(GBP) {
+AdminFee(): money(GBP) {
     £35
 }
 
@@ -34,7 +43,7 @@ PropertyDiscount(num_properties: number, subtotal: money(GBP)): money(GBP) {
 }
 
 // Minimum premium floor
-MinPremium: money(GBP) {
+MinPremium(): money(GBP) {
     £250
 }
 
@@ -44,13 +53,13 @@ Product(risk_score: number, num_properties: number): money(GBP) {
     where base = BasePremium(risk_score) * num_properties,
           discount = PropertyDiscount(num_properties, base),
           net = base - discount,
-          floor = max(net, MinPremium),
+          floor = if net > MinPremium() then net else MinPremium(),
           ipt = IPT(floor),
-          total = floor + ipt + AdminFee
+          total = floor + ipt + AdminFee()
 }
 
 // ISO code form works too
-EuroExample: money(EUR) {
+EuroExample(): money(EUR) {
     EUR1000 * 1.15
 }
 
@@ -60,12 +69,12 @@ IsAffordable(premium: money(GBP)): bool {
 }
 
 // Full breakdown
-Breakdown(risk_score: number, num_properties: number) {
+Breakdown(risk_score: number, num_properties: number): MoneyBreakdown {
     {
         base_premium: BasePremium(risk_score) * num_properties,
         discount: PropertyDiscount(num_properties, BasePremium(risk_score) * num_properties),
-        admin_fee: AdminFee,
-        ipt: IPT(Product(risk_score, num_properties) - AdminFee),
+        admin_fee: AdminFee(),
+        ipt: IPT(Product(risk_score, num_properties) - AdminFee()),
         total: Product(risk_score, num_properties),
         affordable: IsAffordable(Product(risk_score, num_properties)),
     }

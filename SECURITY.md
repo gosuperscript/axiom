@@ -1,50 +1,50 @@
 # Security Policy
 
+## Repository Scope
+
+This repository currently contains three different surfaces:
+
+- a fresh root PHP implementation surface in [`src/`](./src)
+- an experimental TypeScript playground in [`playground/`](./playground)
+- specification and planning documents for the next Axiom v1 implementation
+- an archived pre-v1 PHP runtime in [`legacy/`](./legacy)
+
+When reporting an issue, please state which surface is affected.
+
 ## Supported Versions
 
-We release patches for security vulnerabilities in the following versions:
+We currently handle security issues for:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x     | :white_check_mark: |
+| Surface | Supported |
+| ------- | --------- |
+| Current root PHP implementation surface | best effort |
+| Current `main` branch development work | best effort |
+| Archived legacy runtime | no new feature work; security triage only if still relevant |
+
+No stable Axiom v1 reference implementation has been released from this
+repository yet.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within this library, please send an email to the maintainers. All security vulnerabilities will be promptly addressed.
+Please do not report security vulnerabilities in public issues.
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+Send the report privately to the maintainers and include:
 
-### What to Include
+- a clear description of the issue
+- the affected surface or component
+- steps to reproduce
+- likely impact
+- any mitigation ideas you already have
 
-When reporting a vulnerability, please include:
+## Response Expectations
 
-* A description of the vulnerability
-* Steps to reproduce the issue
-* Potential impact of the vulnerability
-* Any potential solutions you've considered
+- initial acknowledgement within 48 hours where possible
+- follow-up once the issue is confirmed and scoped
+- coordinated disclosure after a fix is available
 
-### Response Timeline
+## Notes
 
-* **Initial Response**: We aim to acknowledge receipt of your vulnerability report within 48 hours
-* **Status Updates**: We will send you regular updates about our progress
-* **Disclosure**: Once the vulnerability is fixed, we will work with you on responsible disclosure
-
-### Security Update Process
-
-1. The security report is received and assigned to a primary handler
-2. The problem is confirmed and a list of affected versions is determined
-3. Code is audited to find any similar problems
-4. Fixes are prepared for all supported releases
-5. New versions are released and announced
-
-## Security Best Practices
-
-When using this library, we recommend:
-
-* Keep your dependencies up to date
-* Use the latest stable version of PHP (8.4+)
-* Follow the principle of least privilege
-* Validate and sanitize all user input
-* Use type coercion methods appropriately
-
-Thank you for helping keep Axiom Library and its users safe!
+- specification wording issues are usually not security issues unless they can
+  be shown to create an exploitable implementation weakness
+- playground-only problems should be identified as such
+- if the issue affects the archived runtime, say so explicitly

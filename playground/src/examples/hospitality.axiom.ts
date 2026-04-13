@@ -59,7 +59,7 @@ type CoverOutcome =
 
 type ProductOutcome =
     offered {
-        covers: dict(CoverOutcome),
+        covers: list(CoverOutcome),
         subtotal: number,
         minimum_premium: number,
         total_gross_premium: number,
@@ -68,7 +68,14 @@ type ProductOutcome =
         currency: string,
     }
   | declined { reasons: list(string) }
-  | referred { reasons: dict(string) }
+  | referred { reasons: list(string) }
+
+type MultiIndustrySummary = {
+    pl_classes: list(string),
+    el_classes: list(string),
+    deep_frying_rates: list(number),
+    minimum_premiums: list(number),
+}
 
 // --- Industry configuration (from industry_config.csv, 28 columns x 8 industries) ---
 // Table declaration — typed companion data, loaded from CSV artifact at deploy time
@@ -130,50 +137,17 @@ namespace Industry {
         match row in industry_config { row.code == industry => row.min_premium_default, _ => 0 }
     }
 
-    // --- Multi-industry lookups (worst-case across selected industries) ---
-
-    // Classification fields: find the row with the highest severity
-    WorstPLClass(industries: list(string)): string {
-        match row in industry_config {
-            row.code in industries && row.pl_severity == worst => row.pl_class,
-            _ => "",
-        }
-        where worst = max collect row in industry_config {
-            row.code in industries => row.pl_severity,
-        }
-    }
-
-    WorstELClass(industries: list(string)): string {
-        match row in industry_config {
-            row.code in industries && row.el_severity == worst => row.el_class,
-            _ => "",
-        }
-        where worst = max collect row in industry_config {
-            row.code in industries => row.el_severity,
-        }
-    }
-
-    // Numeric fields: direct aggregation
-    MaxDeepFryingRate(industries: list(string)): number {
-        max collect row in industry_config {
-            row.code in industries => row.deep_frying_rate,
-        }
-    }
-
-    MaxMinPremiumDefault(industries: list(string)): number {
-        max collect row in industry_config {
-            row.code in industries => row.min_premium_default,
-        }
-    }
+    // --- Multi-industry lookups ---
+    // Core v1 examples use collection queries directly rather than max/min aggregates.
 }
 
 // --- Claims loading system (product-level, shared across all covers) ---
 
 namespace Claims {
     // Years trading coefficient and loading (from years_trading_coefficient_and_loads.csv)
-    // Capped at min(5, yearsExperience)
+    // Years of experience are capped at 5.
     YearsTradingLoading(is_sole_trader: bool, years_experience: number): number {
-        match (is_sole_trader, min(5, years_experience)) {
+        match (is_sole_trader, capped_years) {
             (false, [0..1]) => 1,
             (false, 2) => 0.5,
             (false, 3) => 0.25,
@@ -185,11 +159,12 @@ namespace Claims {
             (true, 5) => -0.25,
             _ => 0,
         }
+        where capped_years = if years_experience > 5 then 5 else years_experience
     }
 
     // Coefficient letter determines which column to use in claims cross-lookup
     Coefficient(is_sole_trader: bool, years_experience: number): string {
-        match (is_sole_trader, min(5, years_experience)) {
+        match (is_sole_trader, capped_years) {
             (false, [0..1]) | (true, [0..1]) => "A",
             (false, 2) | (true, 2) => "B",
             (false, 3) | (true, 3) => "C",
@@ -197,6 +172,7 @@ namespace Claims {
             (false, 5) | (true, 5) => "E",
             _ => "A",
         }
+        where capped_years = if years_experience > 5 then 5 else years_experience
     }
 
     // Claims x years-trading cross-lookup (from claims_years_trading_loadings.csv)
@@ -733,7 +709,7 @@ Product(
     else if bc.number_of_beds == "over20"
         then declined { reasons: ["Maximum 20 beds allowed"] }
     // Rate all covers, check for failures, assemble product
-    else if any not_available {} in covers
+    else if any not_available in covers
         then referred {
             reasons: collect not_available { reason } in covers => reason,
         }
@@ -747,35 +723,47 @@ Product(
             currency: "GBP",
         }
         where total_claims_loading = Claims.TotalLoading(exposure, claims),
-              covers = {
-                  pl: PublicLiability.Rate(exposure, limit: pl_limit, total_claims_loading),
-                  bc: BuildingsContentsStock.Rate(exposure, bc, risks, total_claims_loading),
-                  bi: BusinessInterruption.Rate(exposure, bi, total_claims_loading),
-                  el: EmployersLiability.Rate(exposure, total_claims_loading),
-                  pbe: PortableEquipment.Rate(limit: pbe_limit, total_claims_loading),
-                  ter: Terrorism.Rate(risks, bc, bi),
-              },
+              pl_cover = PublicLiability.Rate(exposure, limit: pl_limit, total_claims_loading),
+              bc_cover = BuildingsContentsStock.Rate(exposure, bc, risks, total_claims_loading),
+              bi_cover = BusinessInterruption.Rate(exposure, bi, total_claims_loading),
+              el_cover = EmployersLiability.Rate(exposure, total_claims_loading),
+              pbe_cover = PortableEquipment.Rate(limit: pbe_limit, total_claims_loading),
+              ter_cover = Terrorism.Rate(risks, bc, bi),
+              covers = [
+                  pl_cover,
+                  bc_cover,
+                  bi_cover,
+                  el_cover,
+                  pbe_cover,
+                  ter_cover,
+              ],
               base_sum = sum(collect rated { base_premium } in covers => base_premium),
-              ter_premium = match covers.ter {
+              ter_premium = match ter_cover {
                   rated { base_premium } => base_premium,
                   _ => 0,
               },
               subtotal = base_sum - ter_premium,
               min_prem = MinimumPremium(exposure, claims, bc),
-              total = max(min_prem, subtotal) + ter_premium
+              floored_subtotal = if min_prem > subtotal then min_prem else subtotal,
+              total = floored_subtotal + ter_premium
 }
 
 // --- Multi-industry demonstration ---
-// When a product covers multiple industries, find the worst-case configuration
+// Shows how a product can query multiple rows across selected industries.
 
-MultiIndustryDemo(industries: list(string)) {
+MultiIndustryDemo(industries: list(string)): MultiIndustrySummary {
     {
-        worst_pl_class: Industry.WorstPLClass(industries),
-        worst_el_class: Industry.WorstELClass(industries),
-        max_deep_frying_rate: Industry.MaxDeepFryingRate(industries),
-        max_min_premium: Industry.MaxMinPremiumDefault(industries),
-        all_pl_classes: collect row in industry_config {
+        pl_classes: collect row in industry_config {
             row.code in industries => row.pl_class,
+        },
+        el_classes: collect row in industry_config {
+            row.code in industries => row.el_class,
+        },
+        deep_frying_rates: collect row in industry_config {
+            row.code in industries => row.deep_frying_rate,
+        },
+        minimum_premiums: collect row in industry_config {
+            row.code in industries => row.min_premium_default,
         },
     }
 }

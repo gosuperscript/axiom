@@ -34,9 +34,18 @@ type ClaimsHistory = {
 
 // --- Outcome types ---
 
+type PropertyBreakdown = {
+    address: string,
+    buildings_premium: number,
+    contents_premium: number,
+    rent_premium: number,
+    pol_premium: number,
+    property_total: number,
+}
+
 type ProductOutcome =
     offered {
-        property_details: list(dict),
+        property_details: list(PropertyBreakdown),
         property_subtotal: number,
         discount_rate: number,
         property_net: number,
@@ -157,7 +166,7 @@ namespace PropertyRating {
     }
 
     // Per-property breakdown with rounded values
-    Breakdown(prop: Property) {
+    Breakdown(prop: Property): PropertyBreakdown {
         {
             address: prop.address,
             buildings_premium: round(BuildingsPremium(prop), 2),
@@ -241,14 +250,6 @@ ClaimsLoading(claims: ClaimsHistory): number {
 
 // --- Worst-case lookups across all properties ---
 // Useful for underwriting rules that check the riskiest property
-
-WorstFloodRisk(properties: list(Property)): number {
-    max collect prop in properties => prop.flood_risk
-}
-
-WorstSubsidenceRisk(properties: list(Property)): number {
-    max collect prop in properties => prop.subsidence_risk
-}
 
 TotalBuildingsSI(properties: list(Property)): number {
     sum collect prop in properties => prop.buildings_sum_insured

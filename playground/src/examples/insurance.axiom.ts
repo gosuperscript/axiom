@@ -10,12 +10,12 @@ type RuleResult =
   | referred { message: string }
 
 type CoverOutcome =
-    not_selected {}
+    not_selected
   | rated { premium: number, loading: number, notes: list(string), endorsements: list(Endorsement) }
   | referred { reasons: list(string) }
 
 type ProductOutcome =
-    offered { total: number, covers: dict(CoverOutcome) }
+    offered { total: number, covers: list(CoverOutcome) }
   | referred { reasons: list(string) }
 
 BuildingsConstructionRule(quote: { construction: string }): RuleResult {
@@ -59,9 +59,11 @@ AggregateRules(
         else rated {
             premium: base_premium * product collect in rules {
                 ok { factor } => factor,
+                _ => 1.00,
             },
             loading: product collect in rules {
                 ok { factor } => factor,
+                _ => 1.00,
             },
             notes: flatten(collect ok { notes: n } in rules => n),
             endorsements: flatten(collect ok { endorsements: e } in rules => e),
@@ -78,7 +80,7 @@ BuildingsCover(
     base_rate: number,
 ): CoverOutcome {
     if not quote.has_buildings
-        then not_selected {}
+        then not_selected
         else AggregateRules(
             rules: [
                 BuildingsConstructionRule(quote: quote),
@@ -96,7 +98,7 @@ ContentsCover(
     base_rate: number,
 ): CoverOutcome {
     if not quote.has_contents
-        then not_selected {}
+        then not_selected
         else rated {
             premium: quote.contents_sum_insured / 1000 * base_rate,
             loading: 1.00,
@@ -105,7 +107,7 @@ ContentsCover(
         }
 }
 
-AggregateCovers(covers: dict(CoverOutcome)): ProductOutcome {
+AggregateCovers(covers: list(CoverOutcome)): ProductOutcome {
     if any referred in covers
         then referred {
             reasons: flatten(collect referred { reasons: rs } in covers => rs),
@@ -130,10 +132,10 @@ Product(
         contents_rate: number,
     },
 ): ProductOutcome {
-    AggregateCovers(covers: {
-        buildings: BuildingsCover(quote: quote, base_rate: rates.buildings_rate),
-        contents: ContentsCover(quote: quote, base_rate: rates.contents_rate),
-    })
+    AggregateCovers(covers: [
+        BuildingsCover(quote: quote, base_rate: rates.buildings_rate),
+        ContentsCover(quote: quote, base_rate: rates.contents_rate),
+    ])
 }
 `;
 

@@ -358,7 +358,11 @@ export function check(ast: ProgramNode, plugins?: import('./plugin').AxiomPlugin
         // Auto-resolve parameterless expression declarations
         const paramlessInfo = exprDecls.get(expr.name)
           ?? (currentCheckerNamespace ? exprDecls.get(`${currentCheckerNamespace}.${expr.name}`) : undefined);
-        if (paramlessInfo && paramlessInfo.decl.params.length === 0) {
+        if (
+          paramlessInfo
+          && paramlessInfo.decl.kind === 'ExpressionDeclaration'
+          && paramlessInfo.decl.params.length === 0
+        ) {
           const retType = paramlessInfo.returnType ?? inferType(paramlessInfo.decl.body, scope);
           if (retType) return setType(expr, retType);
         }

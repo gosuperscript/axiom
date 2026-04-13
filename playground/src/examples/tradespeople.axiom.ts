@@ -14,13 +14,13 @@ type CoverOutcome =
 
 type ProductOutcome =
     offered {
-        covers: dict(CoverOutcome),
+        covers: list(CoverOutcome),
         total_gross_premium: money(GBP),
         total_net_premium: money(GBP),
         currency: string,
     }
   | declined { reasons: list(string) }
-  | referred { reasons: dict(string) }
+  | referred { reasons: list(string) }
 
 // --- Product-level adjustment factors (from CSV lookup tables) ---
 
@@ -139,7 +139,7 @@ namespace PublicLiability {
 // --- Employers Liability (EL) ---
 
 namespace EmployersLiability {
-    // Fixed limit 10M. Premium per industry. Sole traders: insurable workers = max(0, manual - 1)
+    // Fixed limit 10M. Premium per industry. Sole traders exclude the proprietor.
     BasePremium(industry: string): money(GBP) {
         match industry {
             "DRI-103" => £137,
@@ -150,7 +150,7 @@ namespace EmployersLiability {
 
     InsurableManualWorkers(manual_workers: number, business_type: string): number {
         if business_type == "sole_trader"
-            then max(0, manual_workers - 1)
+            then if manual_workers > 1 then manual_workers - 1 else 0
             else manual_workers
     }
 
@@ -161,7 +161,7 @@ namespace EmployersLiability {
                 key: "EL",
                 name: "Employers Liability",
                 base_premium: bp * InsurableManualWorkers(manual_workers, business_type),
-                limit: £10000000,
+                limit: 10000000,
                 excess: £0,
             }
             where bp = BasePremium(industry)
@@ -325,7 +325,7 @@ Product(
         then declined { reasons: ["Manual workers cannot exceed total employees"] }
     else if number_of_claims > 1
         then declined { reasons: ["Maximum 1 claim in last 5 years"] }
-    else if any not_available {} in covers
+    else if any not_available in covers
         then referred {
             reasons: collect not_available { reason } in covers => reason,
         }
@@ -335,14 +335,20 @@ Product(
             total_net_premium: round(base_sum * adj * 0.65, 2),
             currency: "GBP",
         }
-        where covers = {
-                  pl: PublicLiability.Rate(industry, limit: pl_limit, employees: number_of_employees),
-                  el: EmployersLiability.Rate(industry, manual_workers, business_type),
-                  pte: PortableTools.Rate(limit: pte_limit),
-                  opm: OwnPlant.Rate(industry, limit: opm_limit, manual_workers),
-                  hpm: HiredPlant.Rate(industry, limit: hpm_limit, manual_workers),
-                  cw: ContractWorks.Rate(industry, limit: cw_limit, employees: number_of_employees),
-              },
+        where pl_cover = PublicLiability.Rate(industry, limit: pl_limit, employees: number_of_employees),
+              el_cover = EmployersLiability.Rate(industry, manual_workers, business_type),
+              pte_cover = PortableTools.Rate(limit: pte_limit),
+              opm_cover = OwnPlant.Rate(industry, limit: opm_limit, manual_workers),
+              hpm_cover = HiredPlant.Rate(industry, limit: hpm_limit, manual_workers),
+              cw_cover = ContractWorks.Rate(industry, limit: cw_limit, employees: number_of_employees),
+              covers = [
+                  pl_cover,
+                  el_cover,
+                  pte_cover,
+                  opm_cover,
+                  hpm_cover,
+                  cw_cover,
+              ],
               adj = Adjustments.Factor(postcode_group, years_experience, number_of_claims, years_since_last_claim),
               base_sum = sum(collect rated { base_premium } in covers => base_premium)
 }
