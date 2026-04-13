@@ -41,14 +41,14 @@ final readonly class Expression
     {
         $parameters = [];
 
-        foreach (FreeVariables::of($this->source) as $variable) {
-            if ($this->definitions->has($variable['name'], $variable['namespace'])) {
+        foreach (UnboundSymbols::in($this->source) as $symbol) {
+            if ($this->definitions->has($symbol->name, $symbol->namespace)) {
                 continue;
             }
 
-            $parameters[] = $variable['namespace'] !== null
-                ? $variable['namespace'] . '.' . $variable['name']
-                : $variable['name'];
+            $parameters[] = $symbol->namespace !== null
+                ? $symbol->namespace . '.' . $symbol->name
+                : $symbol->name;
         }
 
         return $parameters;

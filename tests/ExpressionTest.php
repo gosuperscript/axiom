@@ -12,7 +12,7 @@ use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\FreeVariables;
+use Superscript\Axiom\UnboundSymbols;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
@@ -28,7 +28,7 @@ use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 use Superscript\Monads\Result\Result;
 
 #[CoversClass(Expression::class)]
-#[UsesClass(FreeVariables::class)]
+#[UsesClass(UnboundSymbols::class)]
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]

@@ -11,36 +11,37 @@ use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Axiom\Sources\SymbolSource;
 
 /**
- * Walks a {@see Source} tree and collects all {@see SymbolSource} references
- * (the "free variables" of the expression).
+ * Walks a {@see Source} tree and collects every {@see SymbolSource} it
+ * references — i.e. the symbols that are not yet bound to a value and are
+ * waiting for a {@see Bindings} or {@see Definitions} entry to resolve them.
  */
-final class FreeVariables
+final class UnboundSymbols
 {
     /**
-     * @return list<array{name: string, namespace: ?string}>
+     * @return list<SymbolSource>
      */
-    public static function of(Source $source): array
+    public static function in(Source $source): array
     {
-        $variables = [];
+        $symbols = [];
         $seen = [];
 
-        self::walk($source, $variables, $seen);
+        self::walk($source, $symbols, $seen);
 
-        return $variables;
+        return $symbols;
     }
 
     /**
-     * @param list<array{name: string, namespace: ?string}> $variables
+     * @param list<SymbolSource> $symbols
      * @param array<string, true> $seen
      */
-    private static function walk(mixed $node, array &$variables, array &$seen): void
+    private static function walk(mixed $node, array &$symbols, array &$seen): void
     {
         if ($node instanceof SymbolSource) {
             $key = ($node->namespace ?? '') . "\0" . $node->name;
 
             if (! isset($seen[$key])) {
                 $seen[$key] = true;
-                $variables[] = ['name' => $node->name, 'namespace' => $node->namespace];
+                $symbols[] = $node;
             }
 
             return;
@@ -48,7 +49,7 @@ final class FreeVariables
 
         if (is_array($node)) {
             foreach ($node as $child) {
-                self::walk($child, $variables, $seen);
+                self::walk($child, $symbols, $seen);
             }
 
             return;
@@ -61,7 +62,7 @@ final class FreeVariables
         $reflection = new ReflectionObject($node);
 
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            self::walk($property->getValue($node), $variables, $seen);
+            self::walk($property->getValue($node), $symbols, $seen);
         }
     }
 }

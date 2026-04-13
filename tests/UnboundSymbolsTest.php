@@ -8,7 +8,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\FreeVariables;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -21,8 +20,9 @@ use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\UnboundSymbols;
 
-#[CoversClass(FreeVariables::class)]
+#[CoversClass(UnboundSymbols::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(InfixExpression::class)]
@@ -35,130 +35,114 @@ use Superscript\Axiom\Types\NumberType;
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(TypeDefinition::class)]
 #[UsesClass(NumberType::class)]
-final class FreeVariablesTest extends TestCase
+final class UnboundSymbolsTest extends TestCase
 {
     #[Test]
     public function finds_a_single_symbol(): void
     {
-        $source = new SymbolSource('radius');
+        $symbol = new SymbolSource('radius');
 
-        $this->assertSame(
-            [['name' => 'radius', 'namespace' => null]],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$symbol], UnboundSymbols::in($symbol));
     }
 
     #[Test]
     public function finds_nothing_in_a_static_source(): void
     {
-        $this->assertSame([], FreeVariables::of(new StaticSource(42)));
+        $this->assertSame([], UnboundSymbols::in(new StaticSource(42)));
     }
 
     #[Test]
     public function finds_symbols_in_nested_infix_expressions(): void
     {
+        $pi = new SymbolSource('PI');
+        $radius = new SymbolSource('radius');
+
         $source = new InfixExpression(
-            left: new SymbolSource('PI'),
+            left: $pi,
             operator: '*',
             right: new InfixExpression(
-                left: new SymbolSource('radius'),
+                left: $radius,
                 operator: '*',
                 right: new SymbolSource('radius'),
             ),
         );
 
-        $this->assertSame(
-            [
-                ['name' => 'PI', 'namespace' => null],
-                ['name' => 'radius', 'namespace' => null],
-            ],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$pi, $radius], UnboundSymbols::in($source));
     }
 
     #[Test]
     public function deduplicates_repeated_symbols(): void
     {
+        $first = new SymbolSource('x');
+
         $source = new InfixExpression(
-            left: new SymbolSource('x'),
+            left: $first,
             operator: '+',
             right: new SymbolSource('x'),
         );
 
-        $this->assertSame(
-            [['name' => 'x', 'namespace' => null]],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$first], UnboundSymbols::in($source));
     }
 
     #[Test]
     public function namespace_and_name_together_form_the_identity(): void
     {
+        $bare = new SymbolSource('value');
+        $namespaced = new SymbolSource('value', 'ns');
+
         $source = new InfixExpression(
-            left: new SymbolSource('value'),
+            left: $bare,
             operator: '+',
-            right: new SymbolSource('value', 'ns'),
+            right: $namespaced,
         );
 
-        $this->assertSame(
-            [
-                ['name' => 'value', 'namespace' => null],
-                ['name' => 'value', 'namespace' => 'ns'],
-            ],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$bare, $namespaced], UnboundSymbols::in($source));
     }
 
     #[Test]
     public function walks_into_unary_expressions(): void
     {
-        $source = new UnaryExpression('-', new SymbolSource('n'));
+        $n = new SymbolSource('n');
+        $source = new UnaryExpression('-', $n);
 
-        $this->assertSame(
-            [['name' => 'n', 'namespace' => null]],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$n], UnboundSymbols::in($source));
     }
 
     #[Test]
     public function walks_into_match_expressions_including_arms_and_patterns(): void
     {
+        $tier = new SymbolSource('tier');
+        $fallbackPattern = new SymbolSource('fallback_pattern');
+        $fallbackValue = new SymbolSource('fallback_value');
+
         $source = new MatchExpression(
-            subject: new SymbolSource('tier'),
+            subject: $tier,
             arms: [
                 new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
                 new MatchArm(
-                    new ExpressionPattern(new SymbolSource('fallback_pattern')),
-                    new SymbolSource('fallback_value'),
+                    new ExpressionPattern($fallbackPattern),
+                    $fallbackValue,
                 ),
                 new MatchArm(new WildcardPattern(), new StaticSource(1.0)),
             ],
         );
 
-        $this->assertSame(
-            [
-                ['name' => 'tier', 'namespace' => null],
-                ['name' => 'fallback_pattern', 'namespace' => null],
-                ['name' => 'fallback_value', 'namespace' => null],
-            ],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$tier, $fallbackPattern, $fallbackValue], UnboundSymbols::in($source));
     }
 
     #[Test]
     public function walks_into_member_access_and_type_definition(): void
     {
+        $quote = new SymbolSource('quote');
+
         $source = new TypeDefinition(
             type: new NumberType(),
             source: new MemberAccessSource(
-                object: new SymbolSource('quote'),
+                object: $quote,
                 property: 'claims',
             ),
         );
 
-        $this->assertSame(
-            [['name' => 'quote', 'namespace' => null]],
-            FreeVariables::of($source),
-        );
+        $this->assertSame([$quote], UnboundSymbols::in($source));
     }
 }
