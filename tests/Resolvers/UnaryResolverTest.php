@@ -1,18 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\BinaryOverloader;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
-use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
-use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 
@@ -20,6 +20,9 @@ use Superscript\Axiom\Sources\UnaryExpression;
 #[CoversClass(UnaryResolver::class)]
 #[UsesClass(StaticResolver::class)]
 #[UsesClass(StaticSource::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class UnaryResolverTest extends TestCase
 {
     #[Test]
@@ -28,10 +31,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '!',
-            operand: new StaticSource(true)
+            operand: new StaticSource(true),
         );
 
-        $this->assertEquals(false, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(false, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -40,10 +43,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '-',
-            operand: new StaticSource(42)
+            operand: new StaticSource(42),
         );
 
-        $this->assertEquals(-42, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(-42, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -52,10 +55,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: 'not',
-            operand: new StaticSource(true)
+            operand: new StaticSource(true),
         );
 
-        $this->assertFalse($resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertFalse($resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -64,10 +67,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: 'not',
-            operand: new StaticSource(false)
+            operand: new StaticSource(false),
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -76,10 +79,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: 'not',
-            operand: new StaticSource(1)
+            operand: new StaticSource(1),
         );
 
-        $this->assertFalse($resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertFalse($resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -88,10 +91,10 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: 'not',
-            operand: new StaticSource(0)
+            operand: new StaticSource(0),
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -104,9 +107,9 @@ class UnaryResolverTest extends TestCase
             $not = new UnaryExpression(operator: 'not', operand: new StaticSource($input));
 
             $this->assertEquals(
-                $resolver->resolve($bang)->unwrap()->unwrap(),
-                $resolver->resolve($not)->unwrap()->unwrap(),
-                sprintf('not and ! should produce identical results for input: %s', var_export($input, true))
+                $resolver->resolve($bang, new Context())->unwrap()->unwrap(),
+                $resolver->resolve($not, new Context())->unwrap()->unwrap(),
+                sprintf('not and ! should produce identical results for input: %s', var_export($input, true)),
             );
         }
     }
@@ -117,9 +120,9 @@ class UnaryResolverTest extends TestCase
         $resolver = new UnaryResolver(new StaticResolver());
         $source = new UnaryExpression(
             operator: '+',
-            operand: new StaticSource(42)
+            operand: new StaticSource(42),
         );
 
-        $this->assertTrue($resolver->resolve($source)->isErr());
+        $this->assertTrue($resolver->resolve($source, new Context())->isErr());
     }
 }

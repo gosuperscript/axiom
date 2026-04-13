@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Patterns\LiteralMatcher;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\WildcardPattern;
@@ -15,6 +18,9 @@ use Superscript\Axiom\Sources\WildcardPattern;
 #[CoversClass(LiteralMatcher::class)]
 #[UsesClass(LiteralPattern::class)]
 #[UsesClass(WildcardPattern::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class LiteralMatcherTest extends TestCase
 {
     #[Test]
@@ -38,7 +44,7 @@ class LiteralMatcherTest extends TestCase
     {
         $matcher = new LiteralMatcher();
 
-        $this->assertTrue($matcher->matches(new LiteralPattern('micro'), 'micro')->unwrap());
+        $this->assertTrue($matcher->matches(new LiteralPattern('micro'), 'micro', new Context())->unwrap());
     }
 
     #[Test]
@@ -46,7 +52,7 @@ class LiteralMatcherTest extends TestCase
     {
         $matcher = new LiteralMatcher();
 
-        $this->assertFalse($matcher->matches(new LiteralPattern('micro'), 'small')->unwrap());
+        $this->assertFalse($matcher->matches(new LiteralPattern('micro'), 'small', new Context())->unwrap());
     }
 
     #[Test]
@@ -54,7 +60,7 @@ class LiteralMatcherTest extends TestCase
     {
         $matcher = new LiteralMatcher();
 
-        $this->assertFalse($matcher->matches(new LiteralPattern(42), '42')->unwrap());
+        $this->assertFalse($matcher->matches(new LiteralPattern(42), '42', new Context())->unwrap());
     }
 
     #[Test]
@@ -62,6 +68,6 @@ class LiteralMatcherTest extends TestCase
     {
         $matcher = new LiteralMatcher();
 
-        $this->assertFalse($matcher->matches(new LiteralPattern(true), 1)->unwrap());
+        $this->assertFalse($matcher->matches(new LiteralPattern(true), 1, new Context())->unwrap());
     }
 }

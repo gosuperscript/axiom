@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Patterns;
 
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\MatchPattern;
@@ -24,9 +25,9 @@ final readonly class ExpressionMatcher implements PatternMatcher
     /**
      * @param ExpressionPattern $pattern
      */
-    public function matches(MatchPattern $pattern, mixed $subjectValue): Result
+    public function matches(MatchPattern $pattern, mixed $subjectValue, Context $context): Result
     {
-        return $this->resolver->resolve($pattern->source)
-            ->map(fn (Option $option) => $option->unwrapOr(null) === $subjectValue);
+        return $this->resolver->resolve($pattern->source, $context)
+            ->map(fn(Option $option) => $option->unwrapOr(null) === $subjectValue);
     }
 }

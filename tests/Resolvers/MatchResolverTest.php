@@ -9,6 +9,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
@@ -31,7 +34,6 @@ use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\WildcardPattern;
-use Superscript\Axiom\SymbolRegistry;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 use Superscript\Monads\Result\Result;
 
@@ -54,11 +56,13 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(NullOverloader::class)]
 #[UsesClass(SymbolResolver::class)]
 #[UsesClass(SymbolSource::class)]
-#[UsesClass(SymbolRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
 #[UsesClass(WildcardMatcher::class)]
 #[UsesClass(LiteralMatcher::class)]
 #[UsesClass(ExpressionMatcher::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class MatchResolverTest extends TestCase
 {
     private function makeResolver(?StaticResolver $staticResolver = null): MatchResolver
@@ -101,7 +105,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(1.1, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(1.1, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -118,7 +122,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(1.0, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(1.0, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -134,7 +138,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
     }
 
     #[Test]
@@ -150,7 +154,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(1.3, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(1.3, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -166,7 +170,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('yes', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('yes', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -182,7 +186,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('no', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('no', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -201,7 +205,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('matched', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('matched', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -220,7 +224,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('fallback', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('fallback', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -238,7 +242,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('C', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('C', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -255,7 +259,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(0.5, $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(0.5, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -285,7 +289,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('condition met', $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('condition met', $delegating->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -312,7 +316,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(25.0, $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(25.0, $delegating->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -323,7 +327,7 @@ class MatchResolverTest extends TestCase
             SymbolSource::class => SymbolResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
-        $delegating->instance(SymbolRegistry::class, new SymbolRegistry([
+        $context = new Context(definitions: new Definitions([
             'tier' => new StaticSource('micro'),
         ]));
 
@@ -336,7 +340,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(1.3, $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(1.3, $delegating->resolve($source, $context)->unwrap()->unwrap());
     }
 
     #[Test]
@@ -349,9 +353,7 @@ class MatchResolverTest extends TestCase
             MatchExpression::class => MatchResolver::class,
         ]);
         $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
-        $delegating->instance(SymbolRegistry::class, new SymbolRegistry([
-            'claims' => new StaticSource(4),
-        ]));
+        $context = new Context(bindings: new Bindings(['claims' => 4]));
 
         $source = new MatchExpression(
             subject: new StaticSource(true),
@@ -370,11 +372,11 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(0.5, $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(0.5, $delegating->resolve($source, $context)->unwrap()->unwrap());
     }
 
     #[Test]
-    public function full_cond_style_match_with_symbols_and_infix(): void
+    public function full_cond_style_match_with_bindings_and_infix(): void
     {
         $delegating = $this->makeDelegating([
             StaticSource::class => StaticResolver::class,
@@ -383,9 +385,9 @@ class MatchResolverTest extends TestCase
             MatchExpression::class => MatchResolver::class,
         ]);
         $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
-        $delegating->instance(SymbolRegistry::class, new SymbolRegistry([
-            'claims' => new StaticSource(1),
-            'turnover' => new StaticSource(600000),
+        $context = new Context(bindings: new Bindings([
+            'claims' => 1,
+            'turnover' => 600000,
         ]));
 
         $source = new MatchExpression(
@@ -415,7 +417,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(0.35, $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(0.35, $delegating->resolve($source, $context)->unwrap()->unwrap());
     }
 
     #[Test]
@@ -431,7 +433,7 @@ class MatchResolverTest extends TestCase
                 return $pattern === $this->target;
             }
 
-            public function matches(MatchPattern $pattern, mixed $subjectValue): Result
+            public function matches(MatchPattern $pattern, mixed $subjectValue, Context $context): Result
             {
                 return Ok($subjectValue === 'special');
             }
@@ -451,7 +453,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('custom matched', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('custom matched', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -469,7 +471,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
 
         $this->assertTrue($result->isErr());
         $this->assertInstanceOf(RuntimeException::class, $result->unwrapErr());
@@ -489,7 +491,7 @@ class MatchResolverTest extends TestCase
                 return $pattern === $this->target;
             }
 
-            public function matches(MatchPattern $pattern, mixed $subjectValue): Result
+            public function matches(MatchPattern $pattern, mixed $subjectValue, Context $context): Result
             {
                 return Err(new RuntimeException('matcher failed'));
             }
@@ -505,7 +507,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
 
         $this->assertTrue($result->isErr());
     }
@@ -534,7 +536,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals(10, $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals(10, $delegating->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -554,7 +556,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('expression', $delegating->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('expression', $delegating->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -567,7 +569,7 @@ class MatchResolverTest extends TestCase
             arms: [],
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
     }
 
     #[Test]
@@ -583,7 +585,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertEquals('matched null', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('matched null', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -595,7 +597,7 @@ class MatchResolverTest extends TestCase
             new WildcardMatcher(),
             new LiteralMatcher(),
             new ExpressionMatcher($inner),
-        ], $inspector);
+        ]);
 
         $source = new MatchExpression(
             subject: new StaticSource('micro'),
@@ -605,7 +607,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $resolver->resolve($source);
+        $resolver->resolve($source, new Context(inspector: $inspector));
 
         $this->assertEquals('match', $inspector->annotations['label']);
         $this->assertEquals('micro', $inspector->annotations['subject']);
@@ -622,7 +624,7 @@ class MatchResolverTest extends TestCase
             new WildcardMatcher(),
             new LiteralMatcher(),
             new ExpressionMatcher($inner),
-        ], $inspector);
+        ]);
 
         $source = new MatchExpression(
             subject: new StaticSource('small'),
@@ -632,7 +634,7 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $resolver->resolve($source);
+        $resolver->resolve($source, new Context(inspector: $inspector));
 
         $this->assertEquals(1, $inspector->annotations['matched_arm']);
         $this->assertEquals(1.1, $inspector->annotations['result']);

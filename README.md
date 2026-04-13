@@ -7,8 +7,8 @@ A powerful PHP library for data transformation, type validation, and expression 
 - **Type System**: Robust type validation and transformation for numbers, strings, booleans, lists, and dictionaries
 - **Expression Evaluation**: Support for infix expressions with custom operators
 - **Match Expressions**: Unified conditional logic — if/then/else, dispatch tables, and cond-style matching
+- **Compiled Expressions**: Turn a source tree into a callable you invoke with inputs
 - **Resolver Pattern**: Pluggable resolver system for different data sources
-- **Symbol Registry**: Named value resolution and reuse
 - **Operator Overloading**: Extensible operator system for custom evaluation logic
 - **Monadic Error Handling**: Built on functional programming principles using Result and Option types
 
@@ -25,120 +25,182 @@ composer require gosuperscript/axiom
 
 ## Quick Start
 
-### Basic Type Transformation
+### Expressions as callables
+
+The top-level API is `Expression`: wrap a `Source` tree with the resolver stack you want, then invoke it with inputs like a function:
 
 ```php
 <?php
 
-use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Definitions;
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
-
-// Create a resolver with basic capabilities
-$resolver = new DelegatingResolver([
-    StaticResolver::class,
-    ValueResolver::class,
-]);
-
-// Transform a string to a number
-$source = new TypeDefinition(
-    type: new NumberType(),
-    source: new StaticSource('42')
-);
-
-$result = $resolver->resolve($source);
-$value = $result->unwrap()->unwrap(); // 42 (as integer)
-```
-
-### Expression Evaluation
-
-```php
-<?php
-
+use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\SymbolRegistry;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\InfixResolver;
-use Superscript\Axiom\Resolvers\SymbolResolver;
 
-// Set up resolver with symbol support
 $resolver = new DelegatingResolver([
-    StaticResolver::class,
-    InfixResolver::class,
-    SymbolResolver::class,
+    StaticSource::class   => StaticResolver::class,
+    SymbolSource::class   => SymbolResolver::class,
+    InfixExpression::class => InfixResolver::class,
 ]);
+$resolver->instance(OperatorOverloader::class, new DefaultOverloader());
 
-// Register symbols
-$resolver->instance(SymbolRegistry::class, new SymbolRegistry([
-    'PI' => new StaticSource(3.14159),
-    'radius' => new StaticSource(5),
-]));
-
-// Calculate: PI * radius * radius (area of circle)
-$expression = new InfixExpression(
+// area = PI * radius * radius
+$source = new InfixExpression(
     left: new SymbolSource('PI'),
     operator: '*',
     right: new InfixExpression(
         left: new SymbolSource('radius'),
         operator: '*',
-        right: new SymbolSource('radius')
-    )
+        right: new SymbolSource('radius'),
+    ),
 );
 
-$result = $resolver->resolve($expression);
-$area = $result->unwrap()->unwrap(); // ~78.54
+$area = new Expression(
+    source: $source,
+    resolver: $resolver,
+    definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
+);
+
+$area->parameters(); // ['radius']
+
+$area(['radius' => 5])->unwrap()->unwrap();  // ~78.54
+$area(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 ```
 
-### Using Namespaced Symbols
+The key idea: the expression's inputs are its **parameters**, passed at the call site.
 
-The `SymbolRegistry` supports namespaces to organize related symbols:
+### Basic Type Transformation
 
 ```php
 <?php
 
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\SymbolRegistry;
+use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Types\NumberType;
 
-// Create registry with namespaced symbols
-$registry = new SymbolRegistry([
-    // Global symbols (no namespace)
-    'version' => new StaticSource('1.0.0'),
-    'debug' => new StaticSource(true),
-    
-    // Math namespace
-    'math' => [
-        'pi' => new StaticSource(3.14159),
-        'e' => new StaticSource(2.71828),
-        'phi' => new StaticSource(1.61803),
-    ],
-    
-    // Constants namespace
-    'physics' => [
-        'c' => new StaticSource(299792458),      // Speed of light
-        'g' => new StaticSource(9.80665),        // Gravitational acceleration
-    ],
+$resolver = new DelegatingResolver([
+    StaticSource::class   => StaticResolver::class,
+    TypeDefinition::class => ValueResolver::class,
 ]);
 
-// Access global symbols
-$version = $registry->get('version');           // Some('1.0.0')
+$source = new TypeDefinition(
+    type: new NumberType(),
+    source: new StaticSource('42'),
+);
 
-// Access namespaced symbols
-$pi = $registry->get('pi', 'math');            // Some(3.14159)
-$c = $registry->get('c', 'physics');           // Some(299792458)
+$expression = new Expression($source, $resolver);
 
-// Using with SymbolSource
-$symbolSource = new SymbolSource('pi', 'math');
-$result = $resolver->resolve($symbolSource);   // ~3.14159
+$expression()->unwrap()->unwrap(); // 42 (as integer)
+```
 
-// Namespaces provide isolation
-$registry->get('pi');                           // None (no global 'pi')
-$registry->get('c', 'math');                   // None (no 'c' in math namespace)
+### Inputs, Definitions, and Namespaces
+
+Inputs are **bindings** — passed at the call site. Stable named expressions (constants, named sub-expressions) are **definitions** — bound once when the `Expression` is constructed. Both support flat names and dotted namespaces.
+
+```php
+use Superscript\Axiom\Definitions;
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+
+$expression = new Expression(
+    source: /* ... */,
+    resolver: $resolver,
+    definitions: new Definitions([
+        // Global scope
+        'version' => new StaticSource('1.0.0'),
+        // Namespaced scope
+        'math' => [
+            'pi' => new StaticSource(3.14159),
+            'e'  => new StaticSource(2.71828),
+        ],
+    ]),
+);
+
+// Flat and namespaced inputs
+$expression([
+    'tier' => 'small',
+    'quote' => [
+        'claims'   => 3,
+        'turnover' => 600000,
+    ],
+]);
+```
+
+`SymbolSource` looks up by name + optional namespace:
+
+```php
+new SymbolSource('pi', 'math');      // -> math.pi
+new SymbolSource('claims', 'quote'); // -> quote.claims
+new SymbolSource('version');         // -> version (global)
+```
+
+**Bindings shadow definitions.** A binding with a `null` value is still a real binding — it intentionally shadows any definition of the same name.
+
+### Match Expressions
+
+`MatchExpression` provides a unified way to express conditionals, dispatch tables, and cond-style matching. A match expression has a **subject** and an ordered list of **arms**. Each arm pairs a pattern with a result expression. The first matching arm wins.
+
+**Patterns:**
+
+- **LiteralPattern**: Matches via strict equality (`===`)
+- **WildcardPattern**: Always matches (the default/catch-all arm)
+- **ExpressionPattern**: Wraps a `Source` — resolves it and compares to the subject
+
+**If/then/else:**
+
+```php
+// if quote.claims > 2 then 100 * 0.25 else 0
+new MatchExpression(
+    subject: new StaticSource(true),
+    arms: [
+        new MatchArm(
+            new ExpressionPattern(
+                new InfixExpression(new SymbolSource('claims', 'quote'), '>', new StaticSource(2)),
+            ),
+            new InfixExpression(new StaticSource(100), '*', new StaticSource(0.25)),
+        ),
+        new MatchArm(new WildcardPattern(), new StaticSource(0)),
+    ],
+);
+```
+
+**Dispatch table:**
+
+```php
+// match tier { "micro" => 1.3, "small" => 1.1, _ => 1.0 }
+new MatchExpression(
+    subject: new SymbolSource('tier'),
+    arms: [
+        new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
+        new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),
+        new MatchArm(new WildcardPattern(), new StaticSource(1.0)),
+    ],
+);
+```
+
+**Extensible pattern matching:** The `MatchResolver` delegates pattern evaluation to a registry of `PatternMatcher` implementations. Extension packages can register their own pattern types (e.g. `IntervalPattern` from `axiom-interval`) without modifying core axiom:
+
+```php
+$matchers = [
+    new WildcardMatcher(),
+    new LiteralMatcher(),
+    new ExpressionMatcher($resolver),
+    // Add custom matchers from extension packages here
+];
+
+$resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
 ```
 
 ## Core Concepts
@@ -182,14 +244,12 @@ The `Type` interface provides two methods for value processing, following the [@
 ```php
 $numberType = new NumberType();
 
-// Assert - only accepts int/float
-$result = $numberType->assert(42);      // Ok(Some(42))
-$result = $numberType->assert('42');    // Err(TransformValueException)
+$numberType->assert(42);     // Ok(Some(42))
+$numberType->assert('42');   // Err(TransformValueException)
 
-// Coerce - converts compatible types
-$result = $numberType->coerce(42);      // Ok(Some(42))
-$result = $numberType->coerce('42');    // Ok(Some(42))
-$result = $numberType->coerce('45%');   // Ok(Some(0.45))
+$numberType->coerce(42);     // Ok(Some(42))
+$numberType->coerce('42');   // Ok(Some(42))
+$numberType->coerce('45%');  // Ok(Some(0.45))
 ```
 
 Both methods return `Result<Option<T>, Throwable>` where:
@@ -197,125 +257,50 @@ Both methods return `Result<Option<T>, Throwable>` where:
 - `Ok(None())` - successful but no value (e.g., empty strings)
 - `Err(exception)` - failed validation/coercion
 
-**Note:** The `coerce()` method provides the same functionality as the previous `transform()` method.
-
 ### Sources
 
 Sources represent different ways to provide data:
 
 - **StaticSource**: Direct values
-- **SymbolSource**: Named references to other sources (with optional namespace support)
+- **SymbolSource**: Named references resolved from the context's bindings or definitions
 - **TypeDefinition**: Combines a type with a source for validation and coercion
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
-- **MatchExpression**: Conditional matching with ordered arms (see below)
-
-### Symbol Registry
-
-The `SymbolRegistry` provides a centralized way to manage named values and organize them using namespaces:
-
-**Key Features:**
-- **Global Symbols**: Direct symbol registration without namespace isolation
-- **Namespaced Symbols**: Group related symbols under namespaces for better organization
-- **Isolation**: Symbols in different namespaces are isolated from each other
-- **Type Safety**: Only `Source` instances can be registered
-
-**Registration Format:**
-```php
-new SymbolRegistry([
-    'globalSymbol' => new StaticSource(value),    // Global scope
-    'namespace' => [                               // Namespaced scope
-        'symbol1' => new StaticSource(value1),
-        'symbol2' => new StaticSource(value2),
-    ],
-])
-```
-
-**Use Cases:**
-- Organize constants by category (math, physics, config)
-- Prevent naming conflicts between different domains
-- Create clear separation between different symbol contexts
-- Improve code maintainability with logical grouping
-
-### Match Expressions
-
-`MatchExpression` provides a unified way to express conditionals, dispatch tables, and cond-style matching. A match expression has a **subject** and an ordered list of **arms**. Each arm pairs a pattern with a result expression. The first matching arm wins.
-
-**Patterns:**
-
-- **LiteralPattern**: Matches via strict equality (`===`)
-- **WildcardPattern**: Always matches (the default/catch-all arm)
-- **ExpressionPattern**: Wraps a Source — resolves it and compares to the subject
-
-**If/then/else:**
-
-```php
-// if claims > 2 then 100 * 0.25 else 0
-new MatchExpression(
-    subject: new StaticSource(true),
-    arms: [
-        new MatchArm(
-            new ExpressionPattern(
-                new InfixExpression(new SymbolSource('claims'), '>', new StaticSource(2)),
-            ),
-            new InfixExpression(new StaticSource(100), '*', new StaticSource(0.25)),
-        ),
-        new MatchArm(new WildcardPattern(), new StaticSource(0)),
-    ],
-);
-```
-
-**Dispatch table:**
-
-```php
-// match tier { "micro" => 1.3, "small" => 1.1, _ => 1.0 }
-new MatchExpression(
-    subject: new SymbolSource('tier'),
-    arms: [
-        new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
-        new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),
-        new MatchArm(new WildcardPattern(), new StaticSource(1.0)),
-    ],
-);
-```
-
-**Cond-style (subjectless):**
-
-```php
-// match { claims > 3 => 0.5, turnover > 500000 => 0.35, _ => 0.1 }
-new MatchExpression(
-    subject: new StaticSource(true),
-    arms: [
-        new MatchArm(new ExpressionPattern(/* claims > 3 */), new StaticSource(0.5)),
-        new MatchArm(new ExpressionPattern(/* turnover > 500000 */), new StaticSource(0.35)),
-        new MatchArm(new WildcardPattern(), new StaticSource(0.1)),
-    ],
-);
-```
-
-**Extensible pattern matching:** The `MatchResolver` delegates pattern evaluation to a registry of `PatternMatcher` implementations. Extension packages can register their own pattern types (e.g. `IntervalPattern` from `axiom-interval`) without modifying core axiom:
-
-```php
-$matchers = [
-    new WildcardMatcher(),
-    new LiteralMatcher(),
-    new ExpressionMatcher($resolver),
-    // Add custom matchers from extension packages here
-];
-
-$resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
-```
+- **MatchExpression**: Conditional matching with ordered arms
+- **MemberAccessSource**: Chained property/array-key access
 
 ### Resolvers
 
-Resolvers handle the evaluation of sources:
+Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`:
 
 - **StaticResolver**: Resolves static values
 - **ValueResolver**: Applies type coercion using the `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
-- **SymbolResolver**: Looks up named symbols
+- **UnaryResolver**: Evaluates unary expressions
+- **SymbolResolver**: Looks up symbols from bindings (first) then definitions (with per-context memoization)
+- **MemberAccessResolver**: Evaluates property/array-key access
 - **MatchResolver**: Evaluates match expressions with extensible pattern matching
 - **DelegatingResolver**: Chains multiple resolvers together
+
+### Context
+
+`Context` carries everything a single call needs:
+
+```php
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
+
+$context = new Context(
+    bindings: new Bindings(['radius' => 5]),
+    definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
+    inspector: $inspector, // optional
+);
+
+$resolver->resolve($source, $context);
+```
+
+`Expression::call()` / `Expression::__invoke()` build the `Context` for you from the bindings you pass.
 
 ### Operators
 
@@ -328,7 +313,7 @@ The library supports various operators through the overloader system:
 
 ### Resolution Inspector
 
-The `ResolutionInspector` interface provides a zero-overhead observability primitive for resolution. Resolvers accept an optional `?ResolutionInspector` and annotate metadata about their work. When no inspector is registered, resolvers skip annotation entirely via null-safe calls.
+The `ResolutionInspector` interface provides a zero-overhead observability primitive for resolution. Resolvers accept the inspector via the `Context` and annotate metadata about their work. When no inspector is present on the context, resolvers skip annotation entirely via null-safe calls.
 
 **Interface:**
 
@@ -345,20 +330,16 @@ interface ResolutionInspector
 |----------|-------------|
 | `StaticResolver` | `label`: `"static(int)"`, `"static(string)"`, etc. |
 | `ValueResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
-| `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`) |
-| `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`) |
-| `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`) |
+| `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`); `left`, `right`, `result` |
+| `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`); `result` |
+| `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"`; `result` |
 | `MatchResolver` | `label`: `"match"`; `subject`: resolved subject value; `matched_arm`: index of matched arm; `result`: final value |
 
-**Usage with DelegatingResolver:**
+**Usage:**
 
 ```php
-<?php
-
 use Superscript\Axiom\ResolutionInspector;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
 
-// Implement the interface to capture metadata
 final class ResolutionContext implements ResolutionInspector
 {
     private array $annotations = [];
@@ -374,21 +355,10 @@ final class ResolutionContext implements ResolutionInspector
     }
 }
 
-// Register it in the resolver
-$context = new ResolutionContext();
-$resolver = new DelegatingResolver([...]);
-$resolver->instance(ResolutionInspector::class, $context);
+$inspector = new ResolutionContext();
+$expression->withInspector($inspector)(['radius' => 5]);
 
-$result = $resolver->resolve($source);
-// Annotations are now available via $context->get('label'), etc.
-```
-
-**Without an inspector (zero overhead):**
-
-```php
-$resolver = new DelegatingResolver([...]);
-// No ResolutionInspector registered — resolvers get null, skip annotation
-$result = $resolver->resolve($source);
+// Annotations are available via $inspector->get('label'), etc.
 ```
 
 ## Advanced Usage
@@ -411,32 +381,30 @@ class EmailType implements Type
 {
     public function assert(mixed $value): Result
     {
-        // Strict validation - only accepts valid email strings
         if (is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
             return Ok(Some($value));
         }
-        
+
         return new Err(new TransformValueException(type: 'email', value: $value));
     }
-    
+
     public function coerce(mixed $value): Result
     {
-        // Permissive conversion - attempts to convert to email format
         $stringValue = is_string($value) ? $value : strval($value);
         $trimmed = trim($stringValue);
-        
+
         if (filter_var($trimmed, FILTER_VALIDATE_EMAIL)) {
             return Ok(Some($trimmed));
         }
-        
+
         return new Err(new TransformValueException(type: 'email', value: $value));
     }
-    
+
     public function compare(mixed $a, mixed $b): bool
     {
         return $a === $b;
     }
-    
+
     public function format(mixed $value): string
     {
         return (string) $value;
@@ -446,26 +414,21 @@ class EmailType implements Type
 
 ### Custom Resolvers
 
-Create specialized resolvers for specific data sources:
+Create specialized resolvers for specific data sources. Resolvers must be stateless and read everything they need from the `Context`:
 
 ```php
 <?php
 
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Source;
 use Superscript\Monads\Result\Result;
 
 class DatabaseResolver implements Resolver
 {
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
-        // Custom resolution logic
-        // Connect to database, fetch data, etc.
-    }
-    
-    public static function supports(Source $source): bool
-    {
-        return $source instanceof DatabaseSource;
+        // Custom resolution logic — connect to database, fetch data, etc.
     }
 }
 ```
@@ -479,8 +442,6 @@ class DatabaseResolver implements Resolver
 3. Run tests: `composer test`
 
 ### Testing
-
-The library uses PHPUnit for testing with 100% code coverage requirements:
 
 ```bash
 # Run all tests
@@ -507,6 +468,7 @@ The library follows several design patterns:
 - **Chain of Responsibility**: DelegatingResolver chains multiple resolvers
 - **Factory Pattern**: Type system for creating appropriate transformations
 - **Functional Programming**: Extensive use of Result and Option monads
+- **Explicit Per-Call State**: Resolvers are stateless; `Context` carries inputs, definitions, inspector, and memo
 
 ## Error Handling
 

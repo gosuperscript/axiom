@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use RuntimeException;
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Patterns\PatternMatcher;
-use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
@@ -29,30 +29,32 @@ final readonly class MatchResolver implements Resolver
     public function __construct(
         public Resolver $resolver,
         private array $matchers,
-        private ?ResolutionInspector $inspector = null,
     ) {}
 
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
-        $this->inspector?->annotate('label', 'match');
-
-        return $this->resolver->resolve($source->subject)
-            ->andThen(fn (Option $subjectOption) => $this->evaluateArms(
+        $result = $this->resolver->resolve($source->subject, $context)
+            ->andThen(fn(Option $subjectOption) => $this->evaluateArms(
                 $subjectOption->unwrapOr(null),
                 $source->arms,
+                $context,
             ));
+
+        $context->inspector?->annotate('label', 'match');
+
+        return $result;
     }
 
     /**
      * @param list<MatchArm> $arms
      * @return Result<Option<mixed>, \Throwable>
      */
-    private function evaluateArms(mixed $subjectValue, array $arms): Result
+    private function evaluateArms(mixed $subjectValue, array $arms, Context $context): Result
     {
-        $this->inspector?->annotate('subject', $subjectValue);
+        $context->inspector?->annotate('subject', $subjectValue);
 
         foreach ($arms as $index => $arm) {
-            $matchResult = $this->matchPattern($arm->pattern, $subjectValue);
+            $matchResult = $this->matchPattern($arm->pattern, $subjectValue, $context);
 
             if ($matchResult->isErr()) {
                 return $matchResult;
@@ -62,11 +64,11 @@ final readonly class MatchResolver implements Resolver
                 continue;
             }
 
-            $this->inspector?->annotate('matched_arm', $index);
+            $context->inspector?->annotate('matched_arm', $index);
 
-            return $this->resolver->resolve($arm->expression)
-                ->inspect(fn (Option $option) => $option->inspect(
-                    fn (mixed $value) => $this->inspector?->annotate('result', $value),
+            return $this->resolver->resolve($arm->expression, $context)
+                ->inspect(fn(Option $option) => $option->inspect(
+                    fn(mixed $value) => $context->inspector?->annotate('result', $value),
                 ));
         }
 
@@ -76,11 +78,11 @@ final readonly class MatchResolver implements Resolver
     /**
      * @return Result<bool, \Throwable>
      */
-    private function matchPattern(MatchPattern $pattern, mixed $subjectValue): Result
+    private function matchPattern(MatchPattern $pattern, mixed $subjectValue, Context $context): Result
     {
         foreach ($this->matchers as $matcher) {
             if ($matcher->supports($pattern)) {
-                return $matcher->matches($pattern, $subjectValue);
+                return $matcher->matches($pattern, $subjectValue, $context);
             }
         }
 

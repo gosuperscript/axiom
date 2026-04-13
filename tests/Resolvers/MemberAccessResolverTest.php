@@ -9,6 +9,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\MemberAccessResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -16,7 +19,6 @@ use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\SymbolRegistry;
 
 #[CoversClass(MemberAccessSource::class)]
 #[CoversClass(MemberAccessResolver::class)]
@@ -25,7 +27,9 @@ use Superscript\Axiom\SymbolRegistry;
 #[UsesClass(DelegatingResolver::class)]
 #[UsesClass(SymbolResolver::class)]
 #[UsesClass(SymbolSource::class)]
-#[UsesClass(SymbolRegistry::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class MemberAccessResolverTest extends TestCase
 {
     #[Test]
@@ -37,7 +41,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertEquals('John', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('John', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -49,7 +53,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
     }
 
     #[Test]
@@ -61,7 +65,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'age',
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
         $this->assertTrue($result->isErr());
         $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
         $this->assertSame("Property 'age' does not exist", $result->unwrapErr()->getMessage());
@@ -79,7 +83,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertEquals('John', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('John', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -94,7 +98,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
     }
 
     #[Test]
@@ -109,7 +113,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'age',
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
         $this->assertTrue($result->isErr());
         $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
         $this->assertSame("Property 'age' does not exist", $result->unwrapErr()->getMessage());
@@ -124,11 +128,13 @@ class MemberAccessResolverTest extends TestCase
             MemberAccessSource::class => MemberAccessResolver::class,
         ]);
 
-        $resolver->instance(SymbolRegistry::class, new SymbolRegistry([
-            'quote' => new StaticSource([
-                'address' => ['postcode' => 'SW1A 1AA'],
+        $context = new Context(
+            definitions: new Definitions([
+                'quote' => new StaticSource([
+                    'address' => ['postcode' => 'SW1A 1AA'],
+                ]),
             ]),
-        ]));
+        );
 
         $source = new MemberAccessSource(
             object: new MemberAccessSource(
@@ -138,7 +144,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'postcode',
         );
 
-        $this->assertEquals('SW1A 1AA', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('SW1A 1AA', $resolver->resolve($source, $context)->unwrap()->unwrap());
     }
 
     #[Test]
@@ -150,7 +156,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $this->assertTrue($resolver->resolve($source)->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
     }
 
     #[Test]
@@ -162,7 +168,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
         $this->assertTrue($result->isErr());
         $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
         $this->assertSame("Cannot access property 'name' on string", $result->unwrapErr()->getMessage());
@@ -177,7 +183,7 @@ class MemberAccessResolverTest extends TestCase
             property: 'name',
         );
 
-        $result = $resolver->resolve($source);
+        $result = $resolver->resolve($source, new Context());
         $this->assertTrue($result->isErr());
         $this->assertInstanceOf(InvalidArgumentException::class, $result->unwrapErr());
         $this->assertSame("Cannot access property 'name' on int", $result->unwrapErr()->getMessage());

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests\Resolvers\Fixtures;
 
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Source;
 use Superscript\Monads\Result\Result;
@@ -17,7 +18,7 @@ final readonly class ResolverWithDependency implements Resolver
         private Dependency $dependency,
     ) {}
 
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
         return Ok(Some($this->dependency->info));
     }

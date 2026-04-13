@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
@@ -23,6 +26,9 @@ use Superscript\Axiom\Types\NumberType;
 #[UsesClass(ValueResolver::class)]
 #[UsesClass(TypeDefinition::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class DelegatingResolverTest extends TestCase
 {
     #[Test]
@@ -32,7 +38,7 @@ class DelegatingResolverTest extends TestCase
             StaticSource::class => StaticResolver::class,
         ]);
 
-        $result = $resolver->resolve(new StaticSource('Hello world!'));
+        $result = $resolver->resolve(new StaticSource('Hello world!'), new Context());
         $this->assertEquals('Hello world!', $result->unwrap()->unwrap());
     }
 
@@ -44,7 +50,7 @@ class DelegatingResolverTest extends TestCase
             TypeDefinition::class => ValueResolver::class,
         ]);
 
-        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')));
+        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context());
         $this->assertEquals(42, $result->unwrap()->unwrap());
     }
 
@@ -57,7 +63,7 @@ class DelegatingResolverTest extends TestCase
 
         $resolver->instance(Dependency::class, new Dependency('hello'));
 
-        $this->assertEquals('hello', $resolver->resolve(new StaticSource(42))->unwrap()->unwrap());
+        $this->assertEquals('hello', $resolver->resolve(new StaticSource(42), new Context())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -90,6 +96,6 @@ class DelegatingResolverTest extends TestCase
         $this->expectExceptionMessage('No resolver found for source of type ' . StaticSource::class);
 
         $resolver = new DelegatingResolver([]);
-        $resolver->resolve(new StaticSource('Hello world!'));
+        $resolver->resolve(new StaticSource('Hello world!'), new Context());
     }
 }
