@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Type;
+use Superscript\Monads\Option\None;
+use Superscript\Monads\Option\Option;
+use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Result;
 use function Superscript\Monads\Result\attempt;
 
@@ -14,6 +19,19 @@ final readonly class BinaryOverloader implements OperatorOverloader
     public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
     {
         return is_numeric($left) && is_numeric($right) && in_array($operator, self::operators);
+    }
+
+    public function inferType(Type $left, Type $right, string $operator): Option
+    {
+        if (! in_array($operator, self::operators, strict: true)) {
+            return new None();
+        }
+
+        if ($left instanceof NumberType && $right instanceof NumberType) {
+            return new Some(new NumberType());
+        }
+
+        return new None();
     }
 
     /**

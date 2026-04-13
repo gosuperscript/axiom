@@ -21,7 +21,7 @@ use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\MatchResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -29,7 +29,7 @@ use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\CoerceSource;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
 
@@ -41,7 +41,7 @@ class KitchenSinkTest extends TestCase
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
             InfixExpression::class => InfixResolver::class,
-            TypeDefinition::class => ValueResolver::class,
+            CoerceSource::class => CoerceResolver::class,
             SymbolSource::class => SymbolResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
@@ -106,9 +106,9 @@ class KitchenSinkTest extends TestCase
     #[Test]
     public function transforming_a_value(): void
     {
-        $source = new TypeDefinition(
-            type: new NumberType(),
+        $source = new CoerceSource(
             source: new StaticSource('5'),
+            target: new NumberType(),
         );
 
         $expression = new Expression($source, $this->fullResolver());
@@ -219,9 +219,9 @@ class KitchenSinkTest extends TestCase
             right: new InfixExpression(
                 left: new SymbolSource('A'),
                 operator: '*',
-                right: new TypeDefinition(
-                    type: new NumberType(),
+                right: new CoerceSource(
                     source: new StaticSource('3'),
+                    target: new NumberType(),
                 ),
             ),
         );

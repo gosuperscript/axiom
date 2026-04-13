@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\Type;
+use Superscript\Monads\Option\None;
+use Superscript\Monads\Option\Option;
+use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Result;
 
 use Psl\Vec;
@@ -15,6 +20,15 @@ class IntersectsOverloader implements OperatorOverloader
     public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
     {
         return $operator === 'intersects';
+    }
+
+    public function inferType(Type $left, Type $right, string $operator): Option
+    {
+        if ($operator !== 'intersects') {
+            return new None();
+        }
+
+        return new Some(new BooleanType());
     }
 
     /**

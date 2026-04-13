@@ -19,9 +19,9 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<int|float>
+ * @extends AbstractType<int|float>
  */
-class NumberType implements Type
+class NumberType extends AbstractType
 {
     public function assert(mixed $value): Result
     {

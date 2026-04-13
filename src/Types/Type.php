@@ -39,4 +39,26 @@ interface Type
      * @return string
      */
     public function format(mixed $value): string;
+
+    /**
+     * Whether a value of $other can be used where this type is expected.
+     *
+     * Default: exact class match. Override to allow subtype compatibility.
+     */
+    public function accepts(Type $other): bool;
+
+    /**
+     * Human-readable name used in type-check error messages.
+     */
+    public function name(): string;
+
+    /**
+     * The declared type of a named member of a value of this type, if any.
+     *
+     * Returns None for scalar types. DictType/ListType override to describe
+     * their member types so MemberAccessSource can propagate static typing.
+     *
+     * @return Option<Type>
+     */
+    public function memberType(string $name): Option;
 }

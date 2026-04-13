@@ -13,9 +13,9 @@ use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\CoerceResolver;
+use Superscript\Axiom\Sources\CoerceSource;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\Dependency;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\ResolverWithDependency;
 use Superscript\Axiom\Types\NumberType;
@@ -23,8 +23,8 @@ use Superscript\Axiom\Types\NumberType;
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(StaticResolver::class)]
-#[UsesClass(ValueResolver::class)]
-#[UsesClass(TypeDefinition::class)]
+#[UsesClass(CoerceResolver::class)]
+#[UsesClass(CoerceSource::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
@@ -47,10 +47,10 @@ class DelegatingResolverTest extends TestCase
     {
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
-            TypeDefinition::class => ValueResolver::class,
+            CoerceSource::class => CoerceResolver::class,
         ]);
 
-        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context());
+        $result = $resolver->resolve(new CoerceSource(new StaticSource('42'), new NumberType()), new Context());
         $this->assertEquals(42, $result->unwrap()->unwrap());
     }
 

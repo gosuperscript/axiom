@@ -6,6 +6,9 @@ namespace Superscript\Axiom\Operators;
 
 use RuntimeException;
 use SebastianBergmann\Exporter\Exporter;
+use Superscript\Axiom\Types\Type;
+use Superscript\Monads\Option\None;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
 use function Superscript\Monads\Result\Err;
@@ -32,6 +35,18 @@ class OverloaderManager implements OperatorOverloader
         }
 
         return Err(new RuntimeException(sprintf('No overloader found for [%s] %s [%s]', (new Exporter())->export($left), $operator, (new Exporter())->export($right))));
+    }
+
+    public function inferType(Type $left, Type $right, string $operator): Option
+    {
+        foreach ($this->overloaders as $overloader) {
+            $inferred = $overloader->inferType($left, $right, $operator);
+            if ($inferred->isSome()) {
+                return $inferred;
+            }
+        }
+
+        return new None();
     }
 
     private function getOverloader(mixed $left, mixed $right, string $operator): ?OperatorOverloader

@@ -16,13 +16,23 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<List<mixed>>
+ * @extends AbstractType<List<mixed>>
  */
-class ListType implements Type
+class ListType extends AbstractType
 {
     public function __construct(
         public Type $type,
     ) {}
+
+    public function accepts(Type $other): bool
+    {
+        return $other instanceof self && $this->type->accepts($other->type);
+    }
+
+    public function name(): string
+    {
+        return 'List<' . $this->type->name() . '>';
+    }
 
     public function assert(mixed $value): Result
     {

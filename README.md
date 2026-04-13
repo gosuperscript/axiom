@@ -82,21 +82,22 @@ The key idea: the expression's inputs are its **parameters**, passed at the call
 <?php
 
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Sources\CoerceSource;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Types\NumberType;
 
 $resolver = new DelegatingResolver([
-    StaticSource::class   => StaticResolver::class,
-    TypeDefinition::class => ValueResolver::class,
+    StaticSource::class => StaticResolver::class,
+    CoerceSource::class => CoerceResolver::class,
 ]);
 
-$source = new TypeDefinition(
-    type: new NumberType(),
+// CoerceSource runs `target->coerce()` on the inner source's value.
+$source = new CoerceSource(
     source: new StaticSource('42'),
+    target: new NumberType(),
 );
 
 $expression = new Expression($source, $resolver);
@@ -257,13 +258,53 @@ Both methods return `Result<Option<T>, Throwable>` where:
 - `Ok(None())` - successful but no value (e.g., empty strings)
 - `Err(exception)` - failed validation/coercion
 
+### Type Checking (Pre-execution Validation)
+
+Every `Source` declares the `Type` it resolves to, so an expression can be statically type-checked **before** it is ever invoked. Operators declare the types they accept via `OperatorOverloader::inferType()`, and `Expression::validate()` walks the tree returning either the expression's result type or a `TypeCheckException` pointing at the offending node.
+
+**Declare your parameters like a function signature:**
+
+```php
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Types\NumberType;
+
+$area = new Expression(
+    source: /* PI * radius * radius */,
+    resolver: $resolver,
+    definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
+    parameters: ['radius' => new NumberType()],
+);
+
+// Type-check the body once, with zero bindings.
+$area->validate();   // Ok(NumberType)
+
+$area(['radius' => 5])->unwrap()->unwrap(); // ~78.54
+```
+
+**Ill-typed expressions fail at validation, not at the deepest matching operator:**
+
+```php
+$broken = new Expression(
+    source: new InfixExpression(new StaticSource('hello'), '+', new StaticSource(5)),
+    resolver: $resolver,
+);
+
+$result = $broken->validate();
+$result->isErr();                    // true
+$result->unwrapErr()->getMessage();  // "... no operator overload for String + Number"
+```
+
+`SymbolSource` resolves its type from — in order — the **declared parameter schema** (`Expression::$parameters`), then the **definition** it points at (whose `type()` is resolved recursively), and otherwise reports an unknown-symbol error. Leaves (`StaticSource`) either take an explicit `Type` or infer one from the PHP value via `TypeInference`.
+
+Use **`CoerceSource`** when you genuinely need to convert a value from one type to another at a boundary — its `type()` is always its `target`, and the resolver runs `target->coerce()` at evaluation time.
+
 ### Sources
 
 Sources represent different ways to provide data:
 
-- **StaticSource**: Direct values
+- **StaticSource**: Direct values. Carries an explicit `Type` (or infers one from the PHP value)
 - **SymbolSource**: Named references resolved from the context's bindings or definitions
-- **TypeDefinition**: Combines a type with a source for validation and coercion
+- **CoerceSource**: Runs `target->coerce()` on the inner source's value — the explicit "convert at this boundary" wrapper
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
 - **MatchExpression**: Conditional matching with ordered arms
@@ -274,7 +315,7 @@ Sources represent different ways to provide data:
 Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`:
 
 - **StaticResolver**: Resolves static values
-- **ValueResolver**: Applies type coercion using the `coerce()` method
+- **CoerceResolver**: Applies type coercion using the target type's `coerce()` method
 - **InfixResolver**: Evaluates binary expressions
 - **UnaryResolver**: Evaluates unary expressions
 - **SymbolResolver**: Looks up symbols from bindings (first) then definitions (with per-context memoization)
@@ -329,7 +370,7 @@ interface ResolutionInspector
 | Resolver | Annotations |
 |----------|-------------|
 | `StaticResolver` | `label`: `"static(int)"`, `"static(string)"`, etc. |
-| `ValueResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
+| `CoerceResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
 | `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`); `left`, `right`, `result` |
 | `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`); `result` |
 | `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"`; `result` |

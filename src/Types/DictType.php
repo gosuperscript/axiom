@@ -19,13 +19,31 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<array<array-key, mixed>>
+ * @extends AbstractType<array<array-key, mixed>>
  */
-class DictType implements Type
+class DictType extends AbstractType
 {
     public function __construct(
         public Type $type,
     ) {}
+
+    public function accepts(Type $other): bool
+    {
+        return $other instanceof self && $this->type->accepts($other->type);
+    }
+
+    public function name(): string
+    {
+        return 'Dict<' . $this->type->name() . '>';
+    }
+
+    /**
+     * @return Option<Type>
+     */
+    public function memberType(string $name): Option
+    {
+        return Some($this->type);
+    }
 
     public function assert(mixed $value): Result
     {

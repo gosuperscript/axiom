@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Axiom\Types\Type;
+use Superscript\Monads\Option\None;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use UnhandledMatchError;
 use function Superscript\Monads\Result\Err;
@@ -49,5 +52,17 @@ final readonly class DefaultOverloader implements OperatorOverloader
         }
 
         return Err(new UnhandledMatchError("Operator [$operator] is not supported."));
+    }
+
+    public function inferType(Type $left, Type $right, string $operator): Option
+    {
+        foreach ($this->overloaders as $overloader) {
+            $inferred = $overloader->inferType($left, $right, $operator);
+            if ($inferred->isSome()) {
+                return $inferred;
+            }
+        }
+
+        return new None();
     }
 }

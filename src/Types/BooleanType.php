@@ -13,9 +13,9 @@ use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 
 /**
- * @implements Type<bool>
+ * @extends AbstractType<bool>
  */
-final class BooleanType implements Type
+final class BooleanType extends AbstractType
 {
     public function assert(mixed $value): Result
     {

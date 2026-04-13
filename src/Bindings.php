@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Option\None;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Option\Some;
@@ -14,32 +15,27 @@ use Superscript\Monads\Option\Some;
  * Bindings hold raw values and are typically constructed fresh for each
  * expression invocation. For stable named expressions (constants, named
  * sub-expressions), use {@see Definitions} instead.
+ *
+ * Optionally, bindings carry a **schema** — a map of declared parameter
+ * {@see Type}s — so pre-execution type checking can validate that the
+ * expression body is consistent with the caller's declared inputs.
  */
 final readonly class Bindings
 {
     /** @var array<string, mixed> */
     private array $values;
 
+    /** @var array<string, Type> */
+    private array $schema;
+
     /**
      * @param array<string, mixed|array<string, mixed>> $bindings
+     * @param array<string, Type|array<string, Type>> $schema
      */
-    public function __construct(array $bindings = [])
+    public function __construct(array $bindings = [], array $schema = [])
     {
-        $values = [];
-
-        foreach ($bindings as $key => $value) {
-            if (is_array($value) && self::isAssoc($value)) {
-                foreach ($value as $name => $inner) {
-                    $values[$key . '.' . $name] = $inner;
-                }
-
-                continue;
-            }
-
-            $values[$key] = $value;
-        }
-
-        $this->values = $values;
+        $this->values = self::flattenBindings($bindings);
+        $this->schema = self::flattenSchema($schema);
     }
 
     public function has(string $name, ?string $namespace = null): bool
@@ -61,9 +57,61 @@ final readonly class Bindings
         return new Some($this->values[$key]);
     }
 
+    /**
+     * Declared type of a parameter, or null if none was declared.
+     */
+    public function typeOf(string $name, ?string $namespace = null): ?Type
+    {
+        return $this->schema[$this->key($name, $namespace)] ?? null;
+    }
+
     private function key(string $name, ?string $namespace): string
     {
         return $namespace !== null ? $namespace . '.' . $name : $name;
+    }
+
+    /**
+     * @param array<string, mixed|array<string, mixed>> $input
+     * @return array<string, mixed>
+     */
+    private static function flattenBindings(array $input): array
+    {
+        $out = [];
+
+        foreach ($input as $key => $value) {
+            if (is_array($value) && self::isAssoc($value)) {
+                foreach ($value as $name => $inner) {
+                    $out[$key . '.' . $name] = $inner;
+                }
+                continue;
+            }
+
+            $out[$key] = $value;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, Type|array<string, Type>> $input
+     * @return array<string, Type>
+     */
+    private static function flattenSchema(array $input): array
+    {
+        $out = [];
+
+        foreach ($input as $key => $value) {
+            if ($value instanceof Type) {
+                $out[$key] = $value;
+                continue;
+            }
+
+            foreach ($value as $name => $inner) {
+                $out[$key . '.' . $name] = $inner;
+            }
+        }
+
+        return $out;
     }
 
     /**

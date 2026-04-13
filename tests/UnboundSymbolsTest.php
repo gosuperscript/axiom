@@ -16,7 +16,7 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\CoerceSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
@@ -33,7 +33,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(ExpressionPattern::class)]
 #[UsesClass(MemberAccessSource::class)]
-#[UsesClass(TypeDefinition::class)]
+#[UsesClass(CoerceSource::class)]
 #[UsesClass(NumberType::class)]
 final class UnboundSymbolsTest extends TestCase
 {
@@ -146,16 +146,16 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
-    public function walks_into_member_access_and_type_definition(): void
+    public function walks_into_member_access_and_coerce_source(): void
     {
         $quote = new SymbolSource('quote');
 
-        $source = new TypeDefinition(
-            type: new NumberType(),
+        $source = new CoerceSource(
             source: new MemberAccessSource(
                 object: $quote,
                 property: 'claims',
             ),
+            target: new NumberType(),
         );
 
         $this->assertSame([$quote], UnboundSymbols::in($source));
