@@ -76,8 +76,8 @@ class KitchenSinkTest extends TestCase
             definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
         );
 
-        $this->assertEqualsWithDelta(78.54, $area(['radius' => 5]), 0.01);
-        $this->assertEqualsWithDelta(314.16, $area(['radius' => 10]), 0.01);
+        $this->assertEqualsWithDelta(78.54, $area(['radius' => 5])->unwrap()->unwrap(), 0.01);
+        $this->assertEqualsWithDelta(314.16, $area(['radius' => 10])->unwrap()->unwrap(), 0.01);
     }
 
     #[Test]
@@ -113,7 +113,7 @@ class KitchenSinkTest extends TestCase
 
         $expression = new Expression($source, $this->fullResolver());
 
-        $this->assertSame(5, $expression());
+        $this->assertSame(5, $expression()->unwrap()->unwrap());
     }
 
     #[Test]
@@ -143,8 +143,8 @@ class KitchenSinkTest extends TestCase
 
         $expression = new Expression($source, $this->fullResolver());
 
-        $this->assertEquals(25.0, $expression(['quote' => ['claims' => 3]]));
-        $this->assertEquals(0, $expression(['quote' => ['claims' => 1]]));
+        $this->assertEquals(25.0, $expression(['quote' => ['claims' => 3]])->unwrap()->unwrap());
+        $this->assertEquals(0, $expression(['quote' => ['claims' => 1]])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -162,9 +162,9 @@ class KitchenSinkTest extends TestCase
 
         $multiplier = new Expression($source, $this->fullResolver());
 
-        $this->assertEquals(1.3, $multiplier(['tier' => 'micro']));
-        $this->assertEquals(1.1, $multiplier(['tier' => 'small']));
-        $this->assertEquals(1.0, $multiplier(['tier' => 'enormous']));
+        $this->assertEquals(1.3, $multiplier(['tier' => 'micro'])->unwrap()->unwrap());
+        $this->assertEquals(1.1, $multiplier(['tier' => 'small'])->unwrap()->unwrap());
+        $this->assertEquals(1.0, $multiplier(['tier' => 'enormous'])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -204,9 +204,9 @@ class KitchenSinkTest extends TestCase
 
         $rate = new Expression($source, $this->fullResolver());
 
-        $this->assertEquals(0.5, $rate(['quote' => ['claims' => 5, 'turnover' => 100]]));
-        $this->assertEquals(0.35, $rate(['quote' => ['claims' => 1, 'turnover' => 600000]]));
-        $this->assertEquals(0.1, $rate(['quote' => ['claims' => 0, 'turnover' => 100]]));
+        $this->assertEquals(0.5, $rate(['quote' => ['claims' => 5, 'turnover' => 100]])->unwrap()->unwrap());
+        $this->assertEquals(0.35, $rate(['quote' => ['claims' => 1, 'turnover' => 600000]])->unwrap()->unwrap());
+        $this->assertEquals(0.1, $rate(['quote' => ['claims' => 0, 'turnover' => 100]])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -228,8 +228,8 @@ class KitchenSinkTest extends TestCase
 
         $expression = new Expression($source, $this->fullResolver());
 
-        $this->assertEquals(7, $expression(['A' => 2]));
-        $this->assertEquals(16, $expression(['A' => 5]));
+        $this->assertEquals(7, $expression(['A' => 2])->unwrap()->unwrap());
+        $this->assertEquals(16, $expression(['A' => 5])->unwrap()->unwrap());
     }
 
     #[Test]

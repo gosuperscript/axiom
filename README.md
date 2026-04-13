@@ -68,9 +68,10 @@ $area = new Expression(
     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
 );
 
-$area->parameters();     // ['radius']
-$area(['radius' => 5]);  // ~78.54
-$area(['radius' => 10]); // ~314.16
+$area->parameters(); // ['radius']
+
+$area(['radius' => 5])->unwrap()->unwrap();  // ~78.54
+$area(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 ```
 
 The key idea: the expression's inputs are its **parameters**, passed at the call site.
@@ -100,7 +101,7 @@ $source = new TypeDefinition(
 
 $expression = new Expression($source, $resolver);
 
-$expression(); // 42 (as integer)
+$expression()->unwrap()->unwrap(); // 42 (as integer)
 ```
 
 ### Inputs, Definitions, and Namespaces

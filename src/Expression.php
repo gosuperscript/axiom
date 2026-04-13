@@ -55,18 +55,18 @@ final readonly class Expression
     }
 
     /**
-     * Invoke the expression with the given bindings. Returns the resolved value
-     * (or null for a `None` result). Throws if resolution returns an error.
+     * Invoke the expression with the given bindings.
      *
      * @param array<string, mixed> $bindings
+     * @return Result<Option<mixed>, Throwable>
      */
-    public function __invoke(array $bindings = []): mixed
+    public function __invoke(array $bindings = []): Result
     {
-        return $this->call($bindings)->unwrap()->unwrapOr(null);
+        return $this->call($bindings);
     }
 
     /**
-     * Invoke the expression, returning the raw `Result<Option<mixed>, Throwable>`.
+     * Invoke the expression with the given bindings.
      *
      * @param array<string, mixed> $bindings
      * @return Result<Option<mixed>, Throwable>

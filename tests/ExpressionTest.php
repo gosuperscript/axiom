@@ -12,7 +12,6 @@ use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\UnboundSymbols;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
@@ -25,6 +24,7 @@ use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
+use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
 #[CoversClass(Expression::class)]
@@ -58,7 +58,7 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
-    public function invoke_returns_the_resolved_value(): void
+    public function invoke_returns_a_result(): void
     {
         $expression = new Expression(
             source: new InfixExpression(
@@ -69,32 +69,38 @@ final class ExpressionTest extends TestCase
             resolver: $this->fullResolver(),
         );
 
-        $this->assertSame(5, $expression(['a' => 2, 'b' => 3]));
+        $result = $expression(['a' => 2, 'b' => 3]);
+
+        $this->assertInstanceOf(Result::class, $result);
+        $this->assertSame(5, $result->unwrap()->unwrap());
     }
 
     #[Test]
-    public function invoke_returns_null_for_a_none_result(): void
+    public function invoke_returns_ok_none_when_a_symbol_is_unbound(): void
     {
         $expression = new Expression(
             source: new SymbolSource('unknown'),
             resolver: $this->fullResolver(),
         );
 
-        $this->assertNull($expression());
+        $result = $expression();
+
+        $this->assertTrue($result->unwrap()->isNone());
     }
 
     #[Test]
-    public function call_returns_the_raw_result(): void
+    public function call_returns_the_same_result_as_invoke(): void
     {
         $expression = new Expression(
             source: new StaticSource(42),
             resolver: $this->fullResolver(),
         );
 
-        $result = $expression->call();
+        $invoked = $expression();
+        $called = $expression->call();
 
-        $this->assertInstanceOf(Result::class, $result);
-        $this->assertSame(42, $result->unwrap()->unwrap());
+        $this->assertInstanceOf(Result::class, $called);
+        $this->assertSame($invoked->unwrap()->unwrap(), $called->unwrap()->unwrap());
     }
 
     #[Test]
@@ -152,8 +158,8 @@ final class ExpressionTest extends TestCase
             definitions: new Definitions(['x' => new StaticSource(1)]),
         );
 
-        $this->assertSame(1, $expression());
-        $this->assertSame(99, $expression(['x' => 99]));
+        $this->assertSame(1, $expression()->unwrap()->unwrap());
+        $this->assertSame(99, $expression(['x' => 99])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -164,12 +170,12 @@ final class ExpressionTest extends TestCase
             resolver: $this->fullResolver(),
         );
 
-        $this->assertNull($expression());
+        $this->assertTrue($expression()->unwrap()->isNone());
 
         $swapped = $expression->withDefinitions(new Definitions(['x' => new StaticSource(7)]));
 
-        $this->assertSame(7, $swapped());
-        $this->assertNull($expression(), 'original is unchanged');
+        $this->assertSame(7, $swapped()->unwrap()->unwrap());
+        $this->assertTrue($expression()->unwrap()->isNone(), 'original is unchanged');
     }
 
     #[Test]
