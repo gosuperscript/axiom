@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Patterns\ExpressionMatcher;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Sources\ExpressionPattern;
@@ -19,6 +22,9 @@ use Superscript\Axiom\Sources\WildcardPattern;
 #[UsesClass(StaticResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(WildcardPattern::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class ExpressionMatcherTest extends TestCase
 {
     #[Test]
@@ -42,7 +48,7 @@ class ExpressionMatcherTest extends TestCase
     {
         $matcher = new ExpressionMatcher(new StaticResolver());
 
-        $this->assertTrue($matcher->matches(new ExpressionPattern(new StaticSource(true)), true)->unwrap());
+        $this->assertTrue($matcher->matches(new ExpressionPattern(new StaticSource(true)), true, new Context())->unwrap());
     }
 
     #[Test]
@@ -50,6 +56,6 @@ class ExpressionMatcherTest extends TestCase
     {
         $matcher = new ExpressionMatcher(new StaticResolver());
 
-        $this->assertFalse($matcher->matches(new ExpressionPattern(new StaticSource(false)), true)->unwrap());
+        $this->assertFalse($matcher->matches(new ExpressionPattern(new StaticSource(false)), true, new Context())->unwrap());
     }
 }

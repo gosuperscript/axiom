@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\ComparisonOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
@@ -19,14 +22,12 @@ use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
-use Superscript\Axiom\ResolutionInspector;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Sources\UnaryExpression;
-use Superscript\Axiom\SymbolRegistry;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
@@ -44,13 +45,15 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(UnaryExpression::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(TypeDefinition::class)]
-#[UsesClass(SymbolRegistry::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(ComparisonOverloader::class)]
 #[UsesClass(NullOverloader::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class ResolutionInspectorTest extends TestCase
 {
     // -- StaticResolver --
@@ -59,9 +62,9 @@ class ResolutionInspectorTest extends TestCase
     public function static_resolver_annotates_label_with_value_type(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new StaticResolver($inspector);
+        $resolver = new StaticResolver();
 
-        $resolver->resolve(new StaticSource(42));
+        $resolver->resolve(new StaticSource(42), new Context(inspector: $inspector));
 
         $this->assertSame('static(int)', $inspector->annotations['label']);
     }
@@ -70,9 +73,9 @@ class ResolutionInspectorTest extends TestCase
     public function static_resolver_annotates_label_for_string_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new StaticResolver($inspector);
+        $resolver = new StaticResolver();
 
-        $resolver->resolve(new StaticSource('hello'));
+        $resolver->resolve(new StaticSource('hello'), new Context(inspector: $inspector));
 
         $this->assertSame('static(string)', $inspector->annotations['label']);
     }
@@ -81,9 +84,9 @@ class ResolutionInspectorTest extends TestCase
     public function static_resolver_annotates_label_for_null_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new StaticResolver($inspector);
+        $resolver = new StaticResolver();
 
-        $resolver->resolve(new StaticSource(null));
+        $resolver->resolve(new StaticSource(null), new Context(inspector: $inspector));
 
         $this->assertSame('static(null)', $inspector->annotations['label']);
     }
@@ -94,13 +97,13 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_label_with_operator(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(1),
             operator: '+',
             right: new StaticSource(2),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame('+', $inspector->annotations['label']);
     }
@@ -109,13 +112,13 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_result_with_computed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),
             operator: '*',
             right: new StaticSource(4),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame(12, $inspector->annotations['result']);
     }
@@ -124,13 +127,13 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_left_and_right_with_resolved_operand_values(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),
             operator: '+',
             right: new StaticSource(4),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame(3, $inspector->annotations['left']);
         $this->assertSame(4, $inspector->annotations['right']);
@@ -140,13 +143,13 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_left_and_right_with_null_for_none_values(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader(), $inspector);
+        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(null),
             operator: '==',
             right: new StaticSource(null),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertNull($inspector->annotations['left']);
         $this->assertNull($inspector->annotations['right']);
@@ -158,12 +161,12 @@ class ResolutionInspectorTest extends TestCase
     public function unary_resolver_annotates_label_with_operator(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new UnaryResolver(new StaticResolver(), $inspector);
+        $resolver = new UnaryResolver(new StaticResolver());
 
         $resolver->resolve(new UnaryExpression(
             operator: '!',
             operand: new StaticSource(true),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame('!', $inspector->annotations['label']);
     }
@@ -172,12 +175,12 @@ class ResolutionInspectorTest extends TestCase
     public function unary_resolver_annotates_result_with_computed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new UnaryResolver(new StaticResolver(), $inspector);
+        $resolver = new UnaryResolver(new StaticResolver());
 
         $resolver->resolve(new UnaryExpression(
             operator: '-',
             operand: new StaticSource(7),
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame(-7, $inspector->annotations['result']);
     }
@@ -188,13 +191,13 @@ class ResolutionInspectorTest extends TestCase
     public function symbol_resolver_annotates_label_with_symbol_name(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new SymbolResolver(
-            new StaticResolver(),
-            new SymbolRegistry(['A' => new StaticSource(2)]),
-            $inspector,
+        $resolver = new SymbolResolver(new StaticResolver());
+        $context = new Context(
+            definitions: new Definitions(['A' => new StaticSource(2)]),
+            inspector: $inspector,
         );
 
-        $resolver->resolve(new SymbolSource('A'));
+        $resolver->resolve(new SymbolSource('A'), $context);
 
         $this->assertSame('A', $inspector->annotations['label']);
     }
@@ -203,13 +206,13 @@ class ResolutionInspectorTest extends TestCase
     public function symbol_resolver_annotates_label_with_namespace_and_name(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new SymbolResolver(
-            new StaticResolver(),
-            new SymbolRegistry(['math' => ['pi' => new StaticSource(3.14)]]),
-            $inspector,
+        $resolver = new SymbolResolver(new StaticResolver());
+        $context = new Context(
+            definitions: new Definitions(['math' => ['pi' => new StaticSource(3.14)]]),
+            inspector: $inspector,
         );
 
-        $resolver->resolve(new SymbolSource('pi', 'math'));
+        $resolver->resolve(new SymbolSource('pi', 'math'), $context);
 
         $this->assertSame('math.pi', $inspector->annotations['label']);
     }
@@ -218,13 +221,13 @@ class ResolutionInspectorTest extends TestCase
     public function symbol_resolver_annotates_result_with_resolved_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new SymbolResolver(
-            new StaticResolver(),
-            new SymbolRegistry(['A' => new StaticSource(2)]),
-            $inspector,
+        $resolver = new SymbolResolver(new StaticResolver());
+        $context = new Context(
+            definitions: new Definitions(['A' => new StaticSource(2)]),
+            inspector: $inspector,
         );
 
-        $resolver->resolve(new SymbolSource('A'));
+        $resolver->resolve(new SymbolSource('A'), $context);
 
         $this->assertSame(2, $inspector->annotations['result']);
     }
@@ -235,9 +238,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_annotates_label_with_type_name(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver(), $inspector);
+        $resolver = new ValueResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')));
+        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
 
         $this->assertSame('NumberType', $inspector->annotations['label']);
     }
@@ -246,9 +249,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_annotates_coercion_when_value_type_changes(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver(), $inspector);
+        $resolver = new ValueResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')));
+        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
 
         $this->assertSame('string -> int', $inspector->annotations['coercion']);
     }
@@ -257,9 +260,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_does_not_annotate_coercion_when_value_unchanged(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver(), $inspector);
+        $resolver = new ValueResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource(42)));
+        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource(42)), new Context(inspector: $inspector));
 
         $this->assertArrayNotHasKey('coercion', $inspector->annotations);
     }
@@ -268,9 +271,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_annotates_coercion_for_string_type(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver(), $inspector);
+        $resolver = new ValueResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new StringType(), new StaticSource(42)));
+        $resolver->resolve(new TypeDefinition(new StringType(), new StaticSource(42)), new Context(inspector: $inspector));
 
         $this->assertSame('StringType', $inspector->annotations['label']);
         $this->assertSame('int -> string', $inspector->annotations['coercion']);
@@ -281,7 +284,7 @@ class ResolutionInspectorTest extends TestCase
     {
         $resolver = new ValueResolver(new StaticResolver());
 
-        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')));
+        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context());
 
         $this->assertSame(42, $result->unwrap()->unwrap());
     }
@@ -292,12 +295,12 @@ class ResolutionInspectorTest extends TestCase
     public function member_access_resolver_annotates_label_with_dot_prefixed_property(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new MemberAccessResolver(new StaticResolver(), $inspector);
+        $resolver = new MemberAccessResolver(new StaticResolver());
 
         $resolver->resolve(new MemberAccessSource(
             object: new StaticSource(['name' => 'John']),
             property: 'name',
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame('.name', $inspector->annotations['label']);
     }
@@ -306,12 +309,12 @@ class ResolutionInspectorTest extends TestCase
     public function member_access_resolver_annotates_result_with_accessed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new MemberAccessResolver(new StaticResolver(), $inspector);
+        $resolver = new MemberAccessResolver(new StaticResolver());
 
         $resolver->resolve(new MemberAccessSource(
             object: new StaticSource(['age' => 30]),
             property: 'age',
-        ));
+        ), new Context(inspector: $inspector));
 
         $this->assertSame(30, $inspector->annotations['result']);
     }
@@ -319,28 +322,27 @@ class ResolutionInspectorTest extends TestCase
     // -- DelegatingResolver integration --
 
     #[Test]
-    public function delegating_resolver_passes_inspector_to_child_resolvers(): void
+    public function delegating_resolver_passes_context_inspector_to_child_resolvers(): void
     {
         $inspector = new SpyInspector();
 
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
         ]);
-        $resolver->instance(ResolutionInspector::class, $inspector);
 
-        $resolver->resolve(new StaticSource(42));
+        $resolver->resolve(new StaticSource(42), new Context(inspector: $inspector));
 
         $this->assertSame('static(int)', $inspector->annotations['label']);
     }
 
     #[Test]
-    public function delegating_resolver_works_without_inspector_registered(): void
+    public function delegating_resolver_works_without_inspector(): void
     {
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
         ]);
 
-        $result = $resolver->resolve(new StaticSource(42));
+        $result = $resolver->resolve(new StaticSource(42), new Context());
 
         $this->assertSame(42, $result->unwrap()->unwrap());
     }
@@ -354,12 +356,9 @@ class ResolutionInspectorTest extends TestCase
             StaticSource::class => StaticResolver::class,
             TypeDefinition::class => ValueResolver::class,
         ]);
-        $resolver->instance(ResolutionInspector::class, $inspector);
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('5')));
+        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('5')), new Context(inspector: $inspector));
 
-        // The last resolver to annotate 'label' wins (StaticResolver overwrites ValueResolver's label)
-        // but we can verify the inspector was used
         $this->assertArrayHasKey('label', $inspector->annotations);
     }
 }

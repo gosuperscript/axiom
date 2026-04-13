@@ -6,13 +6,19 @@ namespace Superscript\Axiom\Tests\Resolvers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\StaticSource;
 
 #[CoversClass(StaticResolver::class)]
 #[CoversClass(StaticSource::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class StaticResolverTest extends TestCase
 {
     #[Test]
@@ -20,6 +26,6 @@ class StaticResolverTest extends TestCase
     {
         $resolver = new StaticResolver();
         $source = new StaticSource('Hello world!');
-        $this->assertEquals('Hello world!', $resolver->resolve($source)->unwrap()->unwrap());
+        $this->assertEquals('Hello world!', $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 }

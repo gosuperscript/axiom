@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Resolvers;
 
 use Illuminate\Container\Container;
 use RuntimeException;
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -49,12 +50,12 @@ final readonly class DelegatingResolver implements BindableResolver
     /**
      * @return Result<Option<mixed>, Throwable>
      */
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
         $sourceClass = get_class($source);
-        
+
         if (isset($this->resolverMap[$sourceClass]) && $this->container->has($this->resolverMap[$sourceClass])) {
-            return $this->container->make($this->resolverMap[$sourceClass])->resolve($source);
+            return $this->container->make($this->resolverMap[$sourceClass])->resolve($source, $context);
         }
 
         throw new RuntimeException("No resolver found for source of type " . $sourceClass);

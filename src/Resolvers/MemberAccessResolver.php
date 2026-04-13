@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use InvalidArgumentException;
-use Superscript\Axiom\ResolutionInspector;
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Monads\Option\Option;
@@ -22,17 +22,18 @@ final readonly class MemberAccessResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
-        private ?ResolutionInspector $inspector = null,
     ) {}
 
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
-        $this->inspector?->annotate('label', ".{$source->property}");
+        $result = $this->resolver->resolve($source->object, $context)
+            ->andThen(fn(Option $option) => $option
+                ->mapOr(Ok(None()), fn(mixed $value) => $this->access($value, $source->property)))
+            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $context->inspector?->annotate('result', $value)));
 
-        return $this->resolver->resolve($source->object)
-            ->andThen(fn (Option $option) => $option
-                ->mapOr(Ok(None()), fn (mixed $value) => $this->access($value, $source->property)))
-            ->inspect(fn (Option $option) => $option->inspect(fn (mixed $value) => $this->inspector?->annotate('result', $value)));
+        $context->inspector?->annotate('label', ".{$source->property}");
+
+        return $result;
     }
 
     /**

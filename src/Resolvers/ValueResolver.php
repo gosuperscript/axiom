@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Resolvers;
 
-use Superscript\Axiom\ResolutionInspector;
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Monads\Option\Option;
@@ -19,25 +19,19 @@ final readonly class ValueResolver implements Resolver
 {
     public function __construct(
         private Resolver $resolver,
-        private ?ResolutionInspector $inspector = null,
     ) {}
 
-    /**
-     * @return Result<Option<mixed>, mixed>
-     */
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
-        $this->inspector?->annotate('label', class_basename($source->type::class));
-
-        return $this->resolver->resolve($source->source)
+        $result = $this->resolver->resolve($source->source, $context)
             ->andThen(
                 fn(Option $option) => $option
-                ->andThen(function (mixed $result) use ($source) {
+                ->andThen(function (mixed $result) use ($source, $context) {
                     return $source->type->coerce($result)
-                        ->inspect(function (Option $coerced) use ($result) {
-                            $coerced->inspect(function (mixed $coercedValue) use ($result) {
+                        ->inspect(function (Option $coerced) use ($result, $context) {
+                            $coerced->inspect(function (mixed $coercedValue) use ($result, $context) {
                                 if ($coercedValue !== $result) {
-                                    $this->inspector?->annotate('coercion', get_debug_type($result) . ' -> ' . get_debug_type($coercedValue));
+                                    $context->inspector?->annotate('coercion', get_debug_type($result) . ' -> ' . get_debug_type($coercedValue));
                                 }
                             });
                         })
@@ -45,5 +39,9 @@ final readonly class ValueResolver implements Resolver
                 })
                 ->transpose(),
             );
+
+        $context->inspector?->annotate('label', class_basename($source->type::class));
+
+        return $result;
     }
 }

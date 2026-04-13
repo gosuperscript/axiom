@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Resolvers;
 
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -18,5 +19,5 @@ interface Resolver
      * @phpstan-param T $source
      * @return Result<Option<mixed>, Throwable>
      */
-    public function resolve(Source $source): Result;
+    public function resolve(Source $source, Context $context): Result;
 }

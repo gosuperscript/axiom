@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use InvalidArgumentException;
-use Superscript\Axiom\ResolutionInspector;
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Monads\Option\Option;
@@ -22,14 +22,11 @@ final readonly class UnaryResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
-        private ?ResolutionInspector $inspector = null,
     ) {}
 
-    public function resolve(Source $source): Result
+    public function resolve(Source $source, Context $context): Result
     {
-        $this->inspector?->annotate('label', $source->operator);
-
-        return $this->resolver->resolve($source->operand)
+        $result = $this->resolver->resolve($source->operand, $context)
             ->andThen(fn(Option $option) => $option
                 ->map(fn(mixed $value) => match ($source->operator) {
                     '!', 'not' => Ok(!$value),
@@ -37,6 +34,10 @@ final readonly class UnaryResolver implements Resolver
                     default => Err(new InvalidArgumentException("Unsupported operator: {$source->operator}")),
                 })
             ->transpose())
-            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $this->inspector?->annotate('result', $value)));
+            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $context->inspector?->annotate('result', $value)));
+
+        $context->inspector?->annotate('label', $source->operator);
+
+        return $result;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Patterns;
 
+use Superscript\Axiom\Context;
 use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Monads\Result\Result;
 
@@ -19,5 +20,5 @@ interface PatternMatcher
     /**
      * @return Result<bool, \Throwable>
      */
-    public function matches(MatchPattern $pattern, mixed $subjectValue): Result;
+    public function matches(MatchPattern $pattern, mixed $subjectValue, Context $context): Result;
 }

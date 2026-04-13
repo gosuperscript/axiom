@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Context;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Patterns\WildcardMatcher;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\WildcardPattern;
@@ -15,6 +18,9 @@ use Superscript\Axiom\Sources\WildcardPattern;
 #[CoversClass(WildcardMatcher::class)]
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(LiteralPattern::class)]
+#[UsesClass(Context::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Definitions::class)]
 class WildcardMatcherTest extends TestCase
 {
     #[Test]
@@ -38,8 +44,8 @@ class WildcardMatcherTest extends TestCase
     {
         $matcher = new WildcardMatcher();
 
-        $this->assertTrue($matcher->matches(new WildcardPattern(), 'anything')->unwrap());
-        $this->assertTrue($matcher->matches(new WildcardPattern(), null)->unwrap());
-        $this->assertTrue($matcher->matches(new WildcardPattern(), 42)->unwrap());
+        $this->assertTrue($matcher->matches(new WildcardPattern(), 'anything', new Context())->unwrap());
+        $this->assertTrue($matcher->matches(new WildcardPattern(), null, new Context())->unwrap());
+        $this->assertTrue($matcher->matches(new WildcardPattern(), 42, new Context())->unwrap());
     }
 }
