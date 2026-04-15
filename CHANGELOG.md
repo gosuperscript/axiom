@@ -1,59 +1,36 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+for released artifacts.
 
 ## [Unreleased]
 
 ### Added
-- Initial open source release
-- MIT License
-- Contributing guidelines
-- Security policy
-- Comprehensive documentation
+
+- Axiom v1 language specification
+- PHP implementation plan for a future reference runtime
 
 ### Changed
-- Changed license from proprietary to MIT
+
+- repository documentation now reflects the current spec-first project state
+- playground examples were realigned with the rewritten Axiom v1 direction
+- the pre-v1 PHP runtime was archived under `legacy/`
+- the root `src/` and `tests/` surfaces were reset for a fresh PHP
+  implementation
 
 ## [1.0.0] - Initial Release
 
 ### Added
-- Type system for data validation and transformation
-  - NumberType for numeric coercion
-  - StringType for string conversion
-  - BooleanType for boolean validation
-  - ListType for array/list validation
-  - DictType for dictionary/map validation
-- Expression evaluation system
-  - InfixExpression for binary operations
-  - UnaryExpression for unary operations
-  - Operator overloading support
-- Source system
-  - StaticSource for direct values
-  - SymbolSource for named references with namespace support
-  - TypeDefinition for type-aware transformations
-- Resolver pattern implementation
-  - DelegatingResolver for chaining resolvers
-  - StaticResolver for static value resolution
-  - ValueResolver for type coercion
-  - InfixResolver for expression evaluation
-  - SymbolResolver for symbol lookup
-- SymbolRegistry for managing named values with namespace support
-- Functional programming approach
-  - Result monad for error handling
-  - Option monad for null handling
-- Comprehensive test suite
-  - 100% code coverage requirement
-  - PHPStan level max static analysis
-  - Mutation testing with Infection
 
-### Architecture
-- Strategy pattern for resolvers
-- Chain of responsibility for delegating resolvers
-- Factory pattern for type creation
-- Functional programming with monadic error handling
+- type system for data validation and transformation
+- expression evaluation system
+- source system
+- resolver-based architecture
+- symbol registry support
+- comprehensive PHP test suite
 
 [Unreleased]: https://github.com/gosuperscript/axiom/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/gosuperscript/axiom/releases/tag/v1.0.0

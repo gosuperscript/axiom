@@ -32,3 +32,18 @@ testbench.yaml
 /docs
 /coverage
 infection.log
+
+# Playground
+playground/dist
+playground/node_modules
+
+# Legacy archive
+legacy/vendor
+legacy/build
+legacy/.phpunit.cache
+legacy/.phpunit.result.cache
+legacy/composer.lock
+legacy/infection.log
+
+# Claude Code
+.claude/

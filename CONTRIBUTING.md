@@ -1,253 +1,101 @@
-# Contributing to Axiom Library
+# Contributing to Axiom
 
-Thank you for your interest in contributing to the Axiom Library! We welcome contributions from the community.
+This repository is currently transitioning from an older PHP expression library
+toward a spec-driven Axiom v1 DSL project. Contributions are welcome, but
+changes should be grounded in the current language direction rather than the
+archived library surface alone.
 
-## How Can I Contribute?
+## Before You Start
 
-### Reporting Bugs
+Read the current project anchors first:
 
-Before creating bug reports, please check existing issues as you might find that you don't need to create one. When you create a bug report, please include as many details as possible:
+- [Axiom v1 Specification](./axiom-v1-spec.md)
+- [PHP Implementation Plan](./axiom-php-implementation-plan.md)
+- [README](./README.md)
 
-* **Use a clear and descriptive title**
-* **Describe the exact steps to reproduce the problem**
-* **Provide specific examples to demonstrate the steps**
-* **Describe the behavior you observed and what you expected**
-* **Include PHP version and environment details**
+If a proposed change conflicts with the current spec or with the planned PHP
+direction, resolve that at the documentation level first.
 
-### Suggesting Enhancements
+## Current Contribution Priorities
 
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
+- improve the Axiom v1 specification
+- keep examples aligned with the specification
+- tighten playground behavior and diagnostics where it helps validate the spec
+- prepare the repository for a clean PHP implementation
+- add conformance-style tests and fixtures
 
-* **Use a clear and descriptive title**
-* **Provide a detailed description of the suggested enhancement**
-* **Explain why this enhancement would be useful**
-* **List any similar features in other libraries**
+## Repository Areas
 
-### Pull Requests
+### Spec and Documentation
 
-* Fill in the required template
-* Follow the PHP coding style (PER/PSR-12)
-* Include tests for new functionality
-* Ensure all tests pass
-* Update documentation as needed
-* Write clear, descriptive commit messages
+Changes to the language should update the relevant documentation in the same
+pull request. The specification should not drift away from the examples or from
+the implementation plan.
+
+### Playground
+
+The playground is exploratory. It is useful for validating syntax and semantics,
+but it is not the canonical implementation target. Keep playground changes
+clearly aligned with the spec and avoid using the playground as the de facto
+language definition.
+
+### Existing PHP Codebase
+
+The archived code now lives in [`legacy/`](./legacy). Treat it as groundwork
+and reference material, not as the active Axiom v1 runtime.
+
+### Fresh Root PHP Implementation
+
+The active PHP implementation surface now starts in [`src/`](./src) and
+[`tests/`](./tests). Keep that surface intentionally small and aligned with the
+current specification.
 
 ## Development Setup
 
-1. **Fork and clone the repository**
-   ```bash
-   git clone https://github.com/your-username/axiom.git
-   cd axiom
-   ```
-
-2. **Install dependencies**
-   ```bash
-   composer install
-   ```
-
-3. **Run tests to ensure everything works**
-   ```bash
-   composer test
-   ```
-
-### Docker Development
-
-If you don't have PHP 8.4 installed locally, you can use Docker:
+### PHP Codebase
 
 ```bash
-docker compose build
-docker compose run --rm php composer install
-docker compose run --rm php composer test
+composer install
+composer test
 ```
 
-## Development Workflow
-
-### Code Style
-
-We use Laravel Pint for code formatting:
+### TypeScript Playground
 
 ```bash
-vendor/bin/pint
+cd playground
+npm install
+npm run build
 ```
 
-This will automatically fix code style issues according to the PER (PHP Evolving Recommendations) preset.
+## Change Expectations
 
-### Testing
+- keep changes focused
+- update docs when semantics or repository structure changes
+- prefer explicit, reviewable designs over clever shortcuts
+- do not widen the language surface casually
+- add or update tests when changing behavior
 
-The project requires **100% code coverage** for all new code. We use three types of testing:
+## Pull Requests
 
-1. **Unit Tests** (PHPUnit)
-   ```bash
-   composer test:unit
-   ```
-   * All new code must have corresponding tests
-   * Tests must achieve 100% line coverage
-   * Use PHPUnit 12+ attributes (`#[Test]`, `#[CoversClass]`)
+- use a clear title and description
+- explain whether the change affects the spec, the playground, the PHP codebase,
+  or more than one of them
+- call out any intentional divergence from existing behavior
+- include follow-up work if the change is deliberately partial
 
-2. **Static Analysis** (PHPStan)
-   ```bash
-   composer test:types
-   ```
-   * Analysis level: max (strictest)
-   * All code must pass without errors
+## Testing
 
-3. **Mutation Testing** (Infection)
-   ```bash
-   composer test:infection
-   ```
-   * Required Mutation Score Indicator (MSI): 100%
-   * Ensures test quality and effectiveness
-
-### Running All Tests
+For PHP changes, run:
 
 ```bash
 composer test
 ```
 
-This runs all three test suites in sequence.
+For playground changes, run:
 
-## Coding Guidelines
-
-### PHP Version
-
-* **Minimum PHP version:** 8.4
-* Use modern PHP features (readonly properties, enums, etc.)
-* Follow strict typing (`declare(strict_types=1)`)
-
-### Architecture Principles
-
-1. **Functional Programming**
-   * Use Result and Option monads for error handling
-   * Avoid exceptions for control flow
-   * Prefer immutability
-
-2. **Type Safety**
-   * All methods must have type declarations
-   * Use PHPStan level max compliance
-   * Return explicit Result/Option types
-
-3. **Design Patterns**
-   * Strategy Pattern for resolvers
-   * Chain of Responsibility for delegating resolvers
-   * Factory Pattern for type creation
-
-### Code Structure
-
-* One class per file
-* Follow PSR-4 autoloading
-* Keep classes focused and single-purpose
-* Write self-documenting code
-
-### Documentation
-
-* Update README.md if adding new features
-* Include PHPDoc blocks for complex methods
-* Add code examples for new functionality
-* Keep documentation clear and concise
-
-## Testing Best Practices
-
-### Writing Tests
-
-```php
-<?php
-
-namespace Superscript\Axiom\Tests;
-
-use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\Test;
-use PHPUnit\Framework\TestCase;
-
-#[CoversClass(YourClass::class)]
-final class YourClassTest extends TestCase
-{
-    #[Test]
-    public function it_does_something(): void
-    {
-        // Arrange
-        $instance = new YourClass();
-        
-        // Act
-        $result = $instance->doSomething();
-        
-        // Assert
-        self::assertTrue($result->isOk());
-    }
-}
+```bash
+cd playground
+npm run build
 ```
 
-### Test Organization
-
-* Unit tests mirror source structure
-* Integration tests go in `tests/KitchenSink/`
-* Use `#[CoversClass]` for unit tests
-* Use `#[CoversNothing]` for integration tests
-
-## Commit Message Guidelines
-
-* Use present tense ("Add feature" not "Added feature")
-* Use imperative mood ("Move cursor to..." not "Moves cursor to...")
-* Limit first line to 72 characters
-* Reference issues and pull requests when relevant
-
-Examples:
-```
-Add support for custom operators in expressions
-
-Fix null handling in StringType coercion
-
-Update documentation for SymbolRegistry namespaces
-```
-
-## Pull Request Process
-
-1. **Create a feature branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make your changes**
-   * Write code
-   * Add tests
-   * Update documentation
-
-3. **Ensure quality**
-   ```bash
-   vendor/bin/pint              # Format code
-   composer test:types          # Check static analysis
-   composer test:unit           # Run unit tests
-   composer test:infection      # Check mutation testing
-   ```
-
-4. **Commit and push**
-   ```bash
-   git add .
-   git commit -m "Your descriptive message"
-   git push origin feature/your-feature-name
-   ```
-
-5. **Create Pull Request**
-   * Fill out the PR template completely
-   * Link related issues
-   * Await code review
-
-6. **Address feedback**
-   * Make requested changes
-   * Push updates to the same branch
-   * Respond to review comments
-
-## Additional Resources
-
-* [PHP Fig - PSR Standards](https://www.php-fig.org/psr/)
-* [PHPStan Documentation](https://phpstan.org/)
-* [Infection Mutation Testing](https://infection.github.io/)
-* [azjezz/psl Library](https://github.com/azjezz/psl) - Our standard library
-
-## Questions?
-
-Feel free to open an issue for:
-* Questions about contributing
-* Clarifications on architecture
-* Help with development setup
-
-Thank you for contributing! 🎉
+If you do not run a relevant validation step, say so in the pull request.

@@ -32,11 +32,9 @@ Fixes #
 
 <!-- Describe the tests you ran to verify your changes -->
 
-- [ ] All existing tests pass (`composer test`)
+- [ ] Root PHP validation passes (`composer test`)
+- [ ] Playground build passes (`cd playground && npm run build`) when relevant
 - [ ] Added new tests for the changes
-- [ ] Static analysis passes (`composer test:types`)
-- [ ] Code coverage remains at 100%
-- [ ] Mutation testing passes (`composer test:infection`)
 
 ## Code Quality Checklist
 
@@ -47,6 +45,7 @@ Fixes #
 - [ ] My changes generate no new warnings or errors
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
+- [ ] I have noted whether the change affects the root implementation, the playground, the spec, or `legacy/`
 
 ## Documentation
 

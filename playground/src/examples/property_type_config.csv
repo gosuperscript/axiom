@@ -1,0 +1,5 @@
+property_type,buildings_rate,contents_rate,pol_base,flood_factor,subsidence_factor
+residential,0.035,0.045,35,0.15,0.10
+commercial,0.055,0.060,75,0.20,0.15
+hmo,0.065,0.055,95,0.15,0.12
+mixed_use,0.060,0.058,85,0.18,0.13

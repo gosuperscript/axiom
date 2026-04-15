@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Axiom Playground</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; }
+
+    #app { display: flex; flex-direction: column; height: 100%; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px; background: #181825; border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; color: #cba6f7; }
+    header .controls { display: flex; gap: 12px; align-items: center; }
+    header label { font-size: 13px; color: #a6adc8; }
+    header select {
+      background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+      padding: 4px 8px; border-radius: 4px; font-size: 13px;
+    }
+
+    .main { display: flex; flex: 1; min-height: 0; }
+
+    .editor-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #editor-container { flex: 1; }
+
+    .output-pane {
+      width: 420px; min-width: 320px; border-left: 1px solid #313244;
+      display: flex; flex-direction: column; background: #181825;
+    }
+
+    .output-section { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .output-section h2 {
+      font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 8px 12px; background: #1e1e2e; border-bottom: 1px solid #313244; color: #a6adc8;
+      flex-shrink: 0;
+    }
+    .output-section pre {
+      flex: 1; overflow: auto; padding: 12px; font-size: 13px; line-height: 1.5;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; white-space: pre-wrap;
+    }
+
+    .diagnostics-section { max-height: 200px; border-top: 1px solid #313244; }
+    .diagnostics-section pre { color: #f38ba8; }
+    .diagnostics-section pre.clean { color: #a6e3a1; }
+
+    .input-section { border-top: 1px solid #313244; }
+    .input-section textarea {
+      width: 100%; height: 120px; background: #1e1e2e; color: #cdd6f4;
+      border: none; padding: 12px; font-size: 13px; line-height: 1.5;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; resize: vertical;
+    }
+
+    .resizer {
+      width: 4px; cursor: col-resize; background: #313244;
+      transition: background 0.15s;
+    }
+    .resizer:hover { background: #cba6f7; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Axiom Playground</h1>
+      <div class="controls">
+        <label for="example-select">Example:</label>
+        <select id="example-select">
+          <option value="insurance">Insurance Rating</option>
+          <option value="healthcare">Healthcare Professional</option>
+          <option value="tradespeople">Tradespeople Platinum</option>
+          <option value="hospitality">AIG Hospitality</option>
+          <option value="landlords">Landlords Property</option>
+          <option value="money">Money Type (Plugin)</option>
+        </select>
+        <label for="expr-select">Evaluate:</label>
+        <select id="expr-select"></select>
+      </div>
+    </header>
+    <div class="main">
+      <div class="editor-pane">
+        <div id="editor-container"></div>
+      </div>
+      <div class="resizer" id="resizer"></div>
+      <div class="output-pane">
+        <div class="input-section">
+          <h2 style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px;background:#1e1e2e;border-bottom:1px solid #313244;color:#a6adc8;">Input (JSON)</h2>
+          <textarea id="input-data" spellcheck="false" placeholder='{ "quote": { ... }, "rates": { ... } }'></textarea>
+        </div>
+        <div class="output-section" style="flex: 1;">
+          <h2>Output</h2>
+          <pre id="output"></pre>
+        </div>
+        <div class="output-section diagnostics-section">
+          <h2>Diagnostics</h2>
+          <pre id="diagnostics" class="clean">No issues</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
