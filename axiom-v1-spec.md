@@ -67,7 +67,7 @@ Axiom v1 does not provide:
 - implicit IO or side effects
 - dynamic maps or dictionary types
 - indexing (`xs[0]`, `record["field"]`)
-- hidden type coercions
+- type coercions
 - `null` or optional/nullable types (`T?`)
 - syntax-extending plugins
 - string interpolation or free-form text templating
@@ -98,12 +98,19 @@ BasePremium(sum_insured: number, rate: number): number {
 }
 ```
 
-Zero-argument expressions are written explicitly with empty parentheses:
+Zero-argument expressions omit the parameter list entirely:
 
 ```axiom
-AdminFee(): number {
+AdminFee: number {
     35
 }
+```
+
+At use sites, zero-argument expressions are referenced by name, not called with
+empty parentheses:
+
+```axiom
+AdminFee
 ```
 
 Parameters may use inline record shapes:
@@ -127,13 +134,15 @@ interfaces explicit.
 
 ### 3.2 Type Declarations
 
+Type declarations bind a name directly to a type body. They do not use `=`.
+
 #### Variant types
 
 A variant type is a closed set of tagged alternatives. Each alternative has a tag
 and an optional record payload.
 
 ```axiom
-type CoverOutcome =
+type CoverOutcome
     rated {
         key: string,
         name: string,
@@ -145,7 +154,7 @@ type CoverOutcome =
 Payload-less variants omit the payload:
 
 ```axiom
-type Status = active | suspended | cancelled
+type Status active | suspended | cancelled
 ```
 
 #### Record types
@@ -153,7 +162,7 @@ type Status = active | suspended | cancelled
 A record type declares a fixed set of named fields:
 
 ```axiom
-type Exposure = {
+type Exposure {
     industry: string,
     turnover: number,
     employees: number,
@@ -201,7 +210,7 @@ table industry_config: list({
 Or, using a named record type:
 
 ```axiom
-type IndustryRow = {
+type IndustryRow {
     code: string,
     base_rate: number,
     min_premium: number,
@@ -267,9 +276,9 @@ There is no core map or dictionary type in v1.
 Named record types and named variant types are nominal.
 
 ```axiom
-type Exposure = { industry: string, turnover: number }
+type Exposure { industry: string, turnover: number }
 
-type Decision =
+type Decision
     approved { premium: number }
   | declined
 ```
@@ -335,22 +344,6 @@ rejected.
 Arithmetic on `non_zero` values usually produces plain `number` unless another rule
 proves a refined result.
 
-### 4.8 Coercion
-
-Axiom supports explicit coercion with `as`, but only for conversions that are total
-and specified.
-
-Core coercions:
-
-| From | To |
-|------|----|
-| `number` | `string` |
-
-Core Axiom v1 does not define `string as number`.
-
-Extensions may register additional total coercions. A coercion may not silently
-invent a domain value for invalid input.
-
 ---
 
 ## 5. Expressions
@@ -366,7 +359,6 @@ All computation in Axiom is expressed through expressions. There are no statemen
 true
 false
 [1, 2, 3]
-{ code: "DRI-945", rate: 0.85 }
 ```
 
 Numeric literals other than `0` are assignable to `non_zero`.
@@ -375,6 +367,7 @@ Numeric literals other than `0` are assignable to `non_zero`.
 
 ```axiom
 turnover
+AdminFee
 exposure.industry
 row.base_rate
 ```
@@ -475,13 +468,16 @@ The wildcard arm is required.
 
 ### 5.6 Expression Calls
 
-Expression calls use one of two forms:
+Parameterized expressions are called with one of two forms:
 
 - positional arguments
 - named arguments
 
 Calls may also mix the forms, with one restriction: positional arguments must come
 before named arguments.
+
+Zero-argument expressions are not called. They are referenced directly by their
+name or qualified name.
 
 Positional example:
 
@@ -505,6 +501,12 @@ Qualified calls into namespaces:
 
 ```axiom
 Industry.BaseRate(industry)
+```
+
+Zero-argument namespace members are also referenced directly:
+
+```axiom
+Pricing.AdminFee
 ```
 
 ### 5.7 Variant Construction
@@ -574,13 +576,7 @@ round(total, 2)
 Bindings are independent definitions inside the current scope. Their evaluation
 order is determined by demand and data dependency, not by textual order alone.
 
-### 5.11 Coercion
-
-```axiom
-42 as string
-```
-
-### 5.12 Parenthesized Expressions
+### 5.11 Parenthesized Expressions
 
 Parentheses override precedence:
 
@@ -598,7 +594,7 @@ From lowest to highest precedence:
 
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
-| 1 | `||` | left |
+| 1 | `\|\|` | left |
 | 2 | `&&` | left |
 | 3 | `==`, `!=` | left |
 | 4 | `<`, `>`, `<=`, `>=`, `in`, `not in` | left |
@@ -642,7 +638,7 @@ Extensions may define additional operator rules for extension-defined types.
 | Operator | Left | Right | Result |
 |----------|------|-------|--------|
 | `&&` | `bool` | `bool` | `bool` |
-| `||` | `bool` | `bool` | `bool` |
+| `\|\|` | `bool` | `bool` | `bool` |
 
 ### 6.6 Membership Operators
 
@@ -866,8 +862,8 @@ The type checker infers types bottom-up.
 | `[1, 2, 3]` | `list(non_zero)` |
 | `{ a: 1, b: "x" }` | inline record shape `{ a: non_zero, b: string }` |
 | `identifier` | declared type from scope |
+| `QualifiedName` | declared return type of a zero-argument expression |
 | `object.field` | field type from record shape |
-| `expr as type` | target type |
 | `left OP right` | operator result type |
 | `if/then/else` | common branch type |
 | `match` | common arm type |
@@ -893,6 +889,7 @@ If a tag is ambiguous, qualification is required.
 For each call, the type checker validates:
 
 - the callee exists
+- the referenced expression declares one or more parameters
 - the argument ordering is valid
 - positional arity or named parameter completeness
 - argument types are assignable to parameter types
@@ -937,7 +934,6 @@ dependencies. Mutual recursion and self-recursion are type errors in v1.
 The checker enforces:
 
 - operator type validity
-- coercion validity
 - member access validity
 - match exhaustiveness for variant subjects
 - match arm type consistency
@@ -1047,7 +1043,8 @@ declaration        = type_decl | namespace_decl | table_decl | expr_decl ;
 
 (* --- Declarations --- *)
 
-type_decl          = "type" UPPER_IDENT "=" ( record_shape | variant_alts ) ;
+type_decl          = "type" UPPER_IDENT type_decl_body ;
+type_decl_body     = record_shape | variant_alts | extension_type ;
 record_shape       = "{" field_decl { "," field_decl } [ "," ] "}" ;
 variant_alts       = variant_alt { "|" variant_alt } ;
 variant_alt        = LOWER_IDENT [ record_shape ] ;
@@ -1059,7 +1056,9 @@ namespace_member   = type_decl | expr_decl ;
 table_decl         = "table" LOWER_IDENT ":" "list" "(" table_row_type ")" ;
 table_row_type     = record_shape | qualified_upper ;
 
-expr_decl          = UPPER_IDENT "(" [ param_list ] ")" ":" type_expr
+expr_decl          = zero_arg_expr_decl | param_expr_decl ;
+zero_arg_expr_decl = UPPER_IDENT ":" type_expr "{" expression "}" ;
+param_expr_decl    = UPPER_IDENT "(" param_list ")" ":" type_expr
                      "{" expression "}" ;
 param_list         = param { "," param } ;
 param              = LOWER_IDENT ":" type_expr ;
@@ -1094,7 +1093,7 @@ comparison_expr    = additive_expr
 additive_expr      = multiplicative_expr { ( "+" | "-" ) multiplicative_expr } ;
 multiplicative_expr = unary_expr { ( "*" | "/" ) unary_expr } ;
 unary_expr         = ( "not" | "!" | "-" ) unary_expr | postfix_expr ;
-postfix_expr       = primary { "." LOWER_IDENT | "as" type_expr } ;
+postfix_expr       = primary { "." LOWER_IDENT } ;
 
 primary            = if_expr
                    | match_expr
@@ -1204,7 +1203,7 @@ type  namespace  table
 if  then  else
 match  in
 any  all  collect
-where  as
+where
 not  true  false
 sum  product
 ```
@@ -1223,12 +1222,12 @@ _
 The following example uses only core v1 features.
 
 ```axiom
-type Exposure = {
+type Exposure {
     industry: string,
     turnover: number,
 }
 
-type CoverOutcome =
+type CoverOutcome
     rated {
         key: string,
         name: string,
@@ -1236,7 +1235,7 @@ type CoverOutcome =
     }
   | not_available { reason: string }
 
-type ProductOutcome =
+type ProductOutcome
     offered {
         covers: list(CoverOutcome),
         total: number,
@@ -1302,7 +1301,6 @@ An extension may add:
 - custom types
 - operator rules for those types
 - intrinsic overloads for those types
-- total coercions involving those types
 
 An extension may not add:
 
@@ -1360,7 +1358,7 @@ extension. It is not part of the core language.
 type.
 
 ```axiom
-type Premium = money(GBP)
+type Premium money(GBP)
 ```
 
 ### 16.2 Literals
@@ -1398,16 +1396,6 @@ The standard money extension overloads:
 - `sum`
 - `product` when explicitly defined by the implementation
 
-### 16.6 Coercion
-
-The standard money extension may define total coercions such as:
-
-```axiom
-150 as money(GBP)
-```
-
-It does not define silent parsing of arbitrary invalid strings.
-
 ---
 
 ## 17. Summary
@@ -1422,7 +1410,6 @@ Its core consists of:
 - `if`, `match`, and `where`
 - list-oriented collection forms
 - exact decimal numbers with static division safety
-- explicit, total-only coercions
 - a narrow extension model for value and type families
 
 Axiom v1 does not include:
