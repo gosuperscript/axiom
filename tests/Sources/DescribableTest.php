@@ -8,19 +8,19 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
-use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
+use Superscript\Axiom\Tests\Sources\Fixtures\UndescribablePattern;
+use Superscript\Axiom\Tests\Sources\Fixtures\UndescribableSource;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
@@ -116,12 +116,9 @@ class DescribableTest extends TestCase
     #[Test]
     public function type_definition_with_non_describable_source_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
+        $source = new TypeDefinition(new NumberType(), new UndescribableSource());
 
-        $source = new TypeDefinition(new NumberType(), $anonymous);
-
-        $description = $source->describe();
-        $this->assertStringEndsWith('(as number)', $description);
+        $this->assertSame('UndescribableSource (as number)', $source->describe());
     }
 
     #[Test]
@@ -178,31 +175,25 @@ class DescribableTest extends TestCase
     #[Test]
     public function infix_with_non_describable_left_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
-
         $source = new InfixExpression(
-            $anonymous,
+            new UndescribableSource(),
             '+',
             new StaticSource(1),
         );
 
-        $description = $source->describe();
-        $this->assertStringEndsWith('+ 1', $description);
+        $this->assertSame('UndescribableSource + 1', $source->describe());
     }
 
     #[Test]
     public function infix_with_non_describable_right_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
-
         $source = new InfixExpression(
             new StaticSource(1),
             '+',
-            $anonymous,
+            new UndescribableSource(),
         );
 
-        $description = $source->describe();
-        $this->assertStringStartsWith('1 + ', $description);
+        $this->assertSame('1 + UndescribableSource', $source->describe());
     }
 
     #[Test]
@@ -222,12 +213,24 @@ class DescribableTest extends TestCase
     #[Test]
     public function unary_with_non_describable_source_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
+        $source = new UnaryExpression('!', new UndescribableSource());
 
-        $source = new UnaryExpression('!', $anonymous);
+        $this->assertSame('!UndescribableSource', $source->describe());
+    }
 
-        $description = $source->describe();
-        $this->assertStringStartsWith('!', $description);
+    #[Test]
+    public function unary_wraps_infix_operand_in_parentheses(): void
+    {
+        $source = new UnaryExpression(
+            '!',
+            new InfixExpression(
+                new SymbolSource('a'),
+                '||',
+                new SymbolSource('b'),
+            ),
+        );
+
+        $this->assertSame('!(a || b)', $source->describe());
     }
 
     #[Test]
@@ -250,12 +253,9 @@ class DescribableTest extends TestCase
     #[Test]
     public function member_access_with_non_describable_object_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
+        $source = new MemberAccessSource(new UndescribableSource(), 'name');
 
-        $source = new MemberAccessSource($anonymous, 'name');
-
-        $description = $source->describe();
-        $this->assertStringEndsWith('.name', $description);
+        $this->assertSame('UndescribableSource.name', $source->describe());
     }
 
     #[Test]
@@ -289,11 +289,9 @@ class DescribableTest extends TestCase
     #[Test]
     public function expression_pattern_with_non_describable_source_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
+        $pattern = new ExpressionPattern(new UndescribableSource());
 
-        $pattern = new ExpressionPattern($anonymous);
-
-        $this->assertNotSame('', $pattern->describe());
+        $this->assertSame('UndescribableSource', $pattern->describe());
     }
 
     #[Test]
@@ -309,23 +307,17 @@ class DescribableTest extends TestCase
     #[Test]
     public function match_arm_with_non_describable_pattern_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements MatchPattern {};
+        $arm = new MatchArm(new UndescribablePattern(), new StaticSource('result'));
 
-        $arm = new MatchArm($anonymous, new StaticSource('result'));
-
-        $description = $arm->describe();
-        $this->assertStringEndsWith("=> 'result'", $description);
+        $this->assertSame("UndescribablePattern => 'result'", $arm->describe());
     }
 
     #[Test]
     public function match_arm_with_non_describable_expression_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
+        $arm = new MatchArm(new WildcardPattern(), new UndescribableSource());
 
-        $arm = new MatchArm(new WildcardPattern(), $anonymous);
-
-        $description = $arm->describe();
-        $this->assertStringStartsWith('_ => ', $description);
+        $this->assertSame('_ => UndescribableSource', $arm->describe());
     }
 
     #[Test]
@@ -347,15 +339,12 @@ class DescribableTest extends TestCase
     #[Test]
     public function match_expression_with_non_describable_subject_falls_back_to_class_name(): void
     {
-        $anonymous = new class implements Source {};
-
         $source = new MatchExpression(
-            $anonymous,
+            new UndescribableSource(),
             [new MatchArm(new WildcardPattern(), new StaticSource(0))],
         );
 
-        $description = $source->describe();
-        $this->assertStringContainsString('{ _ => 0 }', $description);
+        $this->assertSame('match UndescribableSource { _ => 0 }', $source->describe());
     }
 
     #[Test]

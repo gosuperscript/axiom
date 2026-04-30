@@ -20,6 +20,10 @@ final readonly class UnaryExpression implements Source, Describable
             ? $this->operand->describe()
             : (new \ReflectionClass($this->operand))->getShortName();
 
+        if ($this->operand instanceof InfixExpression) {
+            $operand = sprintf('(%s)', $operand);
+        }
+
         return sprintf('%s%s', $this->operator, $operand);
     }
 }
