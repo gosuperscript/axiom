@@ -9,11 +9,18 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\LiteralPattern;
+use Superscript\Axiom\Sources\MatchArm;
+use Superscript\Axiom\Sources\MatchExpression;
+use Superscript\Axiom\Sources\MatchPattern;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Sources\UnaryExpression;
+use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
@@ -24,6 +31,12 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(TypeDefinition::class)]
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(UnaryExpression::class)]
+#[CoversClass(MemberAccessSource::class)]
+#[CoversClass(MatchExpression::class)]
+#[CoversClass(MatchArm::class)]
+#[CoversClass(LiteralPattern::class)]
+#[CoversClass(WildcardPattern::class)]
+#[CoversClass(ExpressionPattern::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(BooleanType::class)]
@@ -215,6 +228,134 @@ class DescribableTest extends TestCase
 
         $description = $source->describe();
         $this->assertStringStartsWith('!', $description);
+    }
+
+    #[Test]
+    public function member_access_describes_property(): void
+    {
+        $source = new MemberAccessSource(new SymbolSource('user'), 'name');
+        $this->assertSame('user.name', $source->describe());
+    }
+
+    #[Test]
+    public function member_access_describes_chained_property(): void
+    {
+        $source = new MemberAccessSource(
+            new MemberAccessSource(new SymbolSource('user'), 'address'),
+            'city',
+        );
+        $this->assertSame('user.address.city', $source->describe());
+    }
+
+    #[Test]
+    public function member_access_with_non_describable_object_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $source = new MemberAccessSource($anonymous, 'name');
+
+        $description = $source->describe();
+        $this->assertStringEndsWith('.name', $description);
+    }
+
+    #[Test]
+    public function literal_pattern_describes_value(): void
+    {
+        $pattern = new LiteralPattern(42);
+        $this->assertSame('42', $pattern->describe());
+    }
+
+    #[Test]
+    public function literal_pattern_describes_string_value(): void
+    {
+        $pattern = new LiteralPattern('hello');
+        $this->assertSame("'hello'", $pattern->describe());
+    }
+
+    #[Test]
+    public function wildcard_pattern_describes_as_underscore(): void
+    {
+        $pattern = new WildcardPattern();
+        $this->assertSame('_', $pattern->describe());
+    }
+
+    #[Test]
+    public function expression_pattern_describes_inner_source(): void
+    {
+        $pattern = new ExpressionPattern(new SymbolSource('x'));
+        $this->assertSame('x', $pattern->describe());
+    }
+
+    #[Test]
+    public function expression_pattern_with_non_describable_source_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $pattern = new ExpressionPattern($anonymous);
+
+        $this->assertNotSame('', $pattern->describe());
+    }
+
+    #[Test]
+    public function match_arm_describes_pattern_and_expression(): void
+    {
+        $arm = new MatchArm(
+            new LiteralPattern(1),
+            new StaticSource('one'),
+        );
+        $this->assertSame("1 => 'one'", $arm->describe());
+    }
+
+    #[Test]
+    public function match_arm_with_non_describable_pattern_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements MatchPattern {};
+
+        $arm = new MatchArm($anonymous, new StaticSource('result'));
+
+        $description = $arm->describe();
+        $this->assertStringEndsWith("=> 'result'", $description);
+    }
+
+    #[Test]
+    public function match_arm_with_non_describable_expression_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $arm = new MatchArm(new WildcardPattern(), $anonymous);
+
+        $description = $arm->describe();
+        $this->assertStringStartsWith('_ => ', $description);
+    }
+
+    #[Test]
+    public function match_expression_describes_subject_and_arms(): void
+    {
+        $source = new MatchExpression(
+            new SymbolSource('status'),
+            [
+                new MatchArm(new LiteralPattern('on'), new StaticSource(true)),
+                new MatchArm(new WildcardPattern(), new StaticSource(false)),
+            ],
+        );
+        $this->assertSame(
+            "match status { 'on' => true, _ => false }",
+            $source->describe(),
+        );
+    }
+
+    #[Test]
+    public function match_expression_with_non_describable_subject_falls_back_to_class_name(): void
+    {
+        $anonymous = new class implements Source {};
+
+        $source = new MatchExpression(
+            $anonymous,
+            [new MatchArm(new WildcardPattern(), new StaticSource(0))],
+        );
+
+        $description = $source->describe();
+        $this->assertStringContainsString('{ _ => 0 }', $description);
     }
 
     #[Test]
