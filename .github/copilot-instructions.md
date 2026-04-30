@@ -158,7 +158,7 @@ Located in `.github/workflows/tests.yaml`:
 ### Dependencies
 
 **Production:**
-- `azjezz/psl` - PHP Standard Library utilities
+- `php-standard-library/php-standard-library` - PHP Standard Library utilities
 - `brick/math` - Arbitrary precision mathematics
 - `gosuperscript/monads` - Result/Option monad implementation
 - `illuminate/container` - Dependency injection container

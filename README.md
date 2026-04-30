@@ -231,7 +231,7 @@ For collections and associative arrays with nested type validation.
 
 ### Type API: Assert vs Coerce
 
-The `Type` interface provides two methods for value processing, following the [@azjezz/psl](https://github.com/azjezz/psl) pattern:
+The `Type` interface provides two methods for value processing, following the [@php-standard-library/php-standard-library](https://github.com/php-standard-library/php-standard-library) pattern:
 
 - **`assert(T $value): Result<Option<T>>`** - Validates that a value is already of the correct type
 - **`coerce(mixed $value): Result<Option<T>>`** - Attempts to convert a value from any type to the target type

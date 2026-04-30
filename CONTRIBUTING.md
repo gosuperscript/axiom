@@ -241,7 +241,7 @@ Update documentation for SymbolRegistry namespaces
 * [PHP Fig - PSR Standards](https://www.php-fig.org/psr/)
 * [PHPStan Documentation](https://phpstan.org/)
 * [Infection Mutation Testing](https://infection.github.io/)
-* [azjezz/psl Library](https://github.com/azjezz/psl) - Our standard library
+* [php-standard-library/php-standard-library](https://github.com/php-standard-library/php-standard-library) - Our standard library
 
 ## Questions?
 
