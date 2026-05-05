@@ -65,7 +65,7 @@ $area(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 Two ideas to internalize:
 
 1. **The expression's inputs are its parameters**, passed at the call site.
-2. **The `Schema` envelope pins a version to the source tree.** When you persist a source and replay it later, the runtime uses the resolver semantics it was authored against — future behavior changes (e.g. stricter typing in V2) can ship without changing the meaning of existing schemas.
+2. **The `Schema` envelope pins a version to the source tree.** When you persist a source and replay it later, the runtime uses the resolver semantics it was authored against — later versions of the library can ship behavior changes without changing the meaning of existing schemas.
 
 ### Basic Type Transformation
 
@@ -198,7 +198,7 @@ $expression = Expression::fromSchema(
 );
 ```
 
-The version owns all version-sensitive bindings — the resolver class for `TypeDefinition`, the default operator overloader, and the default matcher set. Attempting to override a version-sensitive binding (e.g. `->withResolver(TypeDefinition::class, ...)`) throws — the version contract is enforced structurally so a persisted V2 schema can't accidentally run with V1 semantics.
+The version owns all version-sensitive bindings — the resolver class for `TypeDefinition`, the default operator overloader, and the default matcher set. Attempting to override a version-sensitive binding (e.g. `->withResolver(TypeDefinition::class, ...)`) throws — the version contract is enforced structurally so a persisted schema can't accidentally run with the semantics of a different version.
 
 ## Core Concepts
 
@@ -212,7 +212,7 @@ $expression = Expression::fromSchema($schema, definitions: $definitions);
 $expression->version; // SchemaVersion::V1
 ```
 
-Currently only `SchemaVersion::V1` is defined. `V2` is reserved for an upcoming release that introduces strict typing semantics (assert-based type validation rather than coercion).
+Each `SchemaVersion` case pins a coherent set of resolver semantics. New versions are added as new enum cases when a behavior change would otherwise alter the meaning of existing schemas; older cases keep their original semantics so persisted schemas continue to evaluate the same way they always did.
 
 ### Persisting and replaying schemas
 
@@ -253,7 +253,7 @@ For durable storage (database rows, API payloads), encode each `Source` as a tag
 }
 ```
 
-**Forward-compatibility tip.** When a future `SchemaVersion::V2` ships, consumers still on the old version of axiom won't have that enum case. Use `SchemaVersion::tryFrom('v2')` (which returns `null` for unknown values) rather than `from()` (which throws), and turn the `null` into a clear error for the caller — your decoder shouldn't crash inside the read path.
+**Forward-compatibility tip.** A consumer running an older version of axiom may encounter a schema tagged with a `SchemaVersion` case that doesn't exist in their build. Use `SchemaVersion::tryFrom($value)` (which returns `null` for unknown values) rather than `from()` (which throws), and turn the `null` into a clear error for the caller — your decoder shouldn't crash inside the read path.
 
 ### Types
 
