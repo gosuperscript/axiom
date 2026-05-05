@@ -27,29 +27,18 @@ composer require gosuperscript/axiom
 
 ### Expressions as callables
 
-The top-level API is `Expression`: wrap a `Source` tree with the resolver stack you want, then invoke it with inputs like a function:
+The top-level API is `Expression`: wrap a `Source` tree in a versioned `Schema` envelope, build the expression with `Expression::fromSchema()`, and invoke it with inputs like a function:
 
 ```php
 <?php
 
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\InfixResolver;
-use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\SymbolResolver;
+use Superscript\Axiom\Schema;
+use Superscript\Axiom\SchemaVersion;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-
-$resolver = new DelegatingResolver([
-    StaticSource::class   => StaticResolver::class,
-    SymbolSource::class   => SymbolResolver::class,
-    InfixExpression::class => InfixResolver::class,
-]);
-$resolver->instance(OperatorOverloader::class, new DefaultOverloader());
 
 // area = PI * radius * radius
 $source = new InfixExpression(
@@ -62,9 +51,8 @@ $source = new InfixExpression(
     ),
 );
 
-$area = new Expression(
-    source: $source,
-    resolver: $resolver,
+$area = Expression::fromSchema(
+    schema: new Schema(SchemaVersion::V1, $source),
     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
 );
 
@@ -74,7 +62,10 @@ $area(['radius' => 5])->unwrap()->unwrap();  // ~78.54
 $area(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 ```
 
-The key idea: the expression's inputs are its **parameters**, passed at the call site.
+Two ideas to internalize:
+
+1. **The expression's inputs are its parameters**, passed at the call site.
+2. **The `Schema` envelope pins a version to the source tree.** When you persist a source and replay it later, the runtime uses the resolver semantics it was authored against — future behavior changes (e.g. stricter typing in V2) can ship without changing the meaning of existing schemas.
 
 ### Basic Type Transformation
 
@@ -82,24 +73,18 @@ The key idea: the expression's inputs are its **parameters**, passed at the call
 <?php
 
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Schema;
+use Superscript\Axiom\SchemaVersion;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Types\NumberType;
-
-$resolver = new DelegatingResolver([
-    StaticSource::class   => StaticResolver::class,
-    TypeDefinition::class => ValueResolver::class,
-]);
 
 $source = new TypeDefinition(
     type: new NumberType(),
     source: new StaticSource('42'),
 );
 
-$expression = new Expression($source, $resolver);
+$expression = Expression::fromSchema(new Schema(SchemaVersion::V1, $source));
 
 $expression()->unwrap()->unwrap(); // 42 (as integer)
 ```
@@ -111,12 +96,13 @@ Inputs are **bindings** — passed at the call site. Stable named expressions (c
 ```php
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Schema;
+use Superscript\Axiom\SchemaVersion;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 
-$expression = new Expression(
-    source: /* ... */,
-    resolver: $resolver,
+$expression = Expression::fromSchema(
+    schema: new Schema(SchemaVersion::V1, /* ... */),
     definitions: new Definitions([
         // Global scope
         'version' => new StaticSource('1.0.0'),
@@ -190,22 +176,11 @@ new MatchExpression(
 );
 ```
 
-**Extensible pattern matching:** The `MatchResolver` delegates pattern evaluation to a registry of `PatternMatcher` implementations. Extension packages can register their own pattern types (e.g. `IntervalPattern` from `axiom-interval`) without modifying core axiom:
+**Extensible pattern matching:** The default preset wires the built-in matchers (`WildcardPattern`, `LiteralPattern`, `ExpressionPattern`). Extension packages can register their own pattern types (e.g. `IntervalPattern` from `axiom-interval`) via the `customize` closure on `Expression::fromSchema()` — see [Extending the resolver preset](#extending-the-resolver-preset).
 
-```php
-$matchers = [
-    new WildcardMatcher(),
-    new LiteralMatcher(),
-    new ExpressionMatcher($resolver),
-    // Add custom matchers from extension packages here
-];
+### Extending the resolver preset
 
-$resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
-```
-
-### Schema Versioning
-
-Persisted source trees should carry a schema version so future behavior changes (e.g. stricter type semantics) don't silently change the meaning of existing schemas. Wrap the source in a `Schema` envelope and build the expression with `Expression::fromSchema()`:
+Most schemas only need the built-in resolvers and the default preset is enough. When you have your own source types, pattern matchers, or want to replace the operator overloader, pass a `customize` closure to `Expression::fromSchema()`. The closure receives a `ResolverPreset` for the schema's version and returns an extended preset:
 
 ```php
 use Superscript\Axiom\Expression;
@@ -213,42 +188,72 @@ use Superscript\Axiom\Resolvers\ResolverPreset;
 use Superscript\Axiom\Schema;
 use Superscript\Axiom\SchemaVersion;
 
-$schema = new Schema(SchemaVersion::V1, $source);
-
 $expression = Expression::fromSchema(
-    schema: $schema,
-    definitions: $definitions,
-);
-```
-
-The resolver stack is derived from the schema's version. The version owns
-all version-sensitive bindings (which class resolves `TypeDefinition`, the
-default operator overloader, the default pattern matchers); these cannot
-be replaced by consumers.
-
-To extend the preset with **your own** source types, matchers, or a
-replacement overloader, pass a `customize` closure:
-
-```php
-$expression = Expression::fromSchema(
-    schema: $schema,
+    schema: new Schema(SchemaVersion::V1, $source),
     customize: fn (ResolverPreset $preset) => $preset
         ->withResolver(IntervalSource::class, IntervalResolver::class)
-        ->withMatcher(new IntervalMatcher()),
+        ->withMatcher(new IntervalMatcher())
+        ->withOverloader(new MyOverloader()),
     definitions: $definitions,
 );
 ```
 
-Attempting to override a version-sensitive binding (e.g.
-`->withResolver(TypeDefinition::class, ...)`) throws — the version contract
-is enforced structurally.
-
-The legacy `new Expression($source, $resolver, ...)` constructor still
-works for ad-hoc use, but does not provide version guarantees: the
-expression is tagged `SchemaVersion::V1` regardless of how the resolver
-was wired. Use `fromSchema()` for any persisted schema.
+The version owns all version-sensitive bindings — the resolver class for `TypeDefinition`, the default operator overloader, and the default matcher set. Attempting to override a version-sensitive binding (e.g. `->withResolver(TypeDefinition::class, ...)`) throws — the version contract is enforced structurally so a persisted V2 schema can't accidentally run with V1 semantics.
 
 ## Core Concepts
+
+### Schema and SchemaVersion
+
+A `Schema` is the canonical persistence shape: a `SchemaVersion` paired with a `Source` tree. When the runtime replays a persisted schema, the version determines which resolver semantics apply — protecting persisted data from behavior drift.
+
+```php
+$schema = new Schema(SchemaVersion::V1, $source);
+$expression = Expression::fromSchema($schema, definitions: $definitions);
+$expression->version; // SchemaVersion::V1
+```
+
+Currently only `SchemaVersion::V1` is defined. `V2` is reserved for an upcoming release that introduces strict typing semantics (assert-based type validation rather than coercion).
+
+### Persisting and replaying schemas
+
+Axiom doesn't ship a serializer — `Schema` is an envelope, and how you encode it for storage is up to you. The contract to preserve across a round trip:
+
+- `SchemaVersion` is a string-backed enum (`'v1'`), so it survives any encoder.
+- Every built-in `Source` class is `final readonly` with public constructor-promoted properties, so they encode straightforwardly. Custom source types should follow the same shape.
+- The runtime entry point is `Expression::fromSchema($schema, customize: ..., definitions: ...)` — your codec only needs to reconstitute the `Schema` (version + source tree). Definitions, custom resolvers, and inspectors are wired at call time, not persisted.
+
+For short-lived caches, PHP's native serializer is enough:
+
+```php
+$encoded = serialize($schema);
+
+// Restrict allowed classes to limit unsafe deserialization.
+$schema = unserialize($encoded, ['allowed_classes' => [
+    Schema::class,
+    StaticSource::class,
+    SymbolSource::class,
+    InfixExpression::class,
+    /* ...other Source classes you actually use */
+]]);
+
+$expression = Expression::fromSchema($schema, definitions: $definitions);
+```
+
+For durable storage (database rows, API payloads), encode each `Source` as a tagged structure and decode by dispatching on the tag. Put `version` at the top level so a reader can bail out early on an unknown version:
+
+```json
+{
+    "version": "v1",
+    "source": {
+        "kind": "infix",
+        "operator": "*",
+        "left":  { "kind": "symbol", "name": "PI" },
+        "right": { "kind": "symbol", "name": "radius" }
+    }
+}
+```
+
+**Forward-compatibility tip.** When a future `SchemaVersion::V2` ships, consumers still on the old version of axiom won't have that enum case. Use `SchemaVersion::tryFrom('v2')` (which returns `null` for unknown values) rather than `from()` (which throws), and turn the `null` into a clear error for the caller — your decoder shouldn't crash inside the read path.
 
 ### Types
 
@@ -316,16 +321,18 @@ Sources represent different ways to provide data:
 
 ### Resolvers
 
-Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`:
+Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`.
+
+You don't normally construct resolvers directly: `Expression::fromSchema()` builds the right stack via a `ResolverPreset` for the schema's version, and the [`customize` closure](#extending-the-resolver-preset) lets you plug in your own. The built-in resolvers are:
 
 - **StaticResolver**: Resolves static values
-- **ValueResolver**: Applies type coercion using the `coerce()` method
+- **ValueResolver**: Applies type coercion using the `coerce()` method (V1 default for `TypeDefinition`)
 - **InfixResolver**: Evaluates binary expressions
 - **UnaryResolver**: Evaluates unary expressions
 - **SymbolResolver**: Looks up symbols from bindings (first) then definitions (with per-context memoization)
 - **MemberAccessResolver**: Evaluates property/array-key access
 - **MatchResolver**: Evaluates match expressions with extensible pattern matching
-- **DelegatingResolver**: Chains multiple resolvers together
+- **DelegatingResolver**: The chain-of-responsibility primitive that dispatches each `Source` class to its registered resolver — produced by `ResolverPreset::build()`
 
 ### Context
 
@@ -476,6 +483,44 @@ class DatabaseResolver implements Resolver
         // Custom resolution logic — connect to database, fetch data, etc.
     }
 }
+```
+
+Plug it in via the `customize` closure on `Expression::fromSchema()`:
+
+```php
+$expression = Expression::fromSchema(
+    schema: new Schema(SchemaVersion::V1, $source),
+    customize: fn (ResolverPreset $preset) => $preset
+        ->withResolver(DatabaseSource::class, DatabaseResolver::class),
+);
+```
+
+### Manual resolver wiring (escape hatch)
+
+The lower-level `Expression` constructor accepts a manually wired `DelegatingResolver`. This bypasses `ResolverPreset` and **does not provide version guarantees** — the expression is tagged `SchemaVersion::V1` regardless of how the resolver is wired. Prefer `Expression::fromSchema()` for any persisted schema. Use this only for ad-hoc scripts or interactive exploration.
+
+```php
+<?php
+
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Resolvers\DelegatingResolver;
+use Superscript\Axiom\Resolvers\InfixResolver;
+use Superscript\Axiom\Resolvers\StaticResolver;
+use Superscript\Axiom\Resolvers\SymbolResolver;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+
+$resolver = new DelegatingResolver([
+    StaticSource::class    => StaticResolver::class,
+    SymbolSource::class    => SymbolResolver::class,
+    InfixExpression::class => InfixResolver::class,
+]);
+$resolver->instance(OperatorOverloader::class, new DefaultOverloader());
+
+$expression = new Expression($source, $resolver, $definitions);
 ```
 
 ## Development
