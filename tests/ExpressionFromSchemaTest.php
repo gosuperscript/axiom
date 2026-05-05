@@ -16,6 +16,7 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
+use Superscript\Axiom\Patterns\ExpressionMatcher;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\MatchResolver;
@@ -48,6 +49,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(NullOverloader::class)]
+#[UsesClass(ExpressionMatcher::class)]
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]

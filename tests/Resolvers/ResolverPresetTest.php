@@ -28,6 +28,7 @@ use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\ValueResolver;
 use Superscript\Axiom\SchemaVersion;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\StaticSource;
@@ -53,6 +54,7 @@ use Superscript\Axiom\Tests\Resolvers\Fixtures\CustomSourceResolver;
 #[UsesClass(MatchExpression::class)]
 #[UsesClass(MatchArm::class)]
 #[UsesClass(WildcardPattern::class)]
+#[UsesClass(LiteralPattern::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(NullOverloader::class)]
@@ -135,6 +137,26 @@ final class ResolverPresetTest extends TestCase
         $resolver = ResolverPreset::for(SchemaVersion::V1)->build();
 
         $this->assertInstanceOf(DefaultOverloader::class, $resolver->get(OperatorOverloader::class));
+    }
+
+    #[Test]
+    public function default_preset_supports_wildcard_and_literal_patterns(): void
+    {
+        $resolver = ResolverPreset::for(SchemaVersion::V1)->build();
+
+        $source = new MatchExpression(
+            subject: new SymbolSource('tier'),
+            arms: [
+                new MatchArm(new LiteralPattern('small'), new StaticSource('cheap')),
+                new MatchArm(new WildcardPattern(), new StaticSource('default')),
+            ],
+        );
+
+        $literalHit = $resolver->resolve($source, new Context(bindings: new Bindings(['tier' => 'small'])));
+        $this->assertSame('cheap', $literalHit->unwrap()->unwrap());
+
+        $wildcardHit = $resolver->resolve($source, new Context(bindings: new Bindings(['tier' => 'huge'])));
+        $this->assertSame('default', $wildcardHit->unwrap()->unwrap());
     }
 
     #[Test]
