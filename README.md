@@ -203,6 +203,51 @@ $matchers = [
 $resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
 ```
 
+### Schema Versioning
+
+Persisted source trees should carry a schema version so future behavior changes (e.g. stricter type semantics) don't silently change the meaning of existing schemas. Wrap the source in a `Schema` envelope and build the expression with `Expression::fromSchema()`:
+
+```php
+use Superscript\Axiom\Expression;
+use Superscript\Axiom\Resolvers\ResolverPreset;
+use Superscript\Axiom\Schema;
+use Superscript\Axiom\SchemaVersion;
+
+$schema = new Schema(SchemaVersion::V1, $source);
+
+$expression = Expression::fromSchema(
+    schema: $schema,
+    definitions: $definitions,
+);
+```
+
+The resolver stack is derived from the schema's version. The version owns
+all version-sensitive bindings (which class resolves `TypeDefinition`, the
+default operator overloader, the default pattern matchers); these cannot
+be replaced by consumers.
+
+To extend the preset with **your own** source types, matchers, or a
+replacement overloader, pass a `customize` closure:
+
+```php
+$expression = Expression::fromSchema(
+    schema: $schema,
+    customize: fn (ResolverPreset $preset) => $preset
+        ->withResolver(IntervalSource::class, IntervalResolver::class)
+        ->withMatcher(new IntervalMatcher()),
+    definitions: $definitions,
+);
+```
+
+Attempting to override a version-sensitive binding (e.g.
+`->withResolver(TypeDefinition::class, ...)`) throws — the version contract
+is enforced structurally.
+
+The legacy `new Expression($source, $resolver, ...)` constructor still
+works for ad-hoc use, but does not provide version guarantees: the
+expression is tagged `SchemaVersion::V1` regardless of how the resolver
+was wired. Use `fromSchema()` for any persisted schema.
+
 ## Core Concepts
 
 ### Types
