@@ -48,14 +48,26 @@ final readonly class DelegatingResolver implements BindableResolver
     }
 
     /**
-     * @return Result<Option<mixed>, Throwable>
+     * Dispatches to the resolver registered for the source's type. Every {@see Source} carries the
+     * value type it resolves to as its `T` (defaulting to `mixed`), so the result is statically
+     * narrowed to that type — `resolve(new TypeDefinition(new FooType(), $source))` is
+     * `Result<Option<Foo>, Throwable>` and callers never have to re-coerce, while an ordinary source
+     * still resolves to `Result<Option<mixed>, Throwable>`. The dispatch itself is dynamic, so the
+     * narrowing is asserted here once (the delegate resolver produces the value the source describes).
+     *
+     * @template TSource of Source
+     * @param TSource $source
+     * @return Result<Option<template-type<TSource, Source, 'T'>>, Throwable>
      */
     public function resolve(Source $source, Context $context): Result
     {
         $sourceClass = get_class($source);
 
         if (isset($this->resolverMap[$sourceClass]) && $this->container->has($this->resolverMap[$sourceClass])) {
-            return $this->container->make($this->resolverMap[$sourceClass])->resolve($source, $context);
+            /** @var Result<Option<template-type<TSource, Source, 'T'>>, Throwable> $result */
+            $result = $this->container->make($this->resolverMap[$sourceClass])->resolve($source, $context);
+
+            return $result;
         }
 
         throw new RuntimeException("No resolver found for source of type " . $sourceClass);
