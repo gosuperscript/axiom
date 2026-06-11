@@ -19,13 +19,31 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<array<array-key, mixed>>
+ * @template T = mixed
+ * @implements Type<array<string, T>>
  */
 class DictType implements Type
 {
+    /**
+     * @param Type<T> $type
+     */
     public function __construct(
         public Type $type,
     ) {}
+
+    /**
+     * A dict is a string-keyed map (`Type<array<string, T>>`), so result keys are coerced to string.
+     * PHP normalises numeric-string keys back to int, so this has no observable runtime effect — it
+     * only realises the declared key type — which is why its mutators are equivalent and ignored.
+     *
+     * @param array<array-key, mixed> $value
+     * @return list<string>
+     * @infection-ignore-all
+     */
+    private function stringKeys(array $value): array
+    {
+        return array_map(static fn(int|string $key): string => (string) $key, array_keys($value));
+    }
 
     public function assert(mixed $value): Result
     {
@@ -45,7 +63,7 @@ class DictType implements Type
                 default: Err(new InvalidArgumentException('Dict item can not be a None')),
                 f: fn(mixed $value) => Ok($value),
             ));
-        }))->map(fn(array $items) => Some(array_combine(array_keys($value), $items)));
+        }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
     }
 
     public function coerce(mixed $value): Result
@@ -70,7 +88,7 @@ class DictType implements Type
                 default: Err(new InvalidArgumentException('Dict item can not be a None')),
                 f: fn(mixed $value) => Ok($value),
             ));
-        }))->map(fn(array $items) => Some(array_combine(array_keys($value), $items)));
+        }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
     }
 
     public function compare(mixed $a, mixed $b): bool

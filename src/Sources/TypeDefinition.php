@@ -8,8 +8,15 @@ use Superscript\Axiom\Describable;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Types\Type;
 
+/**
+ * @template T = mixed
+ * @implements Source<T>
+ */
 final readonly class TypeDefinition implements Source, Describable
 {
+    /**
+     * @param Type<T> $type
+     */
     public function __construct(
         public Type $type,
         public Source $source,

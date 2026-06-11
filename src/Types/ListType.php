@@ -16,10 +16,14 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * @implements Type<List<mixed>>
+ * @template T = mixed
+ * @implements Type<list<T>>
  */
 class ListType implements Type
 {
+    /**
+     * @param Type<T> $type
+     */
     public function __construct(
         public Type $type,
     ) {}
