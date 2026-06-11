@@ -1,6 +1,7 @@
 parameters:
     paths:
         - src/
+        - tests/StaticAnalysis/
 
     level: max
 
