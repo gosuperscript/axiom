@@ -64,6 +64,7 @@ class CodecTest extends TestCase
             'list of numbers' => [new ListType(new NumberType()), [1, 2, 3], '{"v":1,"type":"list<number>","value":["1","2","3"]}'],
             'nested list' => [new ListType(new ListType(new BooleanType())), [[true], [false]], '{"v":1,"type":"list<list<boolean>>","value":[[true],[false]]}'],
             'dict of strings' => [new DictType(new StringType()), ['a' => 'x'], '{"v":1,"type":"dict<string>","value":{"a":"x"}}'],
+            'dict of numbers' => [new DictType(new NumberType()), ['a' => 1, 'b' => 2.5], '{"v":1,"type":"dict<number>","value":{"a":"1","b":"2.5"}}'],
         ];
     }
 
@@ -117,6 +118,16 @@ class CodecTest extends TestCase
     }
 
     #[Test]
+    public function it_parses_a_type_at_exactly_the_maximum_nesting_depth(): void
+    {
+        $dsl = str_repeat('list<', 32) . 'number' . str_repeat('>', 32);
+
+        $result = (new Codec())->deserialize('{"v":1,"type":"' . $dsl . '","value":null}');
+
+        $this->assertTrue($result->isOk());
+    }
+
+    #[Test]
     public function it_treats_a_missing_version_as_version_one(): void
     {
         $result = (new Codec())->deserialize('{"type":"number","value":"1"}');
@@ -141,7 +152,7 @@ class CodecTest extends TestCase
             'missing type' => ['{"v":1,"value":null}', 'must be an object with a string [type] field'],
             'non-string type' => ['{"v":1,"type":42,"value":null}', 'must be an object with a string [type] field'],
             'non-integer version' => ['{"v":"1","type":"number","value":null}', 'must be an integer'],
-            'newer version' => ['{"v":2,"type":"number","value":null}', 'newer than supported version'],
+            'newer version' => ['{"v":2,"type":"number","value":null}', 'Payload version [2] is newer than supported version [1]'],
             'unknown tag' => ['{"v":1,"type":"money","value":null}', 'Unknown type tag [money]'],
             'uppercase tag' => ['{"v":1,"type":"Number","value":null}', 'Expected a type tag'],
             'empty type' => ['{"v":1,"type":"","value":null}', 'Expected a type tag'],
@@ -152,7 +163,8 @@ class CodecTest extends TestCase
             'wrong arity list no args' => ['{"v":1,"type":"list","value":null}', 'expects exactly one type argument'],
             'wrong arity list two args' => ['{"v":1,"type":"list<number,string>","value":null}', 'expects exactly one type argument'],
             'scalar arg for list' => ['{"v":1,"type":"list<42>","value":null}', 'expects exactly one type argument'],
-            'depth bomb' => ['{"v":1,"type":"' . str_repeat('list<', 50) . 'number' . str_repeat('>', 50) . '","value":null}', 'maximum nesting depth'],
+            'depth bomb' => ['{"v":1,"type":"' . str_repeat('list<', 33) . 'number' . str_repeat('>', 33) . '","value":null}', 'Type string exceeds maximum nesting depth of 32'],
+            'digit after tag start' => ['{"v":1,"type":"list<n2>","value":null}', 'Unknown type tag [n2]'],
             'value fails decode' => ['{"v":1,"type":"number","value":"abc"}', 'numeric'],
             'value wrong wire shape' => ['{"v":1,"type":"number","value":42}', 'numeric'],
             'non-string in string' => ['{"v":1,"type":"string","value":42}', 'string'],

@@ -89,11 +89,10 @@ final readonly class Codec
 
     private function typeToString(Type $type): string
     {
-        $args = array_map(fn(Type|int|float|bool $arg) => match (true) {
-            $arg instanceof Type => $this->typeToString($arg),
-            is_bool($arg) => $arg ? 'true' : 'false',
-            default => var_export($arg, true),
-        }, $type->toArgs());
+        $args = array_map(
+            fn(Type|int|float|bool $arg) => $arg instanceof Type ? $this->typeToString($arg) : var_export($arg, true),
+            $type->toArgs(),
+        );
 
         return $type::tag() . ($args === [] ? '' : '<' . implode(',', $args) . '>');
     }
@@ -155,7 +154,7 @@ final readonly class Codec
 
     private function parseArg(string $dsl, int &$position, int $depth): Type|int|float|bool
     {
-        if (preg_match('/(true|false)(?![a-zA-Z0-9_])/A', $dsl, $matches, offset: $position)) {
+        if (preg_match('/(?:true|false)(?![a-zA-Z0-9_])/A', $dsl, $matches, offset: $position)) {
             $position += strlen($matches[0]);
 
             return $matches[0] === 'true';
