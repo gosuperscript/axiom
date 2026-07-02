@@ -45,4 +45,28 @@ final class BooleanType implements Type
     {
         return $value ? 'True' : 'False';
     }
+
+    public static function tag(): string
+    {
+        return 'boolean';
+    }
+
+    public function toArgs(): array
+    {
+        return [];
+    }
+
+    public function encode(mixed $value): mixed
+    {
+        return $value;
+    }
+
+    public function decode(mixed $value): Result
+    {
+        if (!is_bool($value)) {
+            return new Err(new TransformValueException(type: 'boolean', value: $value));
+        }
+
+        return new Ok($value);
+    }
 }

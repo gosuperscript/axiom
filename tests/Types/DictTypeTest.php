@@ -28,7 +28,7 @@ class DictTypeTest extends TestCase
 {
     #[DataProvider('coerceProvider')]
     #[Test]
-    public function it_can_coerce_value(Type $type, mixed $value, array $expected)
+    public function it_can_coerce_value(Type $type, mixed $value, ?array $expected)
     {
         $type = new DictType($type);
         $result = $type->coerce($value);
@@ -42,12 +42,13 @@ class DictTypeTest extends TestCase
             [new NumberType(), ['a' => '1', 'b' => '2', 'c' => '3'], ['a' => 1, 'b' => 2, 'c' => 3]],
             [new NumberType(), '{"a": 1, "b": 2, "c": 3}', ['a' => 1, 'b' => 2, 'c' => 3]],
             [new ListType(new NumberType()), ['a' => ['1', '2', '3'], 'b' => ['4', '5', '6']], ['a' => [1, 2, 3], 'b' => [4, 5, 6]]],
+            [new NumberType(), [], null],
         ];
     }
 
     #[DataProvider('assertProvider')]
     #[Test]
-    public function it_can_assert_value(Type $type, array $value, array $expected)
+    public function it_can_assert_value(Type $type, array $value, ?array $expected)
     {
         $type = new DictType($type);
         $result = $type->assert($value);
@@ -60,6 +61,7 @@ class DictTypeTest extends TestCase
         return [
             [new NumberType(), ['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 3]],
             [new StringType(), ['x' => 'hello', 'y' => 'world'], ['x' => 'hello', 'y' => 'world']],
+            [new NumberType(), [], null],
         ];
     }
 

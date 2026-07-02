@@ -74,4 +74,31 @@ class ListType implements Type
     {
         return implode(', ', array_map(fn(mixed $item) => $this->type->format($item), $value));
     }
+
+    public static function tag(): string
+    {
+        return 'list';
+    }
+
+    public function toArgs(): array
+    {
+        return [$this->type];
+    }
+
+    public function encode(mixed $value): mixed
+    {
+        return map($value, fn(mixed $item) => $this->type->encode($item));
+    }
+
+    public function decode(mixed $value): Result
+    {
+        if (!is_array($value) || !array_is_list($value)) {
+            return new Err(new TransformValueException(
+                type: 'list',
+                value: $value,
+            ));
+        }
+
+        return Result::collect(map($value, fn(mixed $item) => $this->type->decode($item)));
+    }
 }

@@ -54,4 +54,28 @@ class StringType implements Type
     {
         return strval($value);
     }
+
+    public static function tag(): string
+    {
+        return 'string';
+    }
+
+    public function toArgs(): array
+    {
+        return [];
+    }
+
+    public function encode(mixed $value): mixed
+    {
+        return $value;
+    }
+
+    public function decode(mixed $value): Result
+    {
+        if (!is_string($value)) {
+            return new Err(new TransformValueException(type: 'string', value: $value));
+        }
+
+        return new Ok($value);
+    }
 }

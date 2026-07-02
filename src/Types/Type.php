@@ -39,4 +39,31 @@ interface Type
      * @return string
      */
     public function format(mixed $value): string;
+
+    /**
+     * The canonical lowercase identity of this type in the serialization DSL.
+     */
+    public static function tag(): string;
+
+    /**
+     * The logical arguments of this type: nested Types and/or delimiter-safe
+     * scalars (int|float|bool). Together with tag() this fully describes the type.
+     *
+     * @return list<Type|int|float|bool>
+     */
+    public function toArgs(): array;
+
+    /**
+     * Lossless wire encoding of a present value, distinct from the lossy format().
+     *
+     * @param T $value
+     */
+    public function encode(mixed $value): mixed;
+
+    /**
+     * Decode a wire value produced by encode().
+     *
+     * @return Result<T, Throwable>
+     */
+    public function decode(mixed $value): Result;
 }

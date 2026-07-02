@@ -59,4 +59,32 @@ class NumberType implements Type
 
         return string()->assert($formatter->format($value));
     }
+
+    public static function tag(): string
+    {
+        return 'number';
+    }
+
+    public function toArgs(): array
+    {
+        return [];
+    }
+
+    /**
+     * Numbers ride the wire as strings to preserve int-vs-float and future
+     * big-number precision across a non-PHP hop.
+     */
+    public function encode(mixed $value): mixed
+    {
+        return var_export($value, true);
+    }
+
+    public function decode(mixed $value): Result
+    {
+        if (!is_string($value) || !numeric_string()->matches($value)) {
+            return new Err(new TransformValueException(type: 'numeric', value: $value));
+        }
+
+        return Ok(num()->coerce($value));
+    }
 }

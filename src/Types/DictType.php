@@ -88,4 +88,32 @@ class DictType implements Type
 
         return implode(', ', $parts);
     }
+
+    public static function tag(): string
+    {
+        return 'dict';
+    }
+
+    public function toArgs(): array
+    {
+        return [$this->type];
+    }
+
+    public function encode(mixed $value): mixed
+    {
+        return array_map(fn(mixed $item) => $this->type->encode($item), $value);
+    }
+
+    public function decode(mixed $value): Result
+    {
+        if (! is_array($value)) {
+            return new Err(new TransformValueException(
+                type: 'dict',
+                value: $value,
+            ));
+        }
+
+        return Result::collect(map($value, fn(mixed $item) => $this->type->decode($item)))
+            ->map(fn(array $items) => array_combine(array_keys($value), $items));
+    }
 }
