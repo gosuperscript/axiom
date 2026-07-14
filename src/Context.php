@@ -28,6 +28,9 @@ final class Context
     /** @var array<string, Result<Option<mixed>, Throwable>> */
     private array $symbolMemo = [];
 
+    /** @var array<string, true> */
+    private array $resolvingSymbols = [];
+
     private ?OperatorOverloader $operators = null;
 
     private ?UnaryOverloader $unaryOperators = null;
@@ -70,5 +73,30 @@ final class Context
     public function memoizeSymbol(string $key, Result $result): void
     {
         $this->symbolMemo[$key] = $result;
+    }
+
+    /**
+     * The runtime backstop for definition cycles: the memo alone cannot
+     * break one (it is written only after resolution completes), so a
+     * symbol marks itself in-progress before its definition is followed.
+     * Re-entry means the definition graph is cyclic — a named error, where
+     * unguarded recursion would run unbounded.
+     *
+     * @return bool false when the symbol is already being resolved
+     */
+    public function beginSymbolResolution(string $key): bool
+    {
+        if (isset($this->resolvingSymbols[$key])) {
+            return false;
+        }
+
+        $this->resolvingSymbols[$key] = true;
+
+        return true;
+    }
+
+    public function endSymbolResolution(string $key): void
+    {
+        unset($this->resolvingSymbols[$key]);
     }
 }

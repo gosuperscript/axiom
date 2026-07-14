@@ -132,12 +132,24 @@ final readonly class Expression
     /**
      * What does this expression return? Inferred through the dialect's own
      * stacks over the same Definitions the evaluator walks, with declared
-     * inputs as the environment's leaves.
+     * inputs as the environment's leaves. The definition graph must be
+     * well-founded first — a cyclic definition would recurse without
+     * terminating at runtime, and that is a graph property declarations can
+     * never repair (see DefinitionGraph).
      *
      * @return Result<Type, TypeMismatch>
      */
     public function infer(): Result
     {
+        $cycles = DefinitionGraph::cycles($this->definitions);
+
+        if ($cycles !== []) {
+            return Err(new TypeMismatch(
+                'The definition graph is not well-founded; evaluation would recurse without terminating.',
+                $cycles,
+            ));
+        }
+
         return $this->inference()->infer($this->source, $this->environment());
     }
 

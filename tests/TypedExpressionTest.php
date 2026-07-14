@@ -317,6 +317,47 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
+    public function cyclic_definitions_are_a_compile_diagnostic(): void
+    {
+        // Termination is a graph property of the Definitions alone — no
+        // declaration can repair it, because the runtime follows definition
+        // edges whenever a binding is absent.
+        $expression = new Expression(
+            source: new SymbolSource('a'),
+            resolver: $this->resolver(),
+            definitions: new Definitions([
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $result = $expression->infer();
+
+        $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function cyclic_definitions_err_at_runtime_instead_of_recursing(): void
+    {
+        // The backstop for hosts that never run check(): re-entrant symbol
+        // resolution is a named error, not unbounded recursion.
+        $expression = new Expression(
+            source: new SymbolSource('a'),
+            resolver: $this->resolver(),
+            definitions: new Definitions([
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $result = $expression();
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('Cyclic symbol definition [a]', $result->unwrapErr()->getMessage());
+    }
+
+    #[Test]
     public function extensions_contribute_rules_and_specializations_win_ties(): void
     {
         $absenceAsZero = new class implements OperatorOverloader {

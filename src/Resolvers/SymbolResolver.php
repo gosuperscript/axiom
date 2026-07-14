@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Resolvers;
 
+use RuntimeException;
 use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
+use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
@@ -46,9 +48,18 @@ final readonly class SymbolResolver implements Resolver
             return $context->getMemoizedSymbol($key);
         }
 
+        if (!$context->beginSymbolResolution($key)) {
+            return Err(new RuntimeException(sprintf(
+                'Cyclic symbol definition [%s]; the definition graph must be well-founded. Running check() reports the full cycle statically.',
+                $key,
+            )));
+        }
+
         $result = $context->definitions->get($source->name, $source->namespace)
             ->andThen(fn(Source $definition) => $this->resolver->resolve($definition, $context)->transpose())
             ->transpose();
+
+        $context->endSymbolResolution($key);
 
         $context->memoizeSymbol($key, $result);
 
