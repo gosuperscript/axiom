@@ -41,13 +41,16 @@ use Superscript\Axiom\Types\UnknownType;
  *
  * For every overloader and a specimen matrix of typed values:
  *
- * - R1 (soundness): if typeOf certifies Ok(T), every specimen pair the rule
- *   claims and successfully evaluates must produce a value inhabiting T.
- *   Evaluation may still Err on value-dependent partiality — division by
- *   zero is the canonical case; certification promises the type of success,
- *   not totality. (Inhabitance is vacuous when T is Unknown; the whole law
- *   is skipped when an operand type is Unknown — gradual admission is
- *   deliberately unsound.)
+ * - R1 (soundness, total): if typeOf certifies Ok(T), EVERY specimen pair of
+ *   the certified operand types must be claimed by supportsOverloading — an
+ *   unclaimed specimen is a failure, never a skip; the filter reading of
+ *   this law was the loophole that let certified crashes ship — and every
+ *   claimed pair that evaluates successfully must produce a value
+ *   inhabiting T. Evaluation may still Err on value-dependent partiality —
+ *   division by zero is the canonical case; certification promises claiming
+ *   and the type of success. (Inhabitance is vacuous when T is Unknown; the
+ *   whole law is skipped when an operand type is Unknown — gradual
+ *   admission is deliberately unsound.)
  * - R2 (anti-shadowing honesty): if the rule claims EVERY specimen pair of a
  *   type pair but typeOf refuses it, the rule is hiding runtime semantics
  *   from the checker — unless the refusal is marked dead (the runtime
@@ -86,9 +89,50 @@ final class AgreementHarnessTest extends TestCase
             'List<String>' => [new ListType(new StringType()), [['a', 'b'], []]],
             'List<Number>' => [new ListType(new NumberType()), [[1, 2], []]],
             'Dict<Number>' => [new DictType(new NumberType()), [['a' => 1]]],
-            // Objects deliberately excluded: Unknown is the sanctioned hole.
+            // The specimens partial claims hide behind: an opaque (object
+            // values no core rule claims) and a union with one claimed and
+            // one unclaimed branch. R1's totality reading needs both.
+            'Opaque<thing>' => [self::opaqueThing(), [new \stdClass(), (object) ['id' => 1]]],
+            'Number | Dict<Number>' => [new UnionType(new NumberType(), new DictType(new NumberType())), [5, ['a' => 1]]],
             'Unknown' => [new UnknownType(), [true, 5, 'a', null, ['a']]],
         ];
+    }
+
+    /**
+     * A host-owned opaque domain type, the way the docs prescribe one: a
+     * real membership check, an OpaqueShape projection. Core's OpaqueType
+     * is a fail-closed reification artifact and would refuse the specimens.
+     */
+    private static function opaqueThing(): Type
+    {
+        return new class implements Type {
+            public function assert(mixed $value): \Superscript\Monads\Result\Result
+            {
+                return $value instanceof \stdClass
+                    ? \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some($value))
+                    : \Superscript\Monads\Result\Err(new \InvalidArgumentException('Not a thing.'));
+            }
+
+            public function coerce(mixed $value): \Superscript\Monads\Result\Result
+            {
+                return $this->assert($value);
+            }
+
+            public function compare(mixed $a, mixed $b): bool
+            {
+                return $a === $b;
+            }
+
+            public function format(mixed $value): string
+            {
+                return 'thing';
+            }
+
+            public function shape(): \Superscript\Axiom\Types\Shapes\Shape
+            {
+                return new \Superscript\Axiom\Types\Shapes\OpaqueShape('thing');
+            }
+        };
     }
 
     private const binaryOperators = [
@@ -156,6 +200,17 @@ final class AgreementHarnessTest extends TestCase
 
                     if ($verdict->isOk() && !$gradual) {
                         $returnType = $verdict->unwrap();
+
+                        $this->assertSame(
+                            0,
+                            $unclaimed,
+                            sprintf(
+                                'R1: %s is certified %s, but %d specimen pair(s) of the certified operand types are unclaimed by the runtime — the verdict is not total, and an unclaimed value crashes with "no overloader found"',
+                                $context,
+                                TypeDescriber::describe($returnType),
+                                $unclaimed,
+                            ),
+                        );
 
                         foreach ($claimed as [$left, $right]) {
                             $result = $rule->evaluate($left, $right, $operator);
@@ -249,6 +304,16 @@ final class AgreementHarnessTest extends TestCase
 
                 if ($verdict->isOk() && !$gradual) {
                     $returnType = $verdict->unwrap();
+
+                    $this->assertCount(
+                        count($values),
+                        $claimed,
+                        sprintf(
+                            'R1: %s is certified %s, but some specimen values of the certified operand type are unclaimed by the runtime — the verdict is not total',
+                            $context,
+                            TypeDescriber::describe($returnType),
+                        ),
+                    );
 
                     foreach ($claimed as $value) {
                         $result = $rule->evaluate($value, $operator);

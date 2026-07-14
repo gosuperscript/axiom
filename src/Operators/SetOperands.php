@@ -8,9 +8,11 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\Shapes\DictShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
+use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
 use Superscript\Axiom\Types\Shapes\Shape;
+use Superscript\Axiom\Types\Shapes\UnionShape;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -76,12 +78,23 @@ final class SetOperands
     /**
      * The element judgment for a side that may be a scalar, a list of
      * scalars, or absent (Option stripped — the runtime filters nulls).
-     * Returns null when the side is not element-shaped (dicts, records).
+     * Returns null when the side is not element-shaped: dicts and records
+     * (the runtime claims only scalars, null, and lists) and opaques
+     * (objects — never claimed; membership over a domain type belongs to
+     * the rule that owns it).
      */
     public static function elements(Type $operand): ?Shape
     {
-        $shape = $operand->shape();
+        return self::elementShape($operand->shape());
+    }
 
+    /**
+     * Universal over union members — one supported branch certifies
+     * nothing: every runtime value of the operand must be claimed, so a
+     * union is element-shaped only when every member is.
+     */
+    private static function elementShape(Shape $shape): ?Shape
+    {
         if ($shape instanceof OptionShape) {
             $shape = $shape->inner;
         }
@@ -90,7 +103,23 @@ final class SetOperands
             $shape = $shape->element;
         }
 
-        if ($shape instanceof DictShape || $shape instanceof RecordShape) {
+        if ($shape instanceof UnionShape) {
+            $members = [];
+
+            foreach ($shape->members as $member) {
+                $judged = self::elementShape($member);
+
+                if ($judged === null) {
+                    return null;
+                }
+
+                $members[] = $judged;
+            }
+
+            return UnionShape::of(...$members);
+        }
+
+        if ($shape instanceof DictShape || $shape instanceof RecordShape || $shape instanceof OpaqueShape) {
             return null;
         }
 

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\Shapes\OpaqueShape;
+use Superscript\Axiom\Types\Shapes\Shape;
+use Superscript\Axiom\Types\Shapes\ShapeDomain;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -73,10 +76,13 @@ final readonly class ComparisonOverloader implements OperatorOverloader
     }
 
     /**
-     * Equality requires the operand types to overlap — a comparison that can
-     * never hold is dead code, not a boolean. Absence is tolerated: options
-     * always overlap, and equality against the null literal is the emptiness
-     * test. Ordering requires a defined order on both present operand types
+     * Equality requires both operand types to lie within this rule's claimed
+     * domain (scalar/null/array values — no objects, whose equality belongs
+     * to the rule that owns the type; certifying them here is a certified
+     * crash) and the types to overlap — a comparison that can never hold is
+     * dead code, not a boolean. Absence is tolerated: options always
+     * overlap, and equality against the null literal is the emptiness test.
+     * Ordering requires a defined order on both present operand types
      * (Unknown tolerated), and needs no overlap: ranking distinct numbers is
      * the point.
      *
@@ -85,6 +91,20 @@ final readonly class ComparisonOverloader implements OperatorOverloader
     public function typeOf(string $operator, Type $left, Type $right): Result
     {
         if (in_array($operator, self::equalityOperators)) {
+            // Totality: Ok certifies EVERY value of the operand types, so a
+            // type with object inhabitants — the values isComparable()
+            // refuses — is unsupported here, universally over union members.
+            foreach (['left' => $left, 'right' => $right] as $side => $operand) {
+                if (!ShapeDomain::all($operand->shape(), fn(Shape $leaf) => !$leaf instanceof OpaqueShape)) {
+                    return Err(new TypeMismatch(sprintf(
+                        '[%s] does not claim the %s operand: %s has object values, and object equality belongs to the rule that owns the type.',
+                        $operator,
+                        $side,
+                        TypeDescriber::describe($operand),
+                    )));
+                }
+            }
+
             $negated = in_array($operator, ['!=', '!==']);
 
             return TypeRelations::overlaps($left, $right)
