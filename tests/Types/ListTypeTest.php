@@ -60,7 +60,20 @@ class ListTypeTest extends TestCase
         return [
             [new NumberType(), [1, 2, 3], [1, 2, 3]],
             [new StringType(), ['a', 'b', 'c'], ['a', 'b', 'c']],
+            [new NumberType(), [], []],
         ];
+    }
+
+    #[Test]
+    public function assert_rejects_an_associative_array_instead_of_reindexing_it(): void
+    {
+        // Strict membership: asserting never converts. Reindexing an
+        // associative array is coercion, and signatures dispatch on assert —
+        // a claim that converts would claim values outside the type.
+        $type = new ListType(new NumberType());
+
+        $this->assertTrue($type->assert(['x' => 1])->isErr());
+        $this->assertTrue($type->assert([1 => 'a', 0 => 'b'])->isErr());
     }
 
     #[Test]

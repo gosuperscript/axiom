@@ -60,8 +60,18 @@ class DictTypeTest extends TestCase
         return [
             [new NumberType(), ['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 3]],
             [new StringType(), ['x' => 'hello', 'y' => 'world'], ['x' => 'hello', 'y' => 'world']],
+            // The empty array inhabits both List and Dict — PHP has one
+            // value where the algebra has two types.
             [new NumberType(), [], []],
         ];
+    }
+
+    #[Test]
+    public function assert_rejects_a_non_empty_list_because_a_list_is_not_a_string_keyed_map(): void
+    {
+        $type = new DictType(new NumberType());
+
+        $this->assertTrue($type->assert([1, 2, 3])->isErr());
     }
 
     #[Test]
