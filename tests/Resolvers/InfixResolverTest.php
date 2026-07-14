@@ -29,6 +29,7 @@ use Superscript\Axiom\Sources\StaticSource;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 class InfixResolverTest extends TestCase
 {
     #[Test]

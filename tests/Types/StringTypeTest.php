@@ -59,8 +59,8 @@ class StringTypeTest extends TestCase
     {
         return [
             ['hello', 'hello'],
-            ['', null],
-            ['null', null],
+            ['', ''],
+            ['null', 'null'],
         ];
     }
 

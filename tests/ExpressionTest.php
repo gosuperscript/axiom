@@ -40,6 +40,7 @@ use Superscript\Monads\Result\Result;
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(DefaultOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(NullOverloader::class)]
 final class ExpressionTest extends TestCase

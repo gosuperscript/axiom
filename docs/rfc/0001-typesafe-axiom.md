@@ -257,9 +257,9 @@ final readonly class TypeInference
 
 #### The environment walks the symbol graph
 
-In the engine, a symbol binds to another **`Source`** (`SymbolRegistry` is `array<string, Source>`), not to a value — symbols are derived expressions. A flat pre-seeded type map would force someone to hand-declare the type of every derived symbol: the mirror again. Instead `TypeEnvironment` mirrors `SymbolResolver` structurally:
+In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw values) or by resolving the **`Source`** it names in `Definitions` — defined symbols are derived expressions. A flat pre-seeded type map would force someone to hand-declare the type of every derived symbol: the mirror again. Instead `TypeEnvironment` mirrors `SymbolResolver` structurally — declarations give the types of bindings and take precedence, exactly as bindings shadow definitions at runtime:
 
-- A symbol's type = `infer()` of the `Source` it's bound to in the **same `SymbolRegistry` the evaluator will use** — one registry, both semantics, same principle as the overloader stack.
+- A defined symbol's type = `infer()` of the `Source` it names in the **same `Definitions` the evaluator will use** — one registry, both semantics, same principle as the overloader stack.
 - **Declared types terminate recursion**: a host-declared input type (`turnover: Money<GBP>`) enters as a declared leaf; a host `TypedSource` terminates via `returnType()`; `StaticSource` terminates via the literal registry.
 - **Memoized**, same key scheme as the resolver (`namespace.name`).
 - **Cycle detection**: the checker holds an in-progress set and reports "cyclic symbol definition: a → b → a" as a compile diagnostic — a bug class the runtime currently cannot even survive (its memo is written only after resolution completes), caught statically for free.
@@ -309,7 +309,7 @@ Literal-first inference and value-set `Option` semantics dissolve the bidirectio
 
 There is no compiler in the loop — hosts hold runtime-AST programs and call the API directly:
 
-- The host seeds a `TypeEnvironment` with its declared input types (programmatically — exactly what the downstream production layer does today) over the same `SymbolRegistry` the evaluator uses.
+- The host seeds a `TypeEnvironment` with its declared input types (programmatically — exactly what the downstream production layer does today) — the static face of its `Bindings` — over the same `Definitions` the evaluator uses.
 - `infer(program, env)` answers "what does this derived value return?"; `check(condition, Boolean, env)` answers "is this gate boolean?"; a failed relation carries the `TypeMismatch` cause chain, rendered via `TypeDescriber`.
 - **Corpus sweeps**: to migrate onto the strict runtime, a host runs `check`/`infer` across its stored programs and triages the mismatches — non-exhaustive matches, non-boolean negations, dead comparisons all surface before any evaluation happens. The sweep tool for the runtime strictness is this API, not an authoring-surface feature.
 - Statically-impossible explicit coercions (`TypeDefinition` whose declared type is disjoint from its source's inferred type under `overlaps`) surface in the same sweep.
@@ -364,7 +364,7 @@ If a textual authoring surface is ever built over this engine, it builds on laye
 ## Drift guarantees
 
 1. **Co-location** — `evaluate` and `typeOf` in one class: a semantics change and its typing rule are one diff, one review. This now covers unary operators too; there are no operator rules outside the contract.
-2. **One composed list** — evaluator and inference consume the same managers; miscomposition is unrepresentable. The environment extends the same principle to symbols: one `SymbolRegistry`, both semantics.
+2. **One composed list** — evaluator and inference consume the same managers; miscomposition is unrepresentable. The environment extends the same principle to symbols: one `Definitions`, both semantics.
 3. **Agreement harness, bidirectional and cross-package** — a generative suite in Axiom checking two laws for every overloader against a specimen matrix of typed values:
    - **L1, soundness**: if `typeOf` says `Ok(T)`, then every specimen value pair of those types is claimed by `supportsOverloading`, `evaluate` succeeds on it, and the result inhabits `T`. (Skipped where an operand type is `Unknown` — gradual admission is deliberately unsound — and vacuous when `T` is `Unknown`.)
    - **L2, anti-shadowing**: if every specimen value pair of a type pair is claimed by the rule, then `typeOf` must certify it — a rule that runtime-owns values it statically refuses is hiding semantics from the checker. Exempt: refusals marked `dead` (the runtime tolerates dead tests; the checker still flags them) and the degenerate `NullOverloader` (documented in the class).

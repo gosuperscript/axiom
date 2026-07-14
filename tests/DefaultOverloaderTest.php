@@ -8,6 +8,7 @@ use Generator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Superscript\Axiom\Operators\BinaryOverloader;
@@ -20,6 +21,13 @@ use Superscript\Axiom\Operators\IntersectsOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
+#[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[CoversClass(BinaryOverloader::class)]
 #[CoversClass(ComparisonOverloader::class)]
 #[CoversClass(HasOverloader::class)]
@@ -62,6 +70,9 @@ class DefaultOverloaderTest extends TestCase
         yield [2, '<=', 2, true];
         yield [3, '<=', 2, false];
 
+        yield [1, '<', 2.5, true];
+        yield [2.5, '>', 1, true];
+
         yield [1, '=', 1, true];
         yield [1, '=', 2, false];
         yield [1, '!=', 2, true];
@@ -71,6 +82,13 @@ class DefaultOverloaderTest extends TestCase
         yield [1, '===', 1, true];
         yield [1, '===', '1', false];
         yield [1, '!==', 2, true];
+
+        yield [null, '==', null, true];
+        yield [null, '==', 'a', false];
+        yield ['a', '!=', null, true];
+        yield ['a', '==', 'a', true];
+        yield [['a', 'b'], '==', ['a', 'b'], true];
+        yield [['a', ['b']], '==', ['a', ['c']], false];
 
         yield [['a', 'b'], 'has', 'a', true];
         yield [['a', 'b'], 'has', 'c', false];
@@ -137,6 +155,67 @@ class DefaultOverloaderTest extends TestCase
         $this->assertFalse($overloader->supportsOverloading(1, new stdClass(), '+'));
         $this->assertFalse($overloader->supportsOverloading(new stdClass(), 1, '+'));
         $this->assertFalse($overloader->supportsOverloading(new stdClass(), null, '+'));
+    }
+
+    /**
+     * Rules must claim only values they own: no rule may shadow a dialect's
+     * domain rules by claiming values it would evaluate as PHP garbage.
+     */
+    #[Test]
+    #[DataProvider('dishonestClaims')]
+    public function it_refuses_values_no_rule_owns(mixed $left, string $operator, mixed $right): void
+    {
+        $overloader = new DefaultOverloader();
+        $this->assertFalse($overloader->supportsOverloading(left: $left, right: $right, operator: $operator));
+    }
+
+    public static function dishonestClaims(): Generator
+    {
+        // Equality on objects belongs to the overloader that owns the type.
+        yield [new stdClass(), '==', new stdClass()];
+        yield [new stdClass(), '===', new stdClass()];
+        yield [1, '!=', new stdClass()];
+        yield [[new stdClass()], '==', []];
+
+        // Ordering is defined for numbers only.
+        yield ['a', '<', 'b'];
+        yield ['2024-01-01', '<', '2024-06-01'];
+        yield [true, '<', false];
+        yield ['5', '<', 6];
+        yield [1, '<', '2'];
+        yield [null, '<', 1];
+        yield [1, '<', null];
+        yield [new stdClass(), '>', new stdClass()];
+
+        // Arithmetic requires real numbers, not numeric strings.
+        yield ['5', '+', '3'];
+        yield ['5', '+', 3];
+        yield [5, '*', '3'];
+
+        // Set operators require scalar/null/list operands.
+        yield [['a'], 'has', new stdClass()];
+        yield [new stdClass(), 'has', 'a'];
+        yield [new stdClass(), 'in', ['a']];
+        yield [['a'], 'in', new stdClass()];
+        yield [new stdClass(), 'intersects', ['a']];
+        yield [['a'], 'intersects', new stdClass()];
+    }
+
+    #[Test]
+    public function it_composes_the_typed_dialect(): void
+    {
+        $overloader = new DefaultOverloader();
+
+        $this->assertTrue($overloader->handles('+'));
+        $this->assertTrue($overloader->handles('has'));
+        $this->assertFalse($overloader->handles('coalesce'));
+
+        $number = new \Superscript\Axiom\Types\NumberType();
+        $verdict = $overloader->typeOf('+', $number, $number);
+        $this->assertInstanceOf(\Superscript\Axiom\Types\NumberType::class, $verdict->unwrap());
+
+        $refused = $overloader->typeOf('&&', $number, $number);
+        $this->assertTrue($refused->isErr());
     }
 
     #[Test]

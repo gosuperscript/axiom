@@ -63,6 +63,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 class MatchResolverTest extends TestCase
 {
     private function makeResolver(?StaticResolver $staticResolver = null): MatchResolver
@@ -126,7 +127,7 @@ class MatchResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_none_when_no_arm_matches_and_no_wildcard(): void
+    public function it_returns_err_when_no_arm_matches_and_no_wildcard(): void
     {
         $resolver = $this->makeResolver();
 
@@ -138,7 +139,11 @@ class MatchResolverTest extends TestCase
             ],
         );
 
-        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
+        $result = $resolver->resolve($source, new Context());
+
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(RuntimeException::class, $result->unwrapErr());
+        $this->assertStringContainsString('No match arm matched', $result->unwrapErr()->getMessage());
     }
 
     #[Test]
@@ -560,7 +565,7 @@ class MatchResolverTest extends TestCase
     }
 
     #[Test]
-    public function empty_arms_list_returns_none(): void
+    public function empty_arms_list_returns_err(): void
     {
         $resolver = $this->makeResolver();
 
@@ -569,7 +574,7 @@ class MatchResolverTest extends TestCase
             arms: [],
         );
 
-        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->isNone());
+        $this->assertTrue($resolver->resolve($source, new Context())->isErr());
     }
 
     #[Test]

@@ -54,10 +54,6 @@ class DictType implements Type
             ));
         }
 
-        if (empty($value)) {
-            return new Ok(None());
-        }
-
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
                 default: Err(new InvalidArgumentException('Dict item can not be a None')),
@@ -105,5 +101,10 @@ class DictType implements Type
         $parts = Arr::map($value, fn(mixed $item, string|int $key) => sprintf("%s: %s", $key, $this->type->format($item)));
 
         return implode(', ', $parts);
+    }
+
+    public function shape(): Shapes\Shape
+    {
+        return new Shapes\DictShape($this->type->shape());
     }
 }

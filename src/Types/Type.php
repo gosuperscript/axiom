@@ -11,7 +11,7 @@ use Throwable;
 /**
  * @template T = mixed
  */
-interface Type
+interface Type extends Shaped
 {
     /**
      * Assert that a value is of type T and return it wrapped in Option

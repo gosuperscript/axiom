@@ -60,7 +60,17 @@ class DictTypeTest extends TestCase
         return [
             [new NumberType(), ['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 3]],
             [new StringType(), ['x' => 'hello', 'y' => 'world'], ['x' => 'hello', 'y' => 'world']],
+            [new NumberType(), [], []],
         ];
+    }
+
+    #[Test]
+    public function it_coerces_an_empty_dict_to_absence(): void
+    {
+        $type = new DictType(new NumberType());
+        $result = $type->coerce([]);
+        $this->assertTrue($result->isOk());
+        $this->assertTrue($result->unwrap()->isNone());
     }
 
     #[Test]

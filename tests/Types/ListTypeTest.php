@@ -22,6 +22,8 @@ use function Superscript\Monads\Option\None;
 #[CoversClass(TransformValueException::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\ListShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 class ListTypeTest extends TestCase
 {
     #[DataProvider('coerceProvider')]
@@ -108,5 +110,48 @@ class ListTypeTest extends TestCase
         return [
             [[[1, 2], [3, 4]], '1, 2, 3, 4'],
         ];
+    }
+
+    #[Test]
+    public function it_enforces_a_minimum_length(): void
+    {
+        $type = new ListType(new NumberType(), min: 2);
+
+        $this->assertTrue($type->assert([1, 2])->isOk());
+        $result = $type->assert([1]);
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('requires at least 2', $result->unwrapErr()->getMessage());
+
+        $this->assertTrue($type->coerce(['1'])->isErr());
+    }
+
+    #[Test]
+    public function it_enforces_a_maximum_length(): void
+    {
+        $type = new ListType(new NumberType(), max: 2);
+
+        $this->assertTrue($type->assert([1, 2])->isOk());
+        $result = $type->assert([1, 2, 3]);
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('allows at most 2', $result->unwrapErr()->getMessage());
+
+        $this->assertTrue($type->coerce(['1', '2', '3'])->isErr());
+    }
+
+    #[Test]
+    public function it_projects_to_a_list_shape_with_bounds(): void
+    {
+        $unbounded = (new ListType(new NumberType()))->shape();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Types\Shapes\ListShape::class, $unbounded);
+        $this->assertSame(0, $unbounded->min);
+        $this->assertNull($unbounded->max);
+
+        $bounded = (new ListType(new NumberType(), min: 1, max: 3))->shape();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Types\Shapes\ListShape::class, $bounded);
+        $this->assertSame(1, $bounded->min);
+        $this->assertSame(3, $bounded->max);
+        $this->assertInstanceOf(\Superscript\Axiom\Types\Shapes\NumberShape::class, $bounded->element);
     }
 }

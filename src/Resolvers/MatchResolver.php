@@ -14,9 +14,7 @@ use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
-use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * @implements Resolver<MatchExpression>
@@ -72,7 +70,7 @@ final readonly class MatchResolver implements Resolver
                 ));
         }
 
-        return Ok(None());
+        return Err(new RuntimeException('No match arm matched the subject; add a wildcard arm to handle unmatched values.'));
     }
 
     /**

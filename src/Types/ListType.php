@@ -26,6 +26,8 @@ class ListType implements Type
      */
     public function __construct(
         public Type $type,
+        public ?int $min = null,
+        public ?int $max = null,
     ) {}
 
     public function assert(mixed $value): Result
@@ -35,6 +37,10 @@ class ListType implements Type
                 type: 'list',
                 value: $value,
             ));
+        }
+
+        if ($outOfBounds = $this->checkBounds($value)) {
+            return new Err($outOfBounds);
         }
 
         return Result::collect(map($value, function (mixed $item) {
@@ -58,6 +64,10 @@ class ListType implements Type
             ));
         }
 
+        if ($outOfBounds = $this->checkBounds($value)) {
+            return new Err($outOfBounds);
+        }
+
         return Result::collect(map($value, function (mixed $item) {
             return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
                 default: Err(new InvalidArgumentException('List item can not be a None')),
@@ -77,5 +87,28 @@ class ListType implements Type
     public function format(mixed $value): string
     {
         return implode(', ', array_map(fn(mixed $item) => $this->type->format($item), $value));
+    }
+
+    public function shape(): Shapes\Shape
+    {
+        return new Shapes\ListShape($this->type->shape(), $this->min ?? 0, $this->max);
+    }
+
+    /**
+     * @param array<array-key, mixed> $value
+     */
+    private function checkBounds(array $value): ?InvalidArgumentException
+    {
+        $count = count($value);
+
+        if ($this->min !== null && $count < $this->min) {
+            return new InvalidArgumentException(sprintf('List has %d items but requires at least %d.', $count, $this->min));
+        }
+
+        if ($this->max !== null && $count > $this->max) {
+            return new InvalidArgumentException(sprintf('List has %d items but allows at most %d.', $count, $this->max));
+        }
+
+        return null;
     }
 }

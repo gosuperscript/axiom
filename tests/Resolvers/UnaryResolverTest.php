@@ -23,6 +23,9 @@ use Superscript\Axiom\Sources\UnaryExpression;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
 class UnaryResolverTest extends TestCase
 {
     #[Test]
@@ -74,27 +77,20 @@ class UnaryResolverTest extends TestCase
     }
 
     #[Test]
-    public function it_can_resolve_not_on_truthy_value(): void
+    public function it_returns_err_when_negating_a_non_boolean(): void
     {
         $resolver = new UnaryResolver(new StaticResolver());
-        $source = new UnaryExpression(
-            operator: 'not',
-            operand: new StaticSource(1),
-        );
 
-        $this->assertFalse($resolver->resolve($source, new Context())->unwrap()->unwrap());
-    }
+        foreach ([1, 0, 'hello'] as $input) {
+            foreach (['!', 'not'] as $operator) {
+                $source = new UnaryExpression(operator: $operator, operand: new StaticSource($input));
 
-    #[Test]
-    public function it_can_resolve_not_on_falsy_value(): void
-    {
-        $resolver = new UnaryResolver(new StaticResolver());
-        $source = new UnaryExpression(
-            operator: 'not',
-            operand: new StaticSource(0),
-        );
-
-        $this->assertTrue($resolver->resolve($source, new Context())->unwrap()->unwrap());
+                $this->assertTrue(
+                    $resolver->resolve($source, new Context())->isErr(),
+                    sprintf('%s should refuse non-boolean input: %s', $operator, var_export($input, true)),
+                );
+            }
+        }
     }
 
     #[Test]
@@ -102,7 +98,7 @@ class UnaryResolverTest extends TestCase
     {
         $resolver = new UnaryResolver(new StaticResolver());
 
-        foreach ([true, false, 1, 0, 'hello', ''] as $input) {
+        foreach ([true, false] as $input) {
             $bang = new UnaryExpression(operator: '!', operand: new StaticSource($input));
             $not = new UnaryExpression(operator: 'not', operand: new StaticSource($input));
 
@@ -124,5 +120,36 @@ class UnaryResolverTest extends TestCase
         );
 
         $this->assertTrue($resolver->resolve($source, new Context())->isErr());
+    }
+
+    #[Test]
+    public function a_dialect_can_inject_its_own_unary_overloader(): void
+    {
+        $doubling = new class implements \Superscript\Axiom\Operators\UnaryOverloader {
+            public function supportsOverloading(mixed $operand, string $operator): bool
+            {
+                return is_int($operand) && $operator === '!';
+            }
+
+            public function evaluate(mixed $operand, string $operator): \Superscript\Monads\Result\Result
+            {
+                return \Superscript\Monads\Result\Ok($operand * 2);
+            }
+
+            public function handles(string $operator): bool
+            {
+                return $operator === '!';
+            }
+
+            public function typeOf(string $operator, \Superscript\Axiom\Types\Type $operand): \Superscript\Monads\Result\Result
+            {
+                return \Superscript\Monads\Result\Ok(new \Superscript\Axiom\Types\NumberType());
+            }
+        };
+
+        $resolver = new UnaryResolver(new StaticResolver(), overloader: $doubling);
+        $source = new UnaryExpression(operator: '!', operand: new StaticSource(21));
+
+        $this->assertSame(42, $resolver->resolve($source, new Context())->unwrap()->unwrap());
     }
 }

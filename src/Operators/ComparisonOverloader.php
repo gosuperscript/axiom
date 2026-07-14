@@ -4,20 +4,51 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\Shapes\UnknownShape;
+use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeDescriber;
+use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\TypeOrder;
+use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
+
+use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 final readonly class ComparisonOverloader implements OperatorOverloader
 {
-    private const operators = ['=', '==', '===', '!=', '!==', '<', '<=', '>', '>='];
+    private const equalityOperators = ['=', '==', '===', '!=', '!=='];
+    private const orderingOperators = ['<', '<=', '>', '>='];
 
     public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
     {
-        return in_array($operator, self::operators);
+        if (in_array($operator, self::equalityOperators)) {
+            return $this->isComparable($left) && $this->isComparable($right);
+        }
+
+        if (in_array($operator, self::orderingOperators)) {
+            return (is_int($left) || is_float($left)) && (is_int($right) || is_float($right));
+        }
+
+        return false;
     }
 
     /**
-     * @param value-of<self::operators> $operator
+     * Equality is defined for scalars, null, and arrays of them — never for
+     * objects, whose equality belongs to the overloader that owns the type.
+     */
+    private function isComparable(mixed $value): bool
+    {
+        if (is_array($value)) {
+            return array_all($value, $this->isComparable(...));
+        }
+
+        return $value === null || is_scalar($value);
+    }
+
+    /**
+     * @param value-of<self::equalityOperators>|value-of<self::orderingOperators> $operator
      * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
@@ -32,5 +63,54 @@ final readonly class ComparisonOverloader implements OperatorOverloader
             '>' => $left > $right,
             '>=' => $left >= $right,
         });
+    }
+
+    public function handles(string $operator): bool
+    {
+        return in_array($operator, self::equalityOperators) || in_array($operator, self::orderingOperators);
+    }
+
+    /**
+     * Equality requires the operand types to overlap — a comparison that can
+     * never hold is dead code, not a boolean. Absence is tolerated: options
+     * always overlap, and equality against the null literal is the emptiness
+     * test. Ordering requires a defined order on both present operand types
+     * (Unknown tolerated), and needs no overlap: ranking distinct numbers is
+     * the point.
+     *
+     * @return Result<Type, TypeMismatch>
+     */
+    public function typeOf(string $operator, Type $left, Type $right): Result
+    {
+        if (in_array($operator, self::equalityOperators)) {
+            return TypeRelations::overlaps($left, $right)
+                ->map(fn() => new BooleanType())
+                ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
+                    sprintf('[%s] between %s and %s can never hold.', $operator, TypeDescriber::describe($left), TypeDescriber::describe($right)),
+                    [$cause],
+                    dead: true,
+                ));
+        }
+
+        if (!in_array($operator, self::orderingOperators)) {
+            return Err(new TypeMismatch(sprintf('Comparison does not handle [%s].', $operator)));
+        }
+
+        $causes = [];
+
+        foreach (['left' => $left, 'right' => $right] as $side => $operand) {
+            if (!$operand->shape() instanceof UnknownShape && !TypeOrder::hasDefinedOrder($operand)) {
+                $causes[] = new TypeMismatch(sprintf('The %s operand %s has no defined order.', $side, TypeDescriber::describe($operand)));
+            }
+        }
+
+        if ($causes !== []) {
+            return Err(new TypeMismatch(
+                sprintf('[%s] requires ordered operands; got %s and %s.', $operator, TypeDescriber::describe($left), TypeDescriber::describe($right)),
+                $causes,
+            ));
+        }
+
+        return Ok(new BooleanType());
     }
 }

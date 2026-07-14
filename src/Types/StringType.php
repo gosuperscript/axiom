@@ -24,11 +24,7 @@ class StringType implements Type
             return new Err(new TransformValueException(type: 'string', value: $value));
         }
 
-        return new Ok(match (true) {
-            $value === 'null' => None(),
-            strlen($value) === 0 => None(),
-            default => Some($value),
-        });
+        return new Ok(Some($value));
     }
 
     public function coerce(mixed $value): Result
@@ -53,5 +49,10 @@ class StringType implements Type
     public function format(mixed $value): string
     {
         return strval($value);
+    }
+
+    public function shape(): Shapes\Shape
+    {
+        return new Shapes\StringShape();
     }
 }
