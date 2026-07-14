@@ -2,7 +2,7 @@
 
 - **Status**: Accepted
 - **Author**: Robert van Steen
-- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved; revised again 2026-07-14 after adversarial review — see §Resolved questions, second round)
+- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved; revised again 2026-07-14 after adversarial review — see §Resolved questions, second round; extension-DX round added the signature builder — see §Resolved questions, item 18)
 
 ## Summary
 
@@ -452,3 +452,7 @@ Second round, resolved after the adversarial review of the first implementation:
 15. **Typed bindings** → declarations gain a runtime face: the boundary coerces/asserts declared inputs pre-evaluation, aggregated and named; shadowing a definition requires a declaration; declared∧defined symbols get an agreement check. Typed value objects at the call site were rejected (types on the wrong side of time). (§How hosts consume)
 16. **Bindings shape** → descent, not flattening: arrays bind whole; namespaced lookup descends; a namespace is the record view of a binding, statically and dynamically. (§How hosts consume)
 17. **Harness completeness** → L3, the dead law: `dead` refusals are verified constant-false-or-refused over specimens. (§Drift guarantees)
+
+Third round, resolved in the extension-DX review:
+
+18. **Extension DX — the signature builder** → the four-method overloader contract states operand ownership twice, in two vocabularies (values in `supportsOverloading`, types in `typeOf`), then tests that the two statements didn't diverge — treating the symptom. The front door for extensions is now a declarative row: `Operator::infix('-')->signature(new DateType(), new PeriodType())->returns(new DateType())->evaluate(fn (Date $d, Period $p) => $d->minus($p))`, staged (each step a distinct value; the final `evaluate()` *is* the compiled rule — no `build()` to forget), compiling to an ordinary `InfixSignature`/`PrefixSignature` rule so `Dialect`/`OverloaderManager` composition needs no new machinery. Both faces derive from one declaration — the runtime claim is strict membership (`assert`; claiming never converts), the static verdict admissibility (`admits`) — so the honesty contract and the harness laws hold *by construction*. Closure contract: plain values auto-`Ok`, a returned `Result` passes through (value-dependent partiality), throws propagate (a claimed-value throw is an extension defect, not an evaluation result). `prefix` rejects `Option` operands loudly (absence never reaches a unary rule). Return types are **fixed, not computed**: `returns(callable)` was rejected because a callable that refuses (money's cross-currency case) while `assert`-based claiming still owns the value pair violates anti-shadowing, and repairing that would need value-precise typing through the literal registry at dispatch time — two dispatch modes in one builder. Parameterized families (money) enumerate their host-finite parameter space instead, one row per parameter, with cross-parameter pairs matching no row — refused identically at both faces. Rules that aren't rows (overlap-based verdicts, dead findings, computed return types over unbounded spaces, absence-tolerant claims) keep the raw `OperatorOverloader`/`UnaryOverloader` contract as the documented escape hatch. (§2, §How hosts consume)

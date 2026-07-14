@@ -18,6 +18,7 @@ use Superscript\Axiom\Operators\LogicalOverloader;
 use Superscript\Axiom\Operators\NegateOverloader;
 use Superscript\Axiom\Operators\NotOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
+use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\UnaryOverloader;
 use Superscript\Axiom\Operators\UnaryOverloaderManager;
@@ -112,6 +113,16 @@ final class AgreementHarnessTest extends TestCase
         yield 'InOverloader' => [new InOverloader(), false];
         yield 'IntersectsOverloader' => [new IntersectsOverloader(), false];
         yield 'DefaultOverloader (the composed dialect)' => [new DefaultOverloader(), true];
+
+        // A builder-generated row: the laws are claimed to hold by
+        // construction — this entry is that claim, verified.
+        yield 'InfixSignature (builder-generated string concatenation)' => [
+            Operator::infix('+')
+                ->signature(new StringType(), new StringType())
+                ->returns(new StringType())
+                ->evaluate(fn(string $a, string $b) => $a . $b),
+            false,
+        ];
     }
 
     #[Test]
@@ -210,6 +221,14 @@ final class AgreementHarnessTest extends TestCase
         yield 'NotOverloader' => [new NotOverloader(), false];
         yield 'NegateOverloader' => [new NegateOverloader(), false];
         yield 'UnaryOverloaderManager (the composed dialect)' => [UnaryOverloaderManager::default(), false];
+
+        yield 'PrefixSignature (builder-generated negation)' => [
+            Operator::prefix('-')
+                ->signature(new NumberType())
+                ->returns(new NumberType())
+                ->evaluate(fn(int|float $n) => -$n),
+            false,
+        ];
     }
 
     #[Test]

@@ -432,12 +432,23 @@ $expression->withInspector($inspector)(['radius' => 5]);
 
 ## Extending Axiom
 
-Axiom is designed to be extended from the outside — domain types, operators with their typing rules, host sources, and literal registrations all plug in through dedicated seams, without touching core. The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the short version:
+Axiom is designed to be extended from the outside — domain types, operators with their typing rules, host sources, and literal registrations all plug in through dedicated seams, without touching core. An operator is one declaration — a **signature** — from which both the runtime rule and its typing rule are generated, so they cannot drift:
+
+```php
+use Superscript\Axiom\Operators\Operator;
+
+Operator::infix('-')
+    ->signature(new DateType(), new PeriodType())
+    ->returns(new DateType())
+    ->evaluate(fn (Date $d, Period $p) => $d->minus($p));
+```
+
+The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the short version:
 
 | You want to… | Implement / use | Guide section |
 | --- | --- | --- |
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
-| Give operators new semantics | `OperatorOverloader` / `UnaryOverloader` — `evaluate()` **and** `typeOf()` in one class | Custom operators |
+| Give operators new semantics | `Operator::infix()` / `Operator::prefix()` signatures — or `OperatorOverloader` / `UnaryOverloader` by hand for relation-based verdicts | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
 | Add a data source the checker can see | `TypedSource` | Host sources |
 | Evaluate a new kind of `Source` | `Resolver` (stateless, reads from `Context`) | Custom resolvers |

@@ -112,97 +112,66 @@ final class EmailType implements Type
 
 ## Custom operators
 
-Operators are the centerpiece seam. A binary rule implements `OperatorOverloader`; a unary rule implements `UnaryOverloader`. Both have four obligations:
+Operators are the centerpiece seam, and the front door is one declaration per rule: a **signature** — a row in a dispatch table. Date arithmetic, complete:
 
 ```php
-interface OperatorOverloader
+use Superscript\Axiom\Operators\Operator;
+
+Operator::infix('-')
+    ->signature(new DateType(), new PeriodType())
+    ->returns(new DateType())
+    ->evaluate(fn (Date $d, Period $p) => $d->minus($p)),
+
+Operator::infix('-')
+    ->signature(new DateType(), new DateType())
+    ->returns(new PeriodType())
+    ->evaluate(fn (Date $a, Date $b) => $a->until($b)),
+
+Operator::prefix('abs')
+    ->signature(new NumberType())
+    ->returns(new NumberType())
+    ->evaluate(fn (int|float $n) => abs($n)),
+```
+
+One statement of the fact yields both semantic faces mechanically:
+
+- **Runtime dispatch** is strict membership on the declared operand types (their `assert`) — claiming never converts; conversion belongs to the boundary (`Coerce` nodes, typed bindings), never to dispatch. Your type's `assert` is now your dispatch predicate, so keep it cheap and total: it must `Err` on foreign values, never throw.
+- **The static verdict** is admissibility (`admits`) against the same declared types, with generated mismatch messages that read uniformly with core's: `[-] expects Date and Period; got Date and String.`
+
+Because both faces are projections of one declaration, they cannot drift — the agreement harness passes *by construction*, and the honesty and certification contracts of the low-level interface (§Advanced) are facts you never need to learn.
+
+The closure receives values both operand types asserted. Its contract:
+
+- A **plain return value** is the result — it is wrapped in `Ok` for you.
+- A **returned `Result` passes through** — the door for value-dependent partiality (division by zero, an overflowing add). Corollary: a closure cannot produce a literal `Result` as its evaluation *value*.
+- A **thrown exception propagates.** The claiming contract guarantees the closure only ever sees values it declared, so a throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
+
+The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the resolver short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
+
+### Parameterized families: enumerate
+
+A signature's return type is fixed. Rules whose typing is *parameterized* — money, where `Money<'GBP'> + Money<'GBP'> → Money<'GBP'>` but `Money<'GBP'> + Money<'USD'>` must be refused — are declared by **enumeration over the parameter space**, which is host-finite at composition time:
+
+```php
+final class MoneyExtension extends Extension
 {
-    // RUNTIME: which values does this rule own?
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool;
+    /** @param non-empty-list<string> $currencies the host's configured set */
+    public function __construct(private readonly array $currencies) {}
 
-    // RUNTIME: evaluate a claimed pair.
-    public function evaluate(mixed $left, mixed $right, string $operator): Result;
-
-    // STATIC: which operators does this rule type?
-    public function handles(string $operator): bool;
-
-    // STATIC: the return type for operands of these types.
-    public function typeOf(string $operator, Type $left, Type $right): Result;
+    public function operators(): array
+    {
+        return array_map(
+            fn (string $c) => Operator::infix('+')
+                ->signature(new MoneyType($c), new MoneyType($c))
+                ->returns(new MoneyType($c))
+                ->evaluate(fn (Money $a, Money $b) => $a->plus($b)),
+            $this->currencies,
+        );
+    }
 }
 ```
 
-### The honesty contract on `supportsOverloading`
-
-Claim **only values your rule owns**. Operator-only dispatch (`return $operator === '<'`) claims every value pair, shadows every rule listed after yours in the dialect, and hides semantics from the checker. Test the operands.
-
-### The certification contract on `typeOf`
-
-`Ok(T)` means: *this rule certifies these operand types — every value pair it claims evaluates to a `T`* (value-dependent partiality remains: division by zero errs, certified or not). `Err(TypeMismatch)` means the rule does not certify them, for one of two reasons you should distinguish:
-
-- **Unsupported** — values of these types fall outside your runtime claims. Plain `new TypeMismatch(...)`.
-- **Dead** — the runtime tolerates the operation but it is statically meaningless (a comparison that can never hold). Construct with `dead: true`; consumers render dead findings as probable author bugs rather than unsupported operations.
-
-Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
-
-- `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability plus the `Unknown` hole; pessimistic on unions. This is the judgment for operand positions, and it is how "refuses `Option`" falls out for free: `Option<Number>` is not assignable to a present `Number` slot.
-- `TypeRelations::overlaps($a, $b)` — could any value satisfy both? The judgment for equality and membership.
-- `TypeOrder::hasDefinedOrder($type)` — is ranking meaningful? (Number-only in core; your dialect can ship ordered domain types.)
-
-A date-arithmetic rule, complete:
-
-```php
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Types\Type;
-use Superscript\Axiom\Types\TypeDescriber;
-use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\TypeRelations;
-use Superscript\Monads\Result\Result;
-use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
-
-final readonly class DateArithmeticOverloader implements OperatorOverloader
-{
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
-    {
-        // Honesty: claim only the value pairs this rule owns.
-        return $operator === '-' && $left instanceof Date && ($right instanceof Period || $right instanceof Date);
-    }
-
-    public function evaluate(mixed $left, mixed $right, string $operator): Result
-    {
-        return Ok($right instanceof Period ? $left->minus($right) : $left->until($right));
-    }
-
-    public function handles(string $operator): bool
-    {
-        return $operator === '-';
-    }
-
-    public function typeOf(string $operator, Type $left, Type $right): Result
-    {
-        if (!$this->handles($operator)) {
-            return Err(new TypeMismatch('Date arithmetic does not handle [' . $operator . '].'));
-        }
-
-        $date = new DateType();
-
-        if (TypeRelations::admits($left, $date)->isErr()) {
-            return Err(new TypeMismatch(sprintf(
-                'Date [-] requires a present date on the left; got %s.', TypeDescriber::describe($left),
-            )));
-        }
-
-        // date − period → date; date − date → period
-        return match (true) {
-            TypeRelations::admits($right, new PeriodType())->isOk() => Ok($date),
-            TypeRelations::admits($right, $date)->isOk() => Ok(new PeriodType()),
-            default => Err(new TypeMismatch(sprintf(
-                'Date [-] accepts a period or a date on the right; got %s.', TypeDescriber::describe($right),
-            ))),
-        };
-    }
-}
-```
+This works because currency is part of the type's *value set*: `MoneyType('GBP')::assert` refuses a USD money. Same-currency pairs dispatch to their row; a cross-currency pair matches *no* row, so the checker reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and the runtime refuses identically. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
 
 ### Packaging it: the `Extension` and the `Dialect`
 
@@ -210,12 +179,28 @@ A package ships one `Extension` — the unit that carries everything above, cons
 
 ```php
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Operators\Operator;
 
 final class TimeExtension extends Extension
 {
-    public function operators(): array      { return [new DateArithmeticOverloader(), new DateComparisonOverloader()]; }
-    public function unaryOperators(): array { return []; }
-    public function literals(): array       { return [Date::class => fn(Date $d) => new DateType()]; }
+    public function operators(): array
+    {
+        return [
+            Operator::infix('-')
+                ->signature(new DateType(), new PeriodType())
+                ->returns(new DateType())
+                ->evaluate(fn (Date $d, Period $p) => $d->minus($p)),
+            Operator::infix('-')
+                ->signature(new DateType(), new DateType())
+                ->returns(new PeriodType())
+                ->evaluate(fn (Date $a, Date $b) => $a->until($b)),
+        ];
+    }
+
+    public function literals(): array
+    {
+        return [Date::class => fn(Date $d) => new DateType()];
+    }
 }
 ```
 
@@ -237,9 +222,52 @@ Composition rules worth knowing: extension rules **prepend** core's, so when two
 
 Because your `-` rule certifies `(Date, Period) → Date` while core's arithmetic refuses it, the checker takes your verdict; with `Unknown` operands both may certify with different types, and the honest composed answer is `Unknown`.
 
-One asymmetry to know: **absence never reaches a unary rule.** The resolver short-circuits an absent operand before any rule runs, so unary rules only see present values and optionality propagates structurally (`!Option<Boolean>` is `Option<Boolean>`). Binary rules, by contrast, see values as bound — a dialect that wants absence-as-zero arithmetic writes a binary rule whose `supportsOverloading` claims a `null` beside a number and whose `typeOf` admits `Option<Number>` operands.
-
 (You can still compose `OverloaderManager`/`UnaryOverloaderManager` stacks by hand and wire them into the resolver container yourself — the legacy path — but then keeping the checker's stacks identical is your discipline rather than the API's. Prefer the `Dialect`.)
+
+### Advanced: writing a rule by hand
+
+A signature is a row; some rules are not rows. Implement `OperatorOverloader` (binary) or `UnaryOverloader` directly when you need:
+
+- **Verdicts that are relations, not slots** — core's equality certifies operand types that *overlap*, something no fixed operand type expresses.
+- **Dead findings** — refusing an operation as *statically constant* (`dead: true`) so hosts can render it as a probable author bug rather than an unsupported operation.
+- **Return types computed from operand types** over an unbounded space (`List<T> ++ List<U> → List<T|U>`).
+- **Absence-tolerant claims** — a binary rule that wants absence-as-zero arithmetic claims a `null` beside a number in `supportsOverloading` and admits `Option<Number>` operands in `typeOf`. (Binary rules see values as bound; only unary rules are shielded from absence.)
+
+The four obligations:
+
+```php
+interface OperatorOverloader
+{
+    // RUNTIME: which values does this rule own?
+    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool;
+
+    // RUNTIME: evaluate a claimed pair.
+    public function evaluate(mixed $left, mixed $right, string $operator): Result;
+
+    // STATIC: which operators does this rule type?
+    public function handles(string $operator): bool;
+
+    // STATIC: the return type for operands of these types.
+    public function typeOf(string $operator, Type $left, Type $right): Result;
+}
+```
+
+Two contracts the builder was upholding for you now become yours to keep:
+
+**The honesty contract on `supportsOverloading`.** Claim **only values your rule owns**. Operator-only dispatch (`return $operator === '<'`) claims every value pair, shadows every rule listed after yours in the dialect, and hides semantics from the checker. Test the operands.
+
+**The certification contract on `typeOf`.** `Ok(T)` means: *this rule certifies these operand types — every value pair it claims evaluates to a `T`* (value-dependent partiality remains: division by zero errs, certified or not). `Err(TypeMismatch)` means the rule does not certify them, for one of two reasons you should distinguish:
+
+- **Unsupported** — values of these types fall outside your runtime claims. Plain `new TypeMismatch(...)`.
+- **Dead** — the runtime tolerates the operation but it is statically meaningless (a comparison that can never hold). Construct with `dead: true`; consumers render dead findings as probable author bugs rather than unsupported operations. A dead verdict is a *claim of constancy*, and the harness verifies it (§Testing).
+
+Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
+
+- `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability plus the `Unknown` hole; pessimistic on unions. This is the judgment for operand positions, and it is how "refuses `Option`" falls out for free: `Option<Number>` is not assignable to a present `Number` slot.
+- `TypeRelations::overlaps($a, $b)` — could any value satisfy both? The judgment for equality and membership.
+- `TypeOrder::hasDefinedOrder($type)` — is ranking meaningful? (Number-only in core; your dialect can ship ordered domain types.)
+
+Core's rules (`src/Operators/`) are the reference implementations — `ComparisonOverloader` shows overlap-based equality with dead verdicts, `NotOverloader` the unary shape.
 
 ## Literal registration
 
@@ -362,6 +390,8 @@ public function record_projections_are_true(Type $type, array $specimen): void
 - **The dead law**: where `typeOf` refuses with `dead: true` ("statically constant"), all claimed specimen pairs must evaluate to one identical boolean. A dead verdict is a claim, and claims get verified — this law exists because its absence let PHP's loose equality ship a lie (`5 == '5'` was true while the checker said "can never hold").
 
 Core's `tests/Operators/AgreementHarnessTest.php` is the reference implementation; point it at your rules and your specimens. Throw your specimens at *core's* rules too — that is exactly the test that catches core's comparison rule accidentally claiming your domain objects.
+
+**If your rules are signature-built, the laws hold by construction** — both faces are projections of one declaration, so there is no drift to catch. Still run the harness over your specimens: the one obligation the builder *cannot* discharge for you is your domain type's `assert` being honest and total (it is your dispatch predicate now), and the harness is what catches an `assert` that lies or throws on foreign values.
 
 Skip-list to respect when copying it: soundness is skipped when an operand type is `Unknown` (gradual admission is deliberately unsound), and inhabitance is vacuous when the certified type is `Unknown`.
 

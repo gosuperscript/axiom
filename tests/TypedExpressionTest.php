@@ -16,6 +16,7 @@ use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\UnaryOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
@@ -72,6 +73,11 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[UsesClass(Operator::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
@@ -401,6 +407,38 @@ final class TypedExpressionTest extends TestCase
         // dialect wired into the resolver graph and the inference alike.
         $this->assertSame(7, $expression()->unwrap()->unwrap());
         $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
+    }
+
+    #[Test]
+    public function signature_built_rules_are_full_dialect_citizens(): void
+    {
+        $extension = new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('++')
+                        ->signature(new StringType(), new StringType())
+                        ->returns(new StringType())
+                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                ];
+            }
+        };
+
+        $expression = new Expression(
+            source: new InfixExpression(
+                left: new SymbolSource('greeting'),
+                operator: '++',
+                right: new StaticSource('!'),
+            ),
+            resolver: $this->resolver(),
+            dialect: Dialect::core()->with($extension),
+            declarations: ['greeting' => new StringType()],
+        );
+
+        // One declared row, both faces: the evaluator dispatches it and the
+        // checker certifies it, through the same composed dialect.
+        $this->assertSame('hi!', $expression(['greeting' => 'hi'])->unwrap()->unwrap());
+        $this->assertInstanceOf(StringType::class, $expression->infer()->unwrap());
     }
 
     #[Test]
