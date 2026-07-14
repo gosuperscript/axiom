@@ -4,12 +4,13 @@ A powerful PHP library for data transformation, type validation, and expression 
 
 ## Features
 
-- **Type System**: Robust type validation and transformation for numbers, strings, booleans, lists, and dictionaries
+- **Type System**: Robust type validation and transformation for numbers, strings, booleans, lists, dictionaries, records, options, literals, and unions
+- **Static Type Checking**: Infer and check the type of any expression *before* evaluating it — dead comparisons, non-exhaustive matches, and type errors surface as diagnostics, not runtime surprises ([RFC 0001](docs/rfc/0001-typesafe-axiom.md))
 - **Expression Evaluation**: Support for infix expressions with custom operators
 - **Match Expressions**: Unified conditional logic — if/then/else, dispatch tables, and cond-style matching
 - **Compiled Expressions**: Turn a source tree into a callable you invoke with inputs
 - **Resolver Pattern**: Pluggable resolver system for different data sources
-- **Operator Overloading**: Extensible operator system for custom evaluation logic
+- **Operator Overloading**: Extensible operator system where every rule owns its runtime *and* static semantics in one class, so they can never drift
 - **Monadic Error Handling**: Built on functional programming principles using Result and Option types
 
 ## Requirements
@@ -203,6 +204,44 @@ $matchers = [
 $resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
 ```
 
+### Static Type Checking
+
+Every expression has an inferable type, computed **before evaluation** from the same overloader stack and definitions the evaluator runs — so the static and runtime semantics cannot drift apart:
+
+```php
+use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\TypeEnvironment;
+use Superscript\Axiom\Types\TypeInference;
+
+$inference = new TypeInference(new DefaultOverloader());
+
+// Declare the input types (the static face of your Bindings),
+// over the same Definitions the evaluator uses.
+$environment = new TypeEnvironment($definitions, declarations: [
+    'quote.turnover' => new NumberType(),
+]);
+
+// turnover * 1.2 — what does it return?
+$inference->infer($source, $environment); // Ok(NumberType)
+
+// Is this gate condition boolean?
+$inference->check($condition, new BooleanType(), $environment); // Ok or Err(TypeMismatch)
+```
+
+The checker reports, with a nested cause chain (`TypeMismatch::describe()`):
+
+- **Type errors** — `"abc" * 2`, `!5`, arithmetic on a possibly-absent value
+- **Dead code** — comparisons and membership tests that can never hold (`kind == "warehouse"` when `kind` is `'shop' | 'office'`)
+- **Non-exhaustive matches** — a `match` without a wildcard arm over a subject it cannot prove covered (an unmatched subject is a runtime error)
+- **Impossible coercions** — a `TypeDefinition` whose declared type is disjoint from its source
+- **Unbound and cyclic symbols** — including definition cycles the evaluator itself cannot survive
+
+Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. Gradual typing is available through `UnknownType`: it is admitted at every operand position and certifies nothing.
+
+See [RFC 0001: Typesafe Axiom](docs/rfc/0001-typesafe-axiom.md) for the full design, including the sealed shape algebra and relation laws.
+
 ## Core Concepts
 
 ### Types
@@ -211,23 +250,41 @@ The library provides several built-in types for data validation and coercion:
 
 #### NumberType
 Validates and coerces values to numeric types (int/float):
-- Numeric strings: `"42"` → `42`
-- Percentage strings: `"50%"` → `0.5`
+- Numeric strings: `"42"` → `42` (coercion only)
+- Percentage strings: `"50%"` → `0.5` (coercion only)
 - Numbers: `42.5` → `42.5`
 
 #### StringType
 Validates and coerces values to strings:
-- Numbers: `42` → `"42"`
-- Stringable objects: converted to string representation
-- Special handling for null and empty values
+- Numbers: `42` → `"42"` (coercion only)
+- Stringable objects: converted to string representation (coercion only)
+- Coercion reads `''` and `'null'` as absence; under `assert` they are ordinary strings
 
 #### BooleanType
 Validates and coerces values to boolean:
-- Truthy/falsy evaluation
-- String representations: `"true"`, `"false"`
+- String representations: `"true"`/`"false"`, `"yes"`/`"no"`, `"on"`/`"off"`, `"1"`/`"0"` (coercion only)
+- Coercing `null` yields absence, never a silent `false`
 
 #### ListType and DictType
-For collections and associative arrays with nested type validation.
+For collections and associative arrays with nested type validation. `ListType` optionally carries length bounds (`min`/`max`), enforced by `assert` and `coerce` and visible to the checker.
+
+#### OptionType
+A possibly-absent value. `null` is a legal, *present* value of the option — coercing `null` yields `Some(null)`, not a failed coercion. That is what lets an optional field live inside a record whose required fields treat absence as "missing".
+
+#### RecordType
+Named, individually typed fields, open or closed. An optional field is a field whose type is `OptionType`; coercion canonicalizes a missing optional key to a present `null`. Closed records reject undeclared keys; open records pass them through.
+
+#### LiteralType and UnionType
+A singleton of a scalar (`new LiteralType('shop')`) and a set of alternatives. An enum is a union of literals:
+
+```php
+$tier = new UnionType(new LiteralType('micro'), new LiteralType('small'));
+$tier->assert('micro'); // Ok(Some('micro'))
+$tier->assert('large'); // Err — not a member
+```
+
+#### UnknownType and NeverType
+The gradual-typing escape hatch (admits everything, certifies nothing) and the bottom type (no value inhabits it). Both are produced by inference, never declared by authors.
 
 ### Type API: Assert vs Coerce
 
@@ -254,7 +311,7 @@ $numberType->coerce('45%');  // Ok(Some(0.45))
 
 Both methods return `Result<Option<T>, Throwable>` where:
 - `Ok(Some(value))` - successful validation/coercion with a value
-- `Ok(None())` - successful but no value (e.g., empty strings)
+- `Ok(None())` - successful but no value (absence readings live in `coerce`, the lenient input boundary — `assert` is strict membership)
 - `Err(exception)` - failed validation/coercion
 
 ### Sources
@@ -306,10 +363,13 @@ $resolver->resolve($source, $context);
 
 The library supports various operators through the overloader system:
 
-- **Binary**: `+`, `-`, `*`, `/`, `%`, `**`
-- **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
-- **Logical**: `&&`, `||`
-- **Special**: `has`, `in`, `intersects`
+- **Binary arithmetic**: `+`, `-`, `*`, `/` — two present numbers
+- **Comparison**: `=`/`==`, `===`, `!=`, `!==` for scalars, `null`, and lists of them; ordering (`<`, `<=`, `>`, `>=`) for **numbers only** — PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own overloader)
+- **Logical**: `&&`, `||`, `xor` — two present booleans
+- **Set**: `has`, `in`, `intersects` — list membership and intersection
+- **Unary**: `!`/`not` (booleans only), `-` (numbers only), overloader-driven via `UnaryOverloader`
+
+Every overloader owns **both semantics**: `evaluate()` is the runtime face, `typeOf()` the static face, and `supportsOverloading()` must claim only values the rule genuinely owns — an honesty contract enforced by a generative agreement harness. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
 
 ### Resolution Inspector
 
@@ -361,77 +421,19 @@ $expression->withInspector($inspector)(['radius' => 5]);
 // Annotations are available via $inspector->get('label'), etc.
 ```
 
-## Advanced Usage
+## Extending Axiom
 
-### Custom Types
+Axiom is designed to be extended from the outside — domain types, operators with their typing rules, host sources, and literal registrations all plug in through dedicated seams, without touching core. The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the short version:
 
-Implement the `Type` interface to create custom data validations and coercions:
-
-```php
-<?php
-
-use Superscript\Axiom\Types\Type;
-use Superscript\Monads\Result\Result;
-use Superscript\Monads\Result\Err;
-use Superscript\Axiom\Exceptions\TransformValueException;
-use function Superscript\Monads\Result\Ok;
-use function Superscript\Monads\Option\Some;
-
-class EmailType implements Type
-{
-    public function assert(mixed $value): Result
-    {
-        if (is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
-            return Ok(Some($value));
-        }
-
-        return new Err(new TransformValueException(type: 'email', value: $value));
-    }
-
-    public function coerce(mixed $value): Result
-    {
-        $stringValue = is_string($value) ? $value : strval($value);
-        $trimmed = trim($stringValue);
-
-        if (filter_var($trimmed, FILTER_VALIDATE_EMAIL)) {
-            return Ok(Some($trimmed));
-        }
-
-        return new Err(new TransformValueException(type: 'email', value: $value));
-    }
-
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
-    }
-
-    public function format(mixed $value): string
-    {
-        return (string) $value;
-    }
-}
-```
-
-### Custom Resolvers
-
-Create specialized resolvers for specific data sources. Resolvers must be stateless and read everything they need from the `Context`:
-
-```php
-<?php
-
-use Superscript\Axiom\Context;
-use Superscript\Axiom\Resolvers\Resolver;
-use Superscript\Axiom\Source;
-use Superscript\Monads\Result\Result;
-
-class DatabaseResolver implements Resolver
-{
-    public function resolve(Source $source, Context $context): Result
-    {
-        // Custom resolution logic — connect to database, fetch data, etc.
-    }
-}
-```
+| You want to… | Implement / use | Guide section |
+| --- | --- | --- |
+| Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
+| Give operators new semantics | `OperatorOverloader` / `UnaryOverloader` — `evaluate()` **and** `typeOf()` in one class | Custom operators |
+| Type your own literal values | `LiteralTypeRegistry` | Literal registration |
+| Add a data source the checker can see | `TypedSource` | Host sources |
+| Evaluate a new kind of `Source` | `Resolver` (stateless, reads from `Context`) | Custom resolvers |
+| Add match pattern kinds | `PatternMatcher` | Custom patterns |
+| Prove your rules honest | the agreement harness pattern | Testing your extension |
 
 ## Development
 
