@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Superscript\Axiom\Exceptions\BoundaryViolation;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Operators\UnaryOverloader;
-use Superscript\Axiom\Resolvers\BindableResolver;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
@@ -66,20 +63,6 @@ final readonly class Expression
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
-
-        // One dialect, both semantics: wire the operator stacks into the
-        // resolver graph unless the host already bound its own (the legacy
-        // configuration path — prefer contributing Extensions to the
-        // Dialect, which the checker consumes too).
-        if ($this->resolver instanceof BindableResolver) {
-            if (!$this->resolver->has(OperatorOverloader::class)) {
-                $this->resolver->instance(OperatorOverloader::class, $this->dialect->operators());
-            }
-
-            if (!$this->resolver->has(UnaryOverloader::class)) {
-                $this->resolver->instance(UnaryOverloader::class, $this->dialect->unaryOperators());
-            }
-        }
     }
 
     /**
@@ -166,10 +149,15 @@ final readonly class Expression
             return Err($admitted->unwrapErr());
         }
 
+        // The dialect rides the context, exactly as bindings do: the same
+        // instance infer()/check() read is the one this evaluation runs.
+        // Resolvers hold no operator state, so miscomposition is
+        // unrepresentable — not guarded against.
         $context = new Context(
             bindings: $admitted->unwrap(),
             definitions: $this->definitions,
             inspector: $this->inspector,
+            dialect: $this->dialect,
         );
 
         return $this->resolver->resolve($this->source, $context);

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Resolvers;
 
 use Superscript\Axiom\Context;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Monads\Option\Option;
@@ -18,7 +17,6 @@ final readonly class InfixResolver implements Resolver
 {
     public function __construct(
         public Resolver $resolver,
-        public OperatorOverloader $operatorOverloader,
     ) {}
 
     public function resolve(Source $source, Context $context): Result
@@ -31,7 +29,7 @@ final readonly class InfixResolver implements Resolver
                 $context->inspector?->annotate('left', $left->unwrapOr(null));
                 $context->inspector?->annotate('right', $right->unwrapOr(null));
 
-                return $this->operatorOverloader->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
+                return $context->operators()->evaluate($left->unwrapOr(null), $right->unwrapOr(null), $source->operator)
                     ->inspect(fn($result) => $context->inspector?->annotate('result', $result))
                     ->map(fn($result) => Option::from($result));
             });

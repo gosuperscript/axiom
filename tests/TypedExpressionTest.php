@@ -516,16 +516,43 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function a_manually_bound_overloader_is_not_clobbered(): void
+    public function a_manually_bound_overloader_is_inert_because_the_dialect_rides_the_context(): void
     {
+        // The legacy configuration path: an overloader bound directly on the
+        // resolver container. It used to win at runtime while the checker
+        // read the dialect — the exact miscomposition the RFC forbids. Now
+        // the rules travel with each call, so the binding is dead weight.
+        $hijacker = new class implements OperatorOverloader {
+            public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+            {
+                return true;
+            }
+
+            public function evaluate(mixed $left, mixed $right, string $operator): Result
+            {
+                return Ok('hijacked');
+            }
+
+            public function handles(string $operator): bool
+            {
+                return true;
+            }
+
+            public function typeOf(string $operator, Type $left, Type $right): Result
+            {
+                return Ok(new StringType());
+            }
+        };
+
         $resolver = $this->resolver();
-        $resolver->instance(OperatorOverloader::class, new \Superscript\Axiom\Operators\DefaultOverloader());
+        $resolver->instance(OperatorOverloader::class, $hijacker);
 
         $expression = new Expression(
             source: new InfixExpression(new StaticSource(1), '+', new StaticSource(2)),
             resolver: $resolver,
         );
 
+        $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
         $this->assertSame(3, $expression()->unwrap()->unwrap());
     }
 }

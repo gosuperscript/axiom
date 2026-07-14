@@ -15,7 +15,6 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -63,8 +62,6 @@ final class ExpressionTest extends TestCase
             SymbolSource::class => SymbolResolver::class,
             InfixExpression::class => InfixResolver::class,
         ]);
-
-        $resolver->instance(OperatorOverloader::class, new DefaultOverloader());
 
         return $resolver;
     }

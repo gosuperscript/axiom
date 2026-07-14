@@ -11,8 +11,6 @@ use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Patterns\ExpressionMatcher;
 use Superscript\Axiom\Patterns\LiteralMatcher;
 use Superscript\Axiom\Patterns\WildcardMatcher;
@@ -46,7 +44,6 @@ class KitchenSinkTest extends TestCase
             MatchExpression::class => MatchResolver::class,
         ]);
 
-        $resolver->instance(OperatorOverloader::class, new DefaultOverloader());
         $resolver->instance(MatchResolver::class, new MatchResolver($resolver, [
             new WildcardMatcher(),
             new LiteralMatcher(),

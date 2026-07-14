@@ -102,7 +102,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_label_with_operator(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
+        $resolver = new InfixResolver(new StaticResolver());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(1),
@@ -117,7 +117,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_result_with_computed_value(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
+        $resolver = new InfixResolver(new StaticResolver());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),
@@ -132,7 +132,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_left_and_right_with_resolved_operand_values(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
+        $resolver = new InfixResolver(new StaticResolver());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(3),
@@ -148,7 +148,7 @@ class ResolutionInspectorTest extends TestCase
     public function infix_resolver_annotates_left_and_right_with_null_for_none_values(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new InfixResolver(new StaticResolver(), new DefaultOverloader());
+        $resolver = new InfixResolver(new StaticResolver());
 
         $resolver->resolve(new InfixExpression(
             left: new StaticSource(null),

@@ -15,7 +15,6 @@ use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Operators\BinaryOverloader;
 use Superscript\Axiom\Operators\DefaultOverloader;
 use Superscript\Axiom\Operators\NullOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Patterns\ExpressionMatcher;
 use Superscript\Axiom\Patterns\LiteralMatcher;
 use Superscript\Axiom\Patterns\PatternMatcher;
@@ -275,7 +274,6 @@ class MatchResolverTest extends TestCase
             InfixExpression::class => InfixResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
-        $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
 
         $source = new MatchExpression(
             subject: new StaticSource(true),
@@ -305,7 +303,6 @@ class MatchResolverTest extends TestCase
             InfixExpression::class => InfixResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
-        $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
 
         $source = new MatchExpression(
             subject: new StaticSource(true),
@@ -357,7 +354,6 @@ class MatchResolverTest extends TestCase
             SymbolSource::class => SymbolResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
-        $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
         $context = new Context(bindings: new Bindings(['claims' => 4]));
 
         $source = new MatchExpression(
@@ -389,7 +385,6 @@ class MatchResolverTest extends TestCase
             SymbolSource::class => SymbolResolver::class,
             MatchExpression::class => MatchResolver::class,
         ]);
-        $delegating->instance(OperatorOverloader::class, new DefaultOverloader());
         $context = new Context(bindings: new Bindings([
             'claims' => 1,
             'turnover' => 600000,

@@ -147,9 +147,21 @@ class UnaryResolverTest extends TestCase
             }
         };
 
-        $resolver = new UnaryResolver(new StaticResolver(), overloader: $doubling);
-        $source = new UnaryExpression(operator: '!', operand: new StaticSource(21));
+        $extension = new class ($doubling) extends \Superscript\Axiom\Extension {
+            public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOverloader $rule) {}
 
-        $this->assertSame(42, $resolver->resolve($source, new Context())->unwrap()->unwrap());
+            public function unaryOperators(): array
+            {
+                return [$this->rule];
+            }
+        };
+
+        // The rules travel with the call: the dialect rides the Context,
+        // and the resolver holds no operator state to configure.
+        $resolver = new UnaryResolver(new StaticResolver());
+        $source = new UnaryExpression(operator: '!', operand: new StaticSource(21));
+        $context = new Context(dialect: \Superscript\Axiom\Dialect::core()->with($extension));
+
+        $this->assertSame(42, $resolver->resolve($source, $context)->unwrap()->unwrap());
     }
 }
