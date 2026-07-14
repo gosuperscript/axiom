@@ -21,13 +21,22 @@ use Superscript\Axiom\Types\Shapes\OpaqueShape;
 final class OpaqueTypeTest extends TestCase
 {
     #[Test]
-    public function it_is_dynamically_unverifiable_by_core(): void
+    public function it_is_fail_closed_because_core_cannot_verify_membership(): void
     {
         $type = new OpaqueType('ClaimId');
 
-        $this->assertSame('abc-123', $type->assert('abc-123')->unwrap()->unwrap());
-        $this->assertSame(42, $type->coerce(42)->unwrap()->unwrap());
-        $this->assertTrue($type->assert(null)->unwrap()->isNone());
+        // A fail-open placeholder would claim every non-null value for any
+        // signature or boundary declared over it; the honest posture for an
+        // unverifiable identity is to reject everything, loudly.
+        $this->assertStringContainsString(
+            'Core cannot verify membership of opaque identity [ClaimId]',
+            $type->assert('abc-123')->unwrapErr()->getMessage(),
+        );
+        $this->assertStringContainsString(
+            'the host that owns the identity owns the membership check',
+            $type->coerce(42)->unwrapErr()->getMessage(),
+        );
+        $this->assertTrue($type->assert(null)->isErr());
     }
 
     #[Test]

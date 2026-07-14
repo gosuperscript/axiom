@@ -293,7 +293,35 @@ final class TypeRelations
             return self::opaquesOverlap($a, $b);
         }
 
+        if ($a instanceof ListShape && $b instanceof DictShape) {
+            return self::listOverlapsDict($a, $b);
+        }
+
+        if ($a instanceof DictShape && $b instanceof ListShape) {
+            return self::listOverlapsDict($b, $a);
+        }
+
         return Err(self::noOverlap($a, $b));
+    }
+
+    /**
+     * The empty array inhabits both List and Dict — one PHP value, two
+     * types — so a list that admits emptiness shares exactly that member
+     * with every dict, and overlap must say so or a dead verdict would be
+     * falsified by [] == []. A list with a positive lower bound shares
+     * nothing: dict membership excludes every non-empty list.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    private static function listOverlapsDict(ListShape $list, DictShape $dict): Result
+    {
+        if ($list->min === 0) {
+            return Ok(true);
+        }
+
+        return Err(self::noOverlap($list, $dict, [
+            new TypeMismatch('Only the empty array inhabits both a list and a dict, and this list cannot be empty.'),
+        ]));
     }
 
     /**

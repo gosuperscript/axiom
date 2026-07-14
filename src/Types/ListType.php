@@ -32,7 +32,9 @@ class ListType implements Type
 
     public function assert(mixed $value): Result
     {
-        if (!is_array($value)) {
+        // Strict membership: an associative array is not a list, and
+        // asserting never converts — reindexing belongs to coerce.
+        if (!is_array($value) || !array_is_list($value)) {
             return new Err(new TransformValueException(
                 type: 'list',
                 value: $value,

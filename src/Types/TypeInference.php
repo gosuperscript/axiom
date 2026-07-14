@@ -192,17 +192,21 @@ final readonly class TypeInference
     /**
      * Optionality propagates through unary operators: the resolver
      * short-circuits an absent operand before any rule runs, so rules type
-     * the present operand and the option wraps the result.
+     * the present operand and the option wraps the result. Dispatches on
+     * the operand's projection, not its concrete class — a canonicalized
+     * union like Union(Option<Number>, Number) has shape Number? and must
+     * propagate identically.
      *
      * @return Result<Type, TypeMismatch>
      */
     private function inferUnary(UnaryExpression $source, TypeEnvironment $environment): Result
     {
         return $this->infer($source->operand, $environment)->andThen(function (Type $operand) use ($source) {
-            $present = $operand instanceof OptionType ? $operand->inner : $operand;
+            $shape = $operand->shape();
+            $present = $shape instanceof OptionShape ? TypeReifier::reify($shape->inner) : $operand;
 
             return $this->unaryOperators->typeOf($source->operator, $present)
-                ->map(fn(Type $result) => $operand instanceof OptionType ? new OptionType($result) : $result);
+                ->map(fn(Type $result) => $shape instanceof OptionShape ? new OptionType($result) : $result);
         });
     }
 
@@ -275,6 +279,13 @@ final readonly class TypeInference
      */
     private function covers(Shape $subject, array $literals): bool
     {
+        // Never has no inhabitants, so any set of patterns covers it —
+        // this is what makes `match null { null => ... }` (scrutinee
+        // Option<Never>) exhaustive with the null pattern alone.
+        if ($subject instanceof Shapes\NeverShape) {
+            return true;
+        }
+
         if ($subject instanceof OptionShape) {
             return in_array(null, $literals, strict: true) && $this->covers($subject->inner, $literals);
         }

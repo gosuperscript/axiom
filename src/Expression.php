@@ -9,7 +9,7 @@ use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\UnaryOverloader;
 use Superscript\Axiom\Resolvers\BindableResolver;
 use Superscript\Axiom\Resolvers\Resolver;
-use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeEnvironment;
@@ -208,7 +208,10 @@ final readonly class Expression
             }
 
             if (!$bindings->has($name, $namespace)) {
-                if (!$type instanceof OptionType && !$this->definitions->has($name, $namespace)) {
+                // Required-ness is a property of the projection, not the
+                // concrete class: Union(Option<Number>, String) has shape
+                // (Number | String)? and a missing binding is legal absence.
+                if (!($type->shape() instanceof OptionShape) && !$this->definitions->has($name, $namespace)) {
                     $violations[] = sprintf('required input [%s] is missing', $key);
                 }
 

@@ -499,7 +499,10 @@ final class TypeRelationsTest extends TestCase
             false,
         ];
         yield 'opaque does not overlap a primitive' => [new OpaqueShape('ClaimId'), new StringShape(), false];
-        yield 'list does not overlap dict' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), false];
+        // The empty array inhabits both List and Dict — one PHP value, two
+        // types — so overlap holds exactly when the list admits emptiness.
+        yield 'list overlaps dict at the empty array' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), true];
+        yield 'a non-empty list does not overlap dict' => [new ListShape(new NumberShape(), min: 1), new DictShape(new NumberShape()), false];
     }
 
     #[Test]

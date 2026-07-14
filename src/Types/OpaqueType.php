@@ -4,22 +4,26 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use InvalidArgumentException;
 use SebastianBergmann\Exporter\Exporter;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Monads\Result\Result;
 
-use function Superscript\Monads\Option\None;
-use function Superscript\Monads\Option\Some;
-use function Superscript\Monads\Result\Ok;
+use function Superscript\Monads\Result\Err;
 
 /**
- * A nominal type core cannot inspect: statically it relates only under its
- * identity (parameter-wise), dynamically it is unverifiable here — the
- * host that owns the identity owns the membership check. Unknown's runtime
- * posture with a nominal shape. Produced by reification of opaque field
- * and parameter shapes; hosts with real domain classes ship their own
- * Shaped types instead.
+ * A nominal head core cannot inspect: statically it relates only under its
+ * identity (parameter-wise); dynamically it is fail-closed — core cannot
+ * verify membership of a host-owned identity, so assert and coerce reject
+ * every value and name the host as the owner. A fail-open placeholder
+ * would duplicate Unknown's job while wearing a nominal certificate, and
+ * would claim every non-null value for any signature declared over it.
+ *
+ * @internal Reification artifact: exists only so opaque field and parameter
+ * shapes can reify back to a Type. Never a host-facing declaration type —
+ * hosts with real domain classes ship their own Shaped types with a real
+ * membership check.
  *
  * @implements Type<mixed>
  */
@@ -35,7 +39,10 @@ final readonly class OpaqueType implements Type
 
     public function assert(mixed $value): Result
     {
-        return Ok($value === null ? None() : Some($value));
+        return Err(new InvalidArgumentException(sprintf(
+            'Core cannot verify membership of opaque identity [%s]; the host that owns the identity owns the membership check — declare a host-owned type instead.',
+            $this->identity,
+        )));
     }
 
     public function coerce(mixed $value): Result

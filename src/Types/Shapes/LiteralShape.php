@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types\Shapes;
 
+use Superscript\Axiom\Operators\ValueEquality;
+
 /**
  * A singleton of a scalar base. Substitutable for its base, never the
- * reverse. Numeric literal identity is loose (5 and 5.0 denote the same
- * Number); boolean and string identity is strict.
+ * reverse. Literal identity is value equality — the same definition the
+ * runtime matcher and the comparison operators consume (5 and 5.0 denote
+ * the same Number; boolean and string identity is strict).
  */
 final class LiteralShape extends Shape
 {
@@ -29,10 +32,6 @@ final class LiteralShape extends Shape
             return false;
         }
 
-        if (is_bool($this->value) || is_string($this->value)) {
-            return $this->value === $other->value;
-        }
-
-        return $this->value == $other->value;
+        return ValueEquality::equals($this->value, $other->value);
     }
 }

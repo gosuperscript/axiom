@@ -47,7 +47,10 @@ class DictType implements Type
 
     public function assert(mixed $value): Result
     {
-        if (! is_array($value)) {
+        // Strict membership: a non-empty list is not a string-keyed map.
+        // The empty array inhabits both List and Dict — PHP has one value
+        // where the algebra has two types.
+        if (! is_array($value) || ($value !== [] && array_is_list($value))) {
             return new Err(new TransformValueException(
                 type: 'dict',
                 value: $value,
