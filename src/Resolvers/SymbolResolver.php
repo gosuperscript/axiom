@@ -28,7 +28,11 @@ final readonly class SymbolResolver implements Resolver
             : $source->name;
 
         if ($context->bindings->has($source->name, $source->namespace)) {
-            $value = $context->bindings->get($source->name, $source->namespace);
+            // The resolution channel has one representation of null: None.
+            // A bound null still shadows a definition — shadowing lives in
+            // has(), checked above — but its value is honestly absent.
+            $value = $context->bindings->get($source->name, $source->namespace)
+                ->andThen(fn(mixed $v) => Option::from($v));
             $context->inspector?->annotate('label', $key);
             $value->inspect(fn(mixed $v) => $context->inspector?->annotate('result', $v));
 

@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UnaryResolver`: `!`/`not` are boolean-only — PHP truthiness on non-booleans is no longer evaluated.
 - `MatchResolver`: a match where no arm matches is now a runtime error instead of silently evaluating to absence — add a wildcard arm for a deliberate default.
 
+### Changed (Breaking — adversarial-review round, RFC 0001 second revision)
+- Equality is **value equality**, never PHP juggling: numeric within `Number` (`1 == 1.0`), strict identity otherwise, element-wise for lists, `false` across bases (`5 == '5'` is now `false`); `===`/`!==` become aliases of `==`/`!=`. The set operators (`has`/`in`/`intersects`) use the same value equality instead of `array_intersect`'s string comparison (`true in [1]` is now `false`).
+- One representation of null in the resolution channel: a bound `null` normalizes to absence at symbol lookup (it still shadows — shadowing lives in `has()`).
+- `TypeDefinition` is split into `Coerce` (runtime `coerce`, statically verbatim — the opaque boundary node) and `Ascription` (runtime `assert`, statically checked: `Unknown`-or-overlaps); `ValueResolver` becomes `CoerceResolver`, and `AscriptionResolver` is new. The dead-coercion overlap check is removed from `Coerce` — it was the right rule on the wrong node.
+- `OpaqueShape` gains structural parameters (`Opaque('money', ['currency' => …])`) — nominal head, parameter-wise relations. The **shape-truth law** lands: projections are census-verified truth claims about runtime structure; fictional record projections (the TypeScript branded-types trick) are outlawed for object-valued types.
+- Member access is **shape-driven**: any type whose (verified) projection is record-like gets certified field access; field shapes reify to types (`TypeReifier`, `OpaqueType`).
+- `Bindings` uses **descent, not flattening**: an array binding binds its key whole and namespaced lookups descend into it; explicit dotted keys win. `TypeEnvironment` mirrors the descent for record declarations.
+- **Shadowing a definition requires a declaration** — an undeclared binding colliding with a definition is a boundary error.
+
+### Added (adversarial-review round)
+- `Dialect` + `Extension`: the operator rules and literal registry live in one value object consumed by both the evaluator and the checker; packages contribute via `Extension` (prepend semantics, loud literal collisions).
+- Typed bindings: `Expression` accepts `declarations` and a `Boundary` mode (`Coerce`/`Assert`); declared inputs are validated/converted at invoke time with aggregated, named `BoundaryViolation`s; `Expression::infer()`/`check()` let the expression type itself; declared∧defined symbols get an agreement check.
+- Harness law L3 (dead refusals verified statically-constant over specimens) and census law C2 (record projections verified against specimens).
+
 ### Added
 - RFC 0001: Typesafe Axiom (`docs/rfc/0001-typesafe-axiom.md`) — the accepted design for the static type system: sealed shape algebra, type relations, typed operators (`typeOf` beside `evaluate`), and graph-walking inference over the runtime AST, shipping as one breaking release.
 - The sealed shape algebra (`Types\Shapes`): `Boolean`/`Number`/`String`, `Literal`, `Option` (value-set semantics, nesting collapses), `Union` (canonicalized), `Record` (open/closed), `Dict`, `List` (bounded), `Unknown`, `Never`, `Opaque`.

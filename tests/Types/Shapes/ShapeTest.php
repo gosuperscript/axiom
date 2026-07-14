@@ -135,6 +135,26 @@ final class ShapeTest extends TestCase
         yield 'opaque with same identity' => [new OpaqueShape('ClaimId'), new OpaqueShape('ClaimId'), true];
         yield 'opaque with different identity' => [new OpaqueShape('ClaimId'), new OpaqueShape('CatalogueKey'), false];
         yield 'opaque is not a string' => [new OpaqueShape('ClaimId'), new StringShape(), false];
+        yield 'parameterized opaques compare parameter-wise' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            true,
+        ];
+        yield 'parameterized opaques with different parameter values' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('USD')]),
+            false,
+        ];
+        yield 'parameterized opaques with different parameter names' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['region' => new LiteralShape('GBP')]),
+            false,
+        ];
+        yield 'a parameterless opaque differs from a parameterized one' => [
+            new OpaqueShape('money'),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            false,
+        ];
     }
 
     #[Test]

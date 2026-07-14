@@ -21,12 +21,12 @@ use Superscript\Axiom\Resolvers\MemberAccessResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 use Superscript\Axiom\Types\NumberType;
@@ -37,20 +37,21 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(UnaryResolver::class)]
 #[CoversClass(SymbolResolver::class)]
 #[CoversClass(MemberAccessResolver::class)]
-#[CoversClass(ValueResolver::class)]
+#[CoversClass(CoerceResolver::class)]
 #[CoversClass(DelegatingResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(UnaryExpression::class)]
 #[UsesClass(SymbolSource::class)]
-#[UsesClass(TypeDefinition::class)]
+#[UsesClass(Coerce::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(ComparisonOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
@@ -236,15 +237,15 @@ class ResolutionInspectorTest extends TestCase
         $this->assertSame(2, $inspector->annotations['result']);
     }
 
-    // -- ValueResolver --
+    // -- CoerceResolver --
 
     #[Test]
     public function value_resolver_annotates_label_with_type_name(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver());
+        $resolver = new CoerceResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
+        $resolver->resolve(new Coerce(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
 
         $this->assertSame('NumberType', $inspector->annotations['label']);
     }
@@ -253,9 +254,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_annotates_coercion_when_value_type_changes(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver());
+        $resolver = new CoerceResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
+        $resolver->resolve(new Coerce(new NumberType(), new StaticSource('42')), new Context(inspector: $inspector));
 
         $this->assertSame('string -> int', $inspector->annotations['coercion']);
     }
@@ -264,9 +265,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_does_not_annotate_coercion_when_value_unchanged(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver());
+        $resolver = new CoerceResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource(42)), new Context(inspector: $inspector));
+        $resolver->resolve(new Coerce(new NumberType(), new StaticSource(42)), new Context(inspector: $inspector));
 
         $this->assertArrayNotHasKey('coercion', $inspector->annotations);
     }
@@ -275,9 +276,9 @@ class ResolutionInspectorTest extends TestCase
     public function value_resolver_annotates_coercion_for_string_type(): void
     {
         $inspector = new SpyInspector();
-        $resolver = new ValueResolver(new StaticResolver());
+        $resolver = new CoerceResolver(new StaticResolver());
 
-        $resolver->resolve(new TypeDefinition(new StringType(), new StaticSource(42)), new Context(inspector: $inspector));
+        $resolver->resolve(new Coerce(new StringType(), new StaticSource(42)), new Context(inspector: $inspector));
 
         $this->assertSame('StringType', $inspector->annotations['label']);
         $this->assertSame('int -> string', $inspector->annotations['coercion']);
@@ -286,9 +287,9 @@ class ResolutionInspectorTest extends TestCase
     #[Test]
     public function value_resolver_coercion_path_works_without_inspector(): void
     {
-        $resolver = new ValueResolver(new StaticResolver());
+        $resolver = new CoerceResolver(new StaticResolver());
 
-        $result = $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('42')), new Context());
+        $result = $resolver->resolve(new Coerce(new NumberType(), new StaticSource('42')), new Context());
 
         $this->assertSame(42, $result->unwrap()->unwrap());
     }
@@ -358,10 +359,10 @@ class ResolutionInspectorTest extends TestCase
 
         $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
-            TypeDefinition::class => ValueResolver::class,
+            Coerce::class => CoerceResolver::class,
         ]);
 
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource('5')), new Context(inspector: $inspector));
+        $resolver->resolve(new Coerce(new NumberType(), new StaticSource('5')), new Context(inspector: $inspector));
 
         $this->assertArrayHasKey('label', $inspector->annotations);
     }

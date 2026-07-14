@@ -18,7 +18,7 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\TypedSource;
@@ -49,7 +49,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
-#[UsesClass(TypeDefinition::class)]
+#[UsesClass(Coerce::class)]
+#[UsesClass(\Superscript\Axiom\Sources\Ascription::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(UnaryExpression::class)]
 #[UsesClass(MatchExpression::class)]
@@ -73,6 +74,9 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(TypeDescriber::class)]
 #[UsesClass(TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeOrder::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
+#[UsesClass(\Superscript\Axiom\Types\OpaqueType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOverloader::class)]
@@ -218,7 +222,7 @@ final class TypeInferenceTest extends TestCase
     #[Test]
     public function a_type_definition_is_the_authors_override(): void
     {
-        $definition = new TypeDefinition(new NumberType(), new StaticSource(5));
+        $definition = new Coerce(new NumberType(), new StaticSource(5));
 
         $result = self::inference()->infer($definition, self::env());
 
@@ -228,7 +232,7 @@ final class TypeInferenceTest extends TestCase
     #[Test]
     public function a_type_definition_over_an_untypeable_source_is_the_escape_hatch(): void
     {
-        $definition = new TypeDefinition(new NumberType(), new StaticSource(new \stdClass()));
+        $definition = new Coerce(new NumberType(), new StaticSource(new \stdClass()));
 
         $result = self::inference()->infer($definition, self::env());
 
@@ -236,16 +240,63 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function a_statically_impossible_coercion_is_dead(): void
+    public function coerce_is_statically_opaque_by_design(): void
     {
-        $definition = new TypeDefinition(new NumberType(), new StaticSource('shop'));
+        // '42' does not inhabit Number, but coercion CONVERTS — the boundary
+        // node types verbatim and satisfiability is never modeled statically.
+        $boundary = new Coerce(new NumberType(), new StaticSource('42'));
 
-        $result = self::inference()->infer($definition, self::env());
+        $this->assertInstanceOf(NumberType::class, self::inference()->infer($boundary, self::env())->unwrap());
+    }
+
+    #[Test]
+    public function an_ascription_refines_unknown(): void
+    {
+        $env = self::env(declarations: ['blob' => new UnknownType()]);
+        $claim = new \Superscript\Axiom\Sources\Ascription(new NumberType(), new SymbolSource('blob'));
+
+        $this->assertInstanceOf(NumberType::class, self::inference()->infer($claim, $env)->unwrap());
+    }
+
+    #[Test]
+    public function an_ascription_narrows_an_overlapping_type(): void
+    {
+        $env = self::env(declarations: ['kind' => new StringType()]);
+        $claim = new \Superscript\Axiom\Sources\Ascription(new LiteralType('shop'), new SymbolSource('kind'));
+
+        $result = self::inference()->infer($claim, $env);
+
+        $this->assertSame("'shop'", self::describe($result));
+    }
+
+    #[Test]
+    public function a_disjoint_ascription_is_a_false_claim(): void
+    {
+        $claim = new \Superscript\Axiom\Sources\Ascription(new NumberType(), new StaticSource('shop'));
+
+        $result = self::inference()->infer($claim, self::env());
 
         $this->assertTrue($result->isErr());
-        $this->assertTrue($result->unwrapErr()->dead);
-        $this->assertStringContainsString('The declared type Number can never hold', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('The claim that this is Number is false', $result->unwrapErr()->describe());
         $this->assertStringContainsString("'shop' and Number share no values.", $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_ascription_over_an_untypeable_source_propagates_the_error(): void
+    {
+        $claim = new \Superscript\Axiom\Sources\Ascription(new NumberType(), new StaticSource(new \stdClass()));
+
+        $this->assertTrue(self::inference()->infer($claim, self::env())->isErr());
+    }
+
+    #[Test]
+    public function legacy_impossible_coercion_scenario_now_types_verbatim(): void
+    {
+        // Under the retired dead-coercion check this was refused; the checker
+        // was applying an assert-world relation to the coerce-world node.
+        $boundary = new Coerce(new NumberType(), new StaticSource('shop'));
+
+        $this->assertInstanceOf(NumberType::class, self::inference()->infer($boundary, self::env())->unwrap());
     }
 
     #[Test]
@@ -554,6 +605,73 @@ final class TypeInferenceTest extends TestCase
         $result = self::inference()->infer(new MemberAccessSource(new SymbolSource('blob'), 'anything'), $env);
 
         $this->assertInstanceOf(UnknownType::class, $result->unwrap());
+    }
+
+    #[Test]
+    public function member_access_is_shape_driven_so_extension_types_get_it_for_free(): void
+    {
+        // A host type whose values genuinely ARE records (a JSON-shaped
+        // position) projects record-like — and member access works without
+        // core ever knowing the concrete class. This is the review finding:
+        // dispatch on projections, not on concrete Type classes.
+        $position = new class implements Type {
+            public function assert(mixed $value): Result
+            {
+                return Ok(\Superscript\Monads\Option\Some($value));
+            }
+
+            public function coerce(mixed $value): Result
+            {
+                return $this->assert($value);
+            }
+
+            public function compare(mixed $a, mixed $b): bool
+            {
+                return $a === $b;
+            }
+
+            public function format(mixed $value): string
+            {
+                return '';
+            }
+
+            public function shape(): \Superscript\Axiom\Types\Shapes\Shape
+            {
+                return new \Superscript\Axiom\Types\Shapes\RecordShape([
+                    'lat' => new \Superscript\Axiom\Types\Shapes\NumberShape(),
+                    'lng' => new \Superscript\Axiom\Types\Shapes\NumberShape(),
+                ]);
+            }
+        };
+
+        $env = self::env(declarations: ['position' => $position]);
+
+        $result = self::inference()->infer(new MemberAccessSource(new SymbolSource('position'), 'lat'), $env);
+
+        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+    }
+
+    #[Test]
+    public function member_access_on_an_opaque_type_is_refused(): void
+    {
+        $env = self::env(declarations: [
+            'price' => new \Superscript\Axiom\Types\OpaqueType('money', ['currency' => new LiteralType('GBP')]),
+        ]);
+
+        $result = self::inference()->infer(new MemberAccessSource(new SymbolSource('price'), 'amount'), $env);
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('nominal types make no structural claims', $result->unwrapErr()->describe());
+        $this->assertStringContainsString("money<currency: 'GBP'>", $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function field_type_of_is_the_public_face_of_the_field_judgment(): void
+    {
+        $record = new RecordType(['turnover' => new NumberType()]);
+
+        $this->assertInstanceOf(NumberType::class, self::inference()->fieldTypeOf($record, 'turnover')->unwrap());
+        $this->assertTrue(self::inference()->fieldTypeOf($record, 'ghost')->isErr());
     }
 
     #[Test]

@@ -13,32 +13,32 @@ use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Source;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Types\StringType;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
-#[CoversClass(ValueResolver::class)]
-#[CoversClass(TypeDefinition::class)]
+#[CoversClass(CoerceResolver::class)]
+#[CoversClass(Coerce::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
-class ValueResolverTest extends TestCase
+class CoerceResolverTest extends TestCase
 {
     #[Test]
     public function it_can_resolve_a_value()
     {
-        $resolver = new ValueResolver(new class implements Resolver {
+        $resolver = new CoerceResolver(new class implements Resolver {
             public function resolve(Source $source, Context $context): Result
             {
                 return Ok(Some('Hello, World!'));
             }
         });
-        $source = new TypeDefinition(new StringType(), new class implements Source {});
+        $source = new Coerce(new StringType(), new class implements Source {});
 
         $result = $resolver->resolve($source, new Context());
         $this->assertInstanceOf(Result::class, $result);

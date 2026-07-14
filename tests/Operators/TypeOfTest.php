@@ -169,6 +169,12 @@ final class TypeOfTest extends TestCase
         yield 'a dead comparison is refused as dead' => [
             $comparison, '==', new NumberType(), new StringType(), 'can never hold', true,
         ];
+        yield 'dead negated equality is constant-true, and says so' => [
+            $comparison, '!=', new NumberType(), new StringType(), 'always holds', true,
+        ];
+        yield 'dead strict negated equality says so too' => [
+            $comparison, '!==', new NumberType(), new StringType(), 'always holds', true,
+        ];
         yield 'a dead comparison carries the overlap cause' => [
             $comparison, '==', new NumberType(), new StringType(), 'Number and String share no values.', true,
         ];

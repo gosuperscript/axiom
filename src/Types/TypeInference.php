@@ -12,12 +12,14 @@ use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
+use Superscript\Axiom\Sources\Ascription;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\TypedSource;
+use Superscript\Axiom\Types\Shapes;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -55,7 +57,8 @@ final readonly class TypeInference
             $source instanceof TypedSource => $source->returnType($environment, $this),
             $source instanceof StaticSource => $this->inferValue($source->value),
             $source instanceof SymbolSource => $environment->typeOfSymbol($source->name, $source->namespace, $this),
-            $source instanceof TypeDefinition => $this->inferDefinition($source, $environment),
+            $source instanceof Coerce => Ok($source->type),
+            $source instanceof Ascription => $this->inferAscription($source, $environment),
             $source instanceof UnaryExpression => $this->inferUnary($source, $environment),
             $source instanceof InfixExpression => $this->inferInfix($source, $environment),
             $source instanceof MatchExpression => $this->inferMatch($source, $environment),
@@ -160,33 +163,30 @@ final readonly class TypeInference
     }
 
     /**
+     * An ascription is a checked claim: the inner type must be Unknown (the
+     * refinement case — the whole point of the node) or overlap the claimed
+     * type. A disjoint claim is simply false — assert-world, where overlap
+     * is the correct relation. Coerce, by contrast, types verbatim: the
+     * boundary is statically opaque by design.
+     *
      * @return Result<Type, TypeMismatch>
      */
-    private function inferDefinition(TypeDefinition $source, TypeEnvironment $environment): Result
+    private function inferAscription(Ascription $source, TypeEnvironment $environment): Result
     {
-        $inner = $this->infer($source->source, $environment);
-
-        // The declaration is the author's explicit override — the escape
-        // hatch for sources inference cannot type. But a declaration
-        // disjoint from what inference *can* see is a coercion that can
-        // never succeed.
-        if ($inner->isOk()) {
-            $overlap = TypeRelations::overlaps($inner->unwrap(), $source->type);
-
-            if ($overlap->isErr()) {
-                return Err(new TypeMismatch(
+        // No separate Unknown branch: overlaps(Unknown, T) always holds,
+        // which is exactly the gradual admission an ascription wants.
+        return $this->infer($source->source, $environment)->andThen(
+            fn(Type $inner) => TypeRelations::overlaps($inner, $source->type)
+                ->map(fn() => $source->type)
+                ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
                     sprintf(
-                        'The declared type %s can never hold: the underlying source is %s.',
+                        'The claim that this is %s is false: the value is %s, and no value inhabits both.',
                         TypeDescriber::describe($source->type),
-                        TypeDescriber::describe($inner->unwrap()),
+                        TypeDescriber::describe($inner),
                     ),
-                    [$overlap->unwrapErr()],
-                    dead: true,
-                ));
-            }
-        }
-
-        return Ok($source->type);
+                    [$cause],
+                )),
+        );
     }
 
     /**
@@ -299,45 +299,72 @@ final readonly class TypeInference
     }
 
     /**
+     * Member access is shape-driven: it dispatches on the operand's
+     * projection, not its concrete Type class, so any type whose
+     * (census-verified, therefore true) projection is record-like gets
+     * field access — extension types included. Field shapes reify back to
+     * types. Sound only because of the shape-truth law: trusting a fictional
+     * projection here would certify crashes.
+     *
      * @return Result<Type, TypeMismatch>
      */
     private function inferMemberAccess(MemberAccessSource $source, TypeEnvironment $environment): Result
     {
         return $this->infer($source->object, $environment)
-            ->andThen(fn(Type $object) => $this->accessField($object, $source->property));
+            ->andThen(fn(Type $object) => $this->accessField($object->shape(), $source->property));
+    }
+
+    /**
+     * The field judgment, public for the environment's namespace descent:
+     * a namespaced symbol whose namespace is declared record-typed resolves
+     * to that record's field type — a namespace is the record view of a
+     * binding, statically and dynamically.
+     *
+     * @return Result<Type, TypeMismatch>
+     */
+    public function fieldTypeOf(Type $object, string $property): Result
+    {
+        return $this->accessField($object->shape(), $property);
     }
 
     /**
      * @return Result<Type, TypeMismatch>
      */
-    private function accessField(Type $object, string $property): Result
+    private function accessField(Shape $object, string $property): Result
     {
-        if ($object instanceof OptionType) {
+        if ($object instanceof OptionShape) {
             return $this->accessField($object->inner, $property)->map(fn(Type $field) => new OptionType($field));
         }
 
-        if ($object instanceof UnknownType) {
+        if ($object instanceof Shapes\UnknownShape) {
             return Ok(new UnknownType());
         }
 
-        if ($object instanceof RecordType) {
+        if ($object instanceof Shapes\RecordShape) {
             if (isset($object->fields[$property])) {
-                return Ok($object->fields[$property]);
+                return Ok(TypeReifier::reify($object->fields[$property]));
             }
 
             return Err(new TypeMismatch($object->open
-                ? sprintf("Field '%s' is not declared by the open record %s: openness certifies assignability width, never the presence of a particular field.", $property, TypeDescriber::describe($object))
-                : sprintf("Field '%s' does not exist on %s.", $property, TypeDescriber::describe($object))));
+                ? sprintf("Field '%s' is not declared by the open record %s: openness certifies assignability width, never the presence of a particular field.", $property, TypeDescriber::describeShape($object))
+                : sprintf("Field '%s' does not exist on %s.", $property, TypeDescriber::describeShape($object))));
         }
 
-        if ($object instanceof DictType) {
+        if ($object instanceof Shapes\DictShape) {
             return Err(new TypeMismatch(sprintf(
                 "Member access on %s is not certified: dict keys are statically unknown and a missing key is a runtime error. Give the value a record type.",
-                TypeDescriber::describe($object),
+                TypeDescriber::describeShape($object),
             )));
         }
 
-        return Err(new TypeMismatch(sprintf("Cannot access field '%s' on %s.", $property, TypeDescriber::describe($object))));
+        if ($object instanceof Shapes\OpaqueShape) {
+            return Err(new TypeMismatch(sprintf(
+                "Member access on %s is not certified: nominal types make no structural claims.",
+                TypeDescriber::describeShape($object),
+            )));
+        }
+
+        return Err(new TypeMismatch(sprintf("Cannot access field '%s' on %s.", $property, TypeDescriber::describeShape($object))));
     }
 
     /**

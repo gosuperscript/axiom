@@ -39,7 +39,7 @@ final class TypeDescriber
             $shape instanceof StringShape => 'String',
             $shape instanceof UnknownShape => 'Unknown',
             $shape instanceof NeverShape => 'Never',
-            $shape instanceof OpaqueShape => $shape->identity,
+            $shape instanceof OpaqueShape => self::opaque($shape),
             $shape instanceof LiteralShape => self::literal($shape->value),
             $shape instanceof OptionShape => self::option($shape),
             $shape instanceof UnionShape => implode(' | ', map($shape->members, self::describeShape(...))),
@@ -80,6 +80,21 @@ final class TypeDescriber
             $shape->max === null => sprintf('List<%s, %d..>', $element, $shape->min),
             default => sprintf('List<%s, %d..%d>', $element, $shape->min, $shape->max),
         };
+    }
+
+    private static function opaque(OpaqueShape $shape): string
+    {
+        if ($shape->parameters === []) {
+            return $shape->identity;
+        }
+
+        $parameters = [];
+
+        foreach ($shape->parameters as $name => $parameter) {
+            $parameters[] = sprintf('%s: %s', $name, self::describeShape($parameter));
+        }
+
+        return sprintf('%s<%s>', $shape->identity, implode(', ', $parameters));
     }
 
     private static function record(RecordShape $shape): string

@@ -43,6 +43,17 @@ use Superscript\Monads\Result\Result;
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 #[UsesClass(BinaryOverloader::class)]
 #[UsesClass(NullOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\BoundaryViolation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\LogicalOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
 final class ExpressionTest extends TestCase
 {
     private function fullResolver(): DelegatingResolver
@@ -151,7 +162,25 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
-    public function bindings_override_definitions(): void
+    public function declared_bindings_override_definitions(): void
+    {
+        // Shadowing a definition requires a declaration — the typed license
+        // to shadow. The checker used the declaration, the boundary enforces
+        // it, and the agreement check ties the definition to the same type,
+        // so either source of the value satisfies what was certified.
+        $expression = new Expression(
+            source: new SymbolSource('x'),
+            resolver: $this->fullResolver(),
+            definitions: new Definitions(['x' => new StaticSource(1)]),
+            declarations: ['x' => new \Superscript\Axiom\Types\NumberType()],
+        );
+
+        $this->assertSame(1, $expression()->unwrap()->unwrap());
+        $this->assertSame(99, $expression(['x' => 99])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function undeclared_shadowing_is_a_boundary_violation(): void
     {
         $expression = new Expression(
             source: new SymbolSource('x'),
@@ -159,8 +188,11 @@ final class ExpressionTest extends TestCase
             definitions: new Definitions(['x' => new StaticSource(1)]),
         );
 
-        $this->assertSame(1, $expression()->unwrap()->unwrap());
-        $this->assertSame(99, $expression(['x' => 99])->unwrap()->unwrap());
+        $result = $expression(['x' => 'oops']);
+
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\BoundaryViolation::class, $result->unwrapErr());
+        $this->assertStringContainsString('binding [x] shadows a definition', $result->unwrapErr()->getMessage());
     }
 
     #[Test]

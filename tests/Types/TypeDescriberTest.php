@@ -59,6 +59,14 @@ final class TypeDescriberTest extends TestCase
         yield [new UnknownShape(), 'Unknown'];
         yield [new NeverShape(), 'Never'];
         yield [new OpaqueShape('ClaimId'), 'ClaimId'];
+        yield [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            "money<currency: 'GBP'>",
+        ];
+        yield [
+            new OpaqueShape('money', ['currency' => UnionShape::of(new LiteralShape('GBP'), new LiteralShape('USD')), 'precision' => new NumberShape()]),
+            "money<currency: 'GBP' | 'USD', precision: Number>",
+        ];
 
         yield [new LiteralShape('shop'), "'shop'"];
         yield [new LiteralShape("it's"), "'it's'"];

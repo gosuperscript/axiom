@@ -25,6 +25,9 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(DefaultOverloader::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
@@ -136,6 +139,48 @@ final class TypeEnvironmentTest extends TestCase
         $cycle = $environment->typeOfSymbol('a', null, self::inference());
 
         $this->assertSame('Cyclic symbol definition: a → a.', $cycle->unwrapErr()->message);
+    }
+
+    #[Test]
+    public function a_namespaced_symbol_descends_into_a_record_declaration(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new \Superscript\Axiom\Types\RecordType(['turnover' => new NumberType()]),
+        ]);
+
+        $result = $environment->typeOfSymbol('turnover', 'customer', self::inference());
+
+        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+
+        $missing = $environment->typeOfSymbol('ghost', 'customer', self::inference());
+
+        $this->assertStringContainsString("Field 'ghost' does not exist", $missing->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function declared_and_defined_symbols_are_checked_for_agreement(): void
+    {
+        $environment = new TypeEnvironment(
+            definitions: new \Superscript\Axiom\Definitions([
+                'rate' => new StaticSource('not a number'),
+                'flag' => new StaticSource(5),
+                'agreeing' => new StaticSource(5),
+            ]),
+            declarations: [
+                // only-declared first: its skip must not end the sweep.
+                'only-declared' => new NumberType(),
+                'rate' => new NumberType(),
+                'flag' => new \Superscript\Axiom\Types\BooleanType(),
+                'agreeing' => new NumberType(),
+            ],
+        );
+
+        $mismatches = $environment->agreementMismatches(self::inference());
+
+        $this->assertCount(2, $mismatches);
+        $this->assertStringContainsString('Symbol [rate] is declared Number but its definition disagrees', $mismatches[0]->describe());
+        $this->assertStringContainsString('is not assignable to Number', $mismatches[0]->describe());
+        $this->assertStringContainsString('Symbol [flag] is declared Boolean', $mismatches[1]->describe());
     }
 
     #[Test]

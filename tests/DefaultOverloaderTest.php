@@ -22,6 +22,7 @@ use Superscript\Axiom\Operators\NullOverloader;
 
 #[CoversClass(DefaultOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
@@ -77,11 +78,19 @@ class DefaultOverloaderTest extends TestCase
         yield [1, '=', 2, false];
         yield [1, '!=', 2, true];
         yield [1, '!=', 1, false];
-        yield [1, '==', '1', true];
+
+        // Equality is value equality, never PHP juggling: numeric within
+        // Number (1 == 1.0), false across bases (1 is not '1').
+        yield [1, '==', '1', false];
+        yield [1, '!=', '1', true];
+        yield [1, '==', 1.0, true];
+        yield [1, '===', 1.0, true];
+        yield [true, '==', 1, false];
 
         yield [1, '===', 1, true];
         yield [1, '===', '1', false];
         yield [1, '!==', 2, true];
+        yield [1, '!==', '1', true];
 
         yield [null, '==', null, true];
         yield [null, '==', 'a', false];

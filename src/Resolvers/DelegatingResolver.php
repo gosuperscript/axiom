@@ -50,7 +50,7 @@ final readonly class DelegatingResolver implements BindableResolver
     /**
      * Dispatches to the resolver registered for the source's type. Every {@see Source} carries the
      * value type it resolves to as its `T` (defaulting to `mixed`), so the result is statically
-     * narrowed to that type — `resolve(new TypeDefinition(new FooType(), $source))` is
+     * narrowed to that type — `resolve(new Coerce(new FooType(), $source))` is
      * `Result<Option<Foo>, Throwable>` and callers never have to re-coerce, while an ordinary source
      * still resolves to `Result<Option<mixed>, Throwable>`. The dispatch itself is dynamic, so the
      * narrowing is asserted here once (the delegate resolver produces the value the source describes).

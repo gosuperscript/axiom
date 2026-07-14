@@ -52,6 +52,14 @@ use Superscript\Axiom\Types\UnknownType;
  *   from the checker — unless the refusal is marked dead (the runtime
  *   tolerates dead tests; the checker still flags them), or the rule is the
  *   degenerate NullOverloader (see its class doc).
+ * - R3 (the dead law): a refusal marked dead claims the operation is
+ *   statically CONSTANT — so all claimed specimen pairs of the refused
+ *   types must evaluate to one identical boolean (== between disjoint
+ *   types is constant-false; != is constant-true). This law exists because
+ *   its absence let real bugs ship: dead refusals were exempt from R2 on
+ *   the unverified assumption that dead meant constant, and PHP loose
+ *   equality (5 == '5' → true) plus array_intersect's string comparison
+ *   (true in [1] → true) broke the assumption silently, in four operators.
  *
  * The same two laws run against the composed default dialect, which is
  * itself an OperatorOverloader. Packages and hosts extend this harness by
@@ -166,6 +174,27 @@ final class AgreementHarnessTest extends TestCase
                             ),
                         );
                     }
+
+                    if ($verdict->isErr() && $verdict->unwrapErr()->dead) {
+                        $outcomes = [];
+
+                        foreach ($claimed as [$left, $right]) {
+                            $result = $rule->evaluate($left, $right, $operator);
+
+                            if ($result->isOk()) {
+                                $outcomes[$result->unwrap() ? 'true' : 'false'] = true;
+                            }
+                        }
+
+                        $this->assertLessThanOrEqual(
+                            1,
+                            count($outcomes),
+                            sprintf(
+                                'R3: %s is refused as dead ("statically constant") but claimed pairs evaluated to both true and false — the dead verdict is a lie',
+                                $context,
+                            ),
+                        );
+                    }
                 }
             }
         }
@@ -224,6 +253,24 @@ final class AgreementHarnessTest extends TestCase
                             $context,
                             $verdict->unwrapErr()->message,
                         ),
+                    );
+                }
+
+                if ($verdict->isErr() && $verdict->unwrapErr()->dead) {
+                    $outcomes = [];
+
+                    foreach ($claimed as $value) {
+                        $result = $rule->evaluate($value, $operator);
+
+                        if ($result->isOk()) {
+                            $outcomes[var_export($result->unwrap(), true)] = true;
+                        }
+                    }
+
+                    $this->assertLessThanOrEqual(
+                        1,
+                        count($outcomes),
+                        sprintf('R3: %s is refused as dead but claimed values evaluated to differing outcomes', $context),
                     );
                 }
             }

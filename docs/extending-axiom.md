@@ -19,16 +19,18 @@ A type implements `Type`, which is both a **runtime contract** (`assert`, `coerc
 
 Relations between types (assignability, overlap, …) are not defined on your class — they are defined by structural recursion over a **sealed vocabulary of shapes** (`Superscript\Axiom\Types\Shapes`). Your type *projects* into that vocabulary via `shape()`; it can never add a constructor or edit a relation. Adding a type is adding a shape — an unmodelled type is unrepresentable, not silently incompatible.
 
+**The shape-truth law — the one rule everything else depends on:** your projection is a *truth claim about the runtime structure of your values*. Every relation trusts it, and member access is certified from it, so it must be load-bearing-true: project `RecordShape` **only if** the member-access mechanism can genuinely reach every projected field on every value of your type. This is not honor-system — copy the census pattern (§Testing your extension) and the test suite verifies your projection against real specimens.
+
 Pick your projection:
 
 | Your type is… | Project as |
 | --- | --- |
-| Structurally transparent (an address is its fields) | `RecordShape([...fields], open: false)` |
+| Values genuinely are records — arrays/objects whose fields the resolver can reach (an address, a JSON-shaped position) | `RecordShape([...fields], open: false)` — and member access on your fields is certified for free |
 | Nominal — identity matters, structure shouldn't leak (a claim ID) | `OpaqueShape('ClaimId')` |
-| A branded structural type (money: kind + currency + amount) | A **closed record with literal discriminant fields** — see below |
+| **Object-valued domain type needing parameterized subtyping** (a `Money` class with a currency) | `OpaqueShape` **with structural parameters** — see below |
 | A refinement of a scalar (an email is a string) | The base shape (`StringShape`) — the refinement is enforced at runtime by `assert`/`coerce`; statically it is a `String` |
 
-The discriminant-field encoding is how a money package gets currency subtyping for free:
+The parameterized opaque is how a money package gets currency subtyping *without lying about structure*:
 
 ```php
 use Superscript\Axiom\Types\Shapes;
@@ -41,16 +43,16 @@ final readonly class MoneyType implements Type
 
     public function shape(): Shapes\Shape
     {
-        return new Shapes\RecordShape([
-            'kind' => new Shapes\LiteralShape('money'),
+        return new Shapes\OpaqueShape('money', [
             'currency' => new Shapes\LiteralShape($this->currency),
-            'amount' => new Shapes\NumberShape(),
         ]);
     }
 }
 ```
 
-Now `Money<GBP>` is assignable to a `Money<GBP|USD>` slot by ordinary literal/union rules, `Money<GBP> == Money<USD>` is a *dead comparison* the checker flags, and no relation code anywhere mentions money.
+Opaques relate nominally first, then parameter-wise: `Money<GBP>` is assignable to a `Money<GBP|USD>` slot (same identity, `'GBP' ⊆ 'GBP'|'USD'`), `Money<GBP> == Money<USD>` is a *dead comparison* the checker flags, and no relation code anywhere mentions money. And because opaques make **no structural claims**, nothing is certified that your `Money` object can't deliver — `money.amount` is refused unless you expose it structurally.
+
+**Do not project fictional fields.** An earlier version of this guide recommended encoding the brand as a closed record with literal discriminant fields (`{kind: 'money', currency: 'GBP', amount: Number}`). That trick is how TypeScript's *branded types* work — and it is safe there only because TS types are erased and never meet a runtime. Here, shapes drive a checker that must agree with a live evaluator: a fictional record projection leaks through assignability into record slots whose certified member accesses then crash on the real object. The record encoding remains legal for exactly one case: types whose runtime values *genuinely are* such records (e.g. a host where money literally is `['kind' => 'money', 'currency' => 'GBP', 'amount' => 100]`) — and the census will hold you to it.
 
 A complete refinement-type example:
 
@@ -202,52 +204,55 @@ final readonly class DateArithmeticOverloader implements OperatorOverloader
 }
 ```
 
-### Composing your dialect
+### Packaging it: the `Extension` and the `Dialect`
 
-The dialect is one list. The evaluator dispatches over it (first honest claim wins) and the checker resolves over it (all certifying verdicts collected; agreement resolves to the type, disagreement to `Unknown` — never list order):
+A package ships one `Extension` — the unit that carries everything above, consumed by both the evaluator *and* the checker so they cannot be composed differently:
 
 ```php
-use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Extension;
 
-$operators = new OverloaderManager([
-    new NullOverloader(),
-    new DateArithmeticOverloader(),   // your rule, beside core's
-    new BinaryOverloader(),
-    new ComparisonOverloader(),
-    // ...
-]);
+final class TimeExtension extends Extension
+{
+    public function operators(): array      { return [new DateArithmeticOverloader(), new DateComparisonOverloader()]; }
+    public function unaryOperators(): array { return []; }
+    public function literals(): array       { return [Date::class => fn(Date $d) => new DateType()]; }
+}
 ```
+
+The host composes a `Dialect` once and hands it to the `Expression`:
+
+```php
+use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Expression;
+
+$dialect = Dialect::core()->with(new TimeExtension(), new MoneyExtension());
+
+$expression = new Expression($source, $resolver, dialect: $dialect, declarations: [...]);
+
+$expression->check(new BooleanType());   // the checker uses the dialect...
+$expression(['effective' => $date]);     // ...and so does the evaluator. One list, both semantics.
+```
+
+Composition rules worth knowing: extension rules **prepend** core's, so when two honest rules genuinely both claim a value, the specialization wins the tie; duplicate literal registrations across extensions are a **loud error**, never a precedence question. `Extension` is an abstract class with empty defaults — override only what you contribute, and future hooks (matchers, resolvers) can be added without breaking you.
 
 Because your `-` rule certifies `(Date, Period) → Date` while core's arithmetic refuses it, the checker takes your verdict; with `Unknown` operands both may certify with different types, and the honest composed answer is `Unknown`.
 
-Unary rules mirror all of this exactly — `UnaryOverloaderManager` composes them, and `UnaryResolver` accepts your stack:
-
-```php
-$unary = new UnaryOverloaderManager([
-    new NotOverloader(),
-    new NegateOverloader(),
-    new NegateMoneyOverloader(),  // -money<GBP> → money<GBP>
-]);
-
-new UnaryResolver($inner, overloader: $unary);
-```
-
 One asymmetry to know: **absence never reaches a unary rule.** The resolver short-circuits an absent operand before any rule runs, so unary rules only see present values and optionality propagates structurally (`!Option<Boolean>` is `Option<Boolean>`). Binary rules, by contrast, see values as bound — a dialect that wants absence-as-zero arithmetic writes a binary rule whose `supportsOverloading` claims a `null` beside a number and whose `typeOf` admits `Option<Number>` operands.
+
+(You can still compose `OverloaderManager`/`UnaryOverloaderManager` stacks by hand and wire them into the resolver container yourself — the legacy path — but then keeping the checker's stacks identical is your discipline rather than the API's. Prefer the `Dialect`.)
 
 ## Literal registration
 
-When inference meets a `StaticSource` holding one of your objects, it consults the `LiteralTypeRegistry` — the mapping from PHP value classes to types:
+When inference meets a `StaticSource` holding one of your objects, it consults the literal registry — the mapping from PHP value classes to types, contributed via your `Extension::literals()`:
 
 ```php
-use Superscript\Axiom\Types\LiteralTypeRegistry;
-use Superscript\Axiom\Types\TypeInference;
-
-$inference = new TypeInference($operators, $unary, new LiteralTypeRegistry([
-    Money::class => fn(Money $value) => new MoneyType($value->currency()),
-]));
+public function literals(): array
+{
+    return [Money::class => fn(Money $value) => new MoneyType($value->currency())];
+}
 ```
 
-The factory receives the value, so the type can be as precise as the value determines (`Money('GBP', 100)` types as `Money<GBP>`, not just "money"). An unregistered object literal is an inference *error*, with a message pointing at the registry — never a silent `Unknown`. For domain literals whose class determines nothing, wrap the source in a `TypeDefinition`: the author's explicit type override.
+The factory receives the value, so the type can be as precise as the value determines (`Money('GBP', 100)` types as `Money<GBP>`, not just "money"). An unregistered object literal is an inference *error*, with a message pointing at the registry — never a silent `Unknown`. For domain literals whose class determines nothing, wrap the source in a `Coerce` or `Ascription` node: the author's explicit type.
 
 ## Host sources
 
@@ -325,7 +330,7 @@ Statically, custom patterns behave like `ExpressionPattern`: they match at runti
 
 Two patterns from core are worth copying into your package's suite:
 
-**The shape census.** One test that asserts every type your package ships projects into the expected sealed constructor. It is the "no unmodelled types" guarantee, kept mechanically:
+**The shape census — two laws.** First, every type your package ships projects into the expected sealed constructor (the "no unmodelled types" guarantee, kept mechanically):
 
 ```php
 #[Test]
@@ -336,10 +341,25 @@ public function every_type_projects(Type $type, string $expectedShape): void
 }
 ```
 
-**The agreement harness.** For every overloader, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values), check two laws:
+Second — **shape truth**: for every record-projected type, over real specimens of its values, every projected field must be reachable and inhabit the field's shape. This is the law that outlaws fictional projections generatively rather than by review:
+
+```php
+#[Test]
+#[DataProvider('recordProjections')]
+public function record_projections_are_true(Type $type, array $specimen): void
+{
+    foreach ($type->shape()->fields as $name => $field) {
+        $this->assertArrayHasKey($name, $specimen);
+        $this->assertTrue(TypeReifier::reify($field)->coerce($specimen[$name])->isOk());
+    }
+}
+```
+
+**The agreement harness.** For every overloader, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values), check three laws:
 
 - **Soundness**: where `typeOf` certifies `Ok(T)`, every specimen pair the rule claims and successfully evaluates produces a value that `T::assert` accepts.
 - **Anti-shadowing**: where `typeOf` refuses (and the mismatch is not `dead`), the rule must not claim every specimen pair of those types — a rule that runtime-owns values it statically refuses is hiding semantics from the checker.
+- **The dead law**: where `typeOf` refuses with `dead: true` ("statically constant"), all claimed specimen pairs must evaluate to one identical boolean. A dead verdict is a claim, and claims get verified — this law exists because its absence let PHP's loose equality ship a lie (`5 == '5'` was true while the checker said "can never hold").
 
 Core's `tests/Operators/AgreementHarnessTest.php` is the reference implementation; point it at your rules and your specimens. Throw your specimens at *core's* rules too — that is exactly the test that catches core's comparison rule accidentally claiming your domain objects.
 

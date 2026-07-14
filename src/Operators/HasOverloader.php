@@ -23,8 +23,11 @@ final readonly class HasOverloader implements OperatorOverloader
     }
 
     /**
-     * @param list<string|null> $left
-     * @param list<string|null>|string|null $right
+     * Membership is value equality ({@see ValueEquality}) — never PHP's
+     * array_intersect, whose string comparison juggles types (true in [1]
+     * must be false).
+     *
+     * @param list<mixed> $left
      * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
@@ -37,7 +40,7 @@ final readonly class HasOverloader implements OperatorOverloader
             return Ok(false);
         }
 
-        return Ok(array_intersect($right, $left) === $right);
+        return Ok(array_all($right, fn(mixed $needle) => ValueEquality::contains($left, $needle)));
     }
 
     public function handles(string $operator): bool

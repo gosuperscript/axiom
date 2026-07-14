@@ -2,7 +2,7 @@
 
 - **Status**: Accepted
 - **Author**: Robert van Steen
-- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved)
+- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved; revised again 2026-07-14 after adversarial review — see §Resolved questions, second round)
 
 ## Summary
 
@@ -24,7 +24,7 @@ Hosts want to answer, before evaluating anything, questions the engine currently
 
 - `Types\Type` is a **runtime contract**: `assert`, `coerce`, `compare`, `format`. It answers "does this value inhabit this type?" — never "how does this type relate to that one?".
 - Operators are **value-directed**: `OperatorOverloader::supportsOverloading(mixed $left, mixed $right, string $operator)` dispatches on runtime values; an ordered stack (`OverloaderManager`) composes a dialect.
-- The runtime AST (`Source`) already contains the one static-typing node: `TypeDefinition` (an author's explicit type declaration around a source, evaluated via `ValueResolver`).
+- The runtime AST (`Source`) already contains one static-typing node, historically named `TypeDefinition` (evaluated via coercion). This RFC splits it into two nodes with distinct semantics: `Coerce` and `Ascription` (§3).
 
 What's missing is the middle: a **static semantics** connecting declared types to expressions.
 
@@ -75,9 +75,14 @@ The sealed constructors:
 | `ListShape(element, min, max)` | length-bounded list | A plain list is bounds `[0, ∞)`; there is no separate sized-list shape. Bounds participate in subtyping and overlap. |
 | `UnknownShape` | statically unnameable | Gradual typing. Admissible at every operand position; certifies nothing under assignability (accepted only by itself). Derived, never authored. |
 | `NeverShape` | bottom | The empty value set. Type of impossible joins; `Option<Never>` is the type of the `null` literal; union identity. |
-| `OpaqueShape(identity)` | pure nominal | Equal only to itself. For host types that shouldn't be structurally transparent (claim IDs, catalogue keys). |
+| `OpaqueShape(identity, parameters)` | nominal head, structural parameters | Related only under the same identity; then parameter-wise by the ordinary relations (`Opaque('money', ['currency' => Literal('GBP')])` is assignable to `Opaque('money', ['currency' => 'GBP' \| 'USD'])`). Parameterless opaques are plain nominal identities (claim IDs, catalogue keys). The shape for object-valued domain types. |
 
-**Deliberate omission — no `Brand` constructor.** Money "branded by kind and currency" is the *discriminant-field encoding*: a closed record with literal fields (`{kind: 'money', currency: 'GBP', amount: Number}`). Currency subtyping (`Money<GBP>` assignable to `Money<GBP|USD>`) falls out of ordinary literal/union rules with zero new machinery, as proven downstream in production. A first-class brand constructor would add an eleventh case interacting with all others in every relation, to prevent only deliberate spoofing — not a real threat in an expression language. A projection helper (`Shape::branded('money', ['currency' => $c], $fields)`) keeps packages from hand-rolling the convention. A real constructor is reserved for the day spoofing actually bites.
+**The shape-truth law.** `shape()` is a **truth claim about the runtime structure of the type's values** — every relation trusts it, so it must be load-bearing-true. Project `RecordShape` *only if* the member-access mechanism can reach every projected field on every value of the type and obtain an inhabitant of the field's shape. This is census-enforced, not honor-system (see the shape-soundness census, second law). The consequence for domain types:
+
+- Values that genuinely *are* records (JSON-shaped hosts where money is `['kind' => 'money', 'currency' => 'GBP', 'amount' => 100]`) may project as records — the discriminant-field encoding is legal there, and currency subtyping falls out of literal/union rules.
+- **Object-valued** domain types (a `Money` class) must **not** project fictional fields. They project `OpaqueShape` with structural parameters: `Opaque('money', ['currency' => Literal('GBP')])` — nominal head (no structural claims, no field access, no record interop), parameters related by the ordinary rules, so currency subtyping survives without the lie.
+
+*Design history, owned explicitly:* the first revision of this RFC omitted a brand-like constructor on the argument that the discriminant-field encoding gives branded subtyping "for free". The adversarial review round killed that premise: a fictional record projection leaks through assignability — `Money` becomes assignable to `{amount: Number}` slots, whose certified member accesses then crash on the actual object. Once shapes must be true, object-valued types need a nominal-with-parameters constructor, so `OpaqueShape` gained parameters. (Contrast TypeScript's *branded types*, which use exactly this fictional-field trick safely — because TS types are erased and never meet a runtime. Our shapes drive a checker that must agree with a live evaluator; the same trick is a certified-crash factory here.)
 
 An unmodelled type (no projection, no `Shaped`) **throws** — a programming error in the host, not a mismatch a rule author branches on.
 
@@ -140,6 +145,11 @@ Diagnostics are first-class: relations fail with a `TypeMismatch` — a message 
 
 *Value domain (Phase 0 alignment)*
 - `assert` defines strict membership: `""` **is** a `String`, `'null'` **is** a `String`, `[]`/`{}` **are** a `List`/`Dict`. The absence readings (`'' → None`, `'null' → None`, `[] → None`) live in — and only in — `coerce`, the lenient input boundary where "empty CSV cell means no value" is a legitimate reading. Hosts keep binding-time leniency; the internal value domain becomes coherent.
+- **Equality is value equality, never PHP juggling**: numeric comparison when both operands are numbers (`1 == 1.0` holds — one `Number` base, matching literal-shape identity and `Type::compare`), strict identity for strings/booleans/null, element-wise for lists, and **`false` across bases** (`5 == '5'` is `false`). This is what makes a `dead` verdict honest by construction: no overlap ⇒ genuinely constant-false. `===`/`!==` become aliases of `==`/`!=` (strictness was only distinct while `==` juggled). A host that coerced its stringly inputs — which the typed boundary now does for it — never notices.
+- **One representation of null in the resolution channel**: the value `null` travels as `None`; `Some(null)` never escapes a resolver (a bound `null` normalizes to `None` at symbol lookup — shadowing survives, since it lives in `Bindings::has()`, checked before the value is read). The *coercion channel* deliberately keeps its two-value protocol — `Option::coerce(null) → Some(null)` ("present null") vs `None` ("read as missing") — but that distinction is consumed at boundaries (record fields, typed bindings), never propagated. `InfixResolver` already converts both directions at operator positions (`unwrapOr(null)` in, `Option::from` out); this law makes the whole engine as consistent as its operators.
+
+*Coercion is the boundary*
+- `assert` defines **membership** (the value domain, what shapes describe); `coerce` defines **admission** (host-facing conversion policy). Coercion is statically opaque — the checker never reasons about it — and has exactly two homes: the typed binding boundary (declared inputs coerced at `Expression` invoke) and the explicit `Coerce` node. Certification is a conditional guarantee ("*if* inputs inhabit their declared types…"); the boundary is what establishes the condition, which is why `coerce` exists on `Type` at all.
 
 ### 2. Typed operators — one class, both semantics
 
@@ -194,7 +204,7 @@ interface OperatorOverloader
 | Overloader | Static rule (`typeOf`) |
 | --- | --- |
 | `LogicalOverloader` | two present booleans → `Boolean`; refuses `Option` (falls out of `admits`) |
-| `ComparisonOverloader` | operand types must `overlaps()`; ordering additionally requires `hasDefinedOrder` on present types; tolerates `Option` (equality against `null` is the emptiness test) → `Boolean` |
+| `ComparisonOverloader` | runtime equality is **value equality** (numeric within `Number`, strict otherwise, `false` across bases — never PHP juggling; `===`/`!==` are aliases); statically, operand types must `overlaps()` — a comparison that cannot hold is `dead`, and value equality makes `dead` mean constant-`false` *by construction*; ordering additionally requires `hasDefinedOrder` on present types; tolerates `Option` (equality against `null` is the emptiness test) → `Boolean` |
 | `BinaryOverloader` | two present numbers → `Number`; refuses `Option` |
 | `NullOverloader` | the degenerate `null ∘ null → null` rule; contributes no static admissibility beyond what `Option` operand positions of other rules claim |
 | `HasOverloader` / `InOverloader` | list side must be list-shaped and present; element types must `overlaps()` → `Boolean` |
@@ -270,7 +280,8 @@ In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw valu
 - `SymbolSource` → environment lookup as above.
 - `StaticSource` → **literal-first inference**: scalars infer as `LiteralType` always (values are immutable; there is no mutation-driven reason to widen). `Literal('shop')` is assignable to `String` wherever needed, and equality/membership get sharper: `x == "warehouse"` where `x: 'shop' | 'office'` is a compile error under `overlaps` — dead-comparison detection for free. Domain literals via `LiteralTypeRegistry`: value-class → type, plugin-extensible (core registers scalars and lists; `axiom-money` registers `Money`; a host registers its own).
 - List literals → **union element unification with exact bounds**: `[money<GBP>, money<USD>]` is `List<Money<GBP> | Money<USD>, 2, 2>`; `['shop', 'office']` is `List<'shop' | 'office', 2, 2>` (which is what makes `x in ['shop', 'office']` typecheck precisely against an enum-typed `x`); `[]` is `List<Never, 0, 0>`. Same join as `match`, same position, same precision — never equivalence-else-`Unknown`.
-- `TypeDefinition` → the declared type, verbatim. The author's explicit override, and the escape hatch for domain literals whose class determines nothing.
+- `Coerce(type, source)` → the declared type, **verbatim, unchecked**. The boundary node: runtime converts via `coerce()`; the boundary is statically opaque *by design* (coercion is admission policy, not membership — see the coercion-is-the-boundary law). The old `TypeDefinition` name is retired: it always behaved as coercion, and "definition" read as annotation — exactly the confusion that produced a review finding.
+- `Ascription(type, source)` → the declared type, **checked**: the inner type must be `Unknown` or `overlaps` the declaration; disjoint is an error (a false claim, assert-world, where overlap *is* the correct relation — TypeScript's `as` draws the same line). Runtime verifies via `assert()` and fails loudly, so a lying ascription is a tripwire, not a rot vector. The author's annotation: refine an `Unknown` host source, narrow a union.
 - `UnaryExpression` / `InfixExpression` → operand types through the composed overloader stacks; unary applies the structural `Option`-propagation rule first.
 - `MatchExpression` → see below.
 - `MemberAccessSource` → see below.
@@ -295,11 +306,16 @@ A host source that knows its type declares it (a geocoding source → its coordi
 
 #### Member access
 
-- `Record.field` (declared) → the field's type. Record coercion canonicalizes, so declared-field access never hits the missing-key error.
-- `Option<Record>.field` → `Option<FieldType>` — optionality propagates, mirroring the resolver; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
+Member access is **shape-driven** — it dispatches on the operand's projection, not its concrete `Type` class, so any type whose (census-verified, therefore true) projection is record-like gets field access, extension types included. Field shapes **reify** back to types (`Shape → Type` is mechanical over the sealed constructors; an opaque field reifies to `OpaqueType` — statically nominal, dynamically unverifiable by core, `Unknown`'s runtime posture with a nominal shape).
+
+- Record-shaped operand, declared field → the field's shape, reified. Record coercion canonicalizes, so declared-field access never hits the missing-key error.
+- `Option<record-shaped>.field` → `Option<FieldType>` — optionality propagates, mirroring the resolver; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
 - `Unknown.field` → `Unknown` (gradual admission).
 - Undeclared field on a **closed** record → compile error. On an **open** record → also compile error: "open" is a claim about assignability width, not a certificate that any particular extra field exists — and the runtime errs when it doesn't. Certifying on "might have it" is the optimistic hole `admits` already closes for unions.
-- **`Dict<V>.field` → compile error** (strict): a dict's nature is "keys unknown statically", so every access is fallible, and the runtime's missing-key `Err` stays exactly as is. `Dict` is a transport type you *type your way out of* — "give this a `schema`, or bind it `Unknown` if you truly can't". Escape valve reserved for later: an explicit `get(dict, key)` function typed `Option<V>` — opt-in fallibility, visible in the syntax, rather than every dot on a dict being secretly partial.
+- **Dict-shaped operand → compile error** (strict): a dict's nature is "keys unknown statically", so every access is fallible, and the runtime's missing-key `Err` stays exactly as is. `Dict` is a transport type you *type your way out of*. Escape valve reserved for later: an explicit `get(dict, key)` function typed `Option<V>`.
+- **Opaque-shaped operand → compile error**: nominal types make no structural claims, so there is nothing to certify accessing.
+
+Shape-driven access is only sound *because of* the shape-truth law: an earlier design dispatched on concrete classes precisely to avoid trusting projections, which broke extension types; trusting projections without the truth law would have certified crashes on fictional fields. Truth first, then trust.
 
 #### `check` is `infer` + assignability (bidirectionality reserved for lambdas)
 
@@ -307,12 +323,41 @@ Literal-first inference and value-set `Option` semantics dissolve the bidirectio
 
 ### How hosts consume the checker
 
-There is no compiler in the loop — hosts hold runtime-AST programs and call the API directly:
+There is no compiler in the loop — hosts hold runtime-AST programs and call the API directly, through one object that owns everything type-relevant:
 
-- The host seeds a `TypeEnvironment` with its declared input types (programmatically — exactly what the downstream production layer does today) — the static face of its `Bindings` — over the same `Definitions` the evaluator uses.
-- `infer(program, env)` answers "what does this derived value return?"; `check(condition, Boolean, env)` answers "is this gate boolean?"; a failed relation carries the `TypeMismatch` cause chain, rendered via `TypeDescriber`.
+#### The `Dialect` and its extensions
+
+The operator rules live in exactly one place. A `Dialect` is a value object composing the binary manager, the unary manager, and the literal registry; both the evaluator and the checker consume the *same instance*, so checking with different rules than you run with stops being representable in the API a normal host touches. Packages contribute through an `Extension` (an abstract class with empty-default hooks — `operators()`, `unaryOperators()`, `literals()` — abstract so hooks like `matchers()` can be added later without breaking implementors):
+
+```php
+$dialect = Dialect::core()->with(new MoneyExtension(), new TimeExtension());
+```
+
+Extension rules **prepend** core's (specialization wins ties — rare and deliberate under the honesty contract); duplicate literal registrations are **loud errors** (a configuration bug, not a precedence question).
+
+#### Typed bindings: the boundary
+
+Certification is conditional — "*if* inputs inhabit their declared types, this expression is sound" — and the boundary establishes the condition. The same declarations map serves both faces: statically it seeds the `TypeEnvironment`; at invoke time each declared binding passes through its declared type (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
+
+- Declared input, bad value → boundary error, pre-evaluation, aggregated across all bad inputs, named by binding (`binding [customer]: field [turnover]…`) — errors speak the host's language, not the AST's.
+- Declared required input, missing → boundary error (all missing inputs reported at once). Declared `Option`, missing or null → legal absence.
+- Undeclared extra keys → ignored (superset contexts stay legal). Undeclared *parameters* are the explicit gradual path: at check time they're unbound-symbol errors unless declared `Unknown`.
+- **Shadowing a definition requires a declaration**: a binding key colliding with a definition name is a boundary error unless the symbol is declared — the declaration is the typed license to shadow, the boundary enforces it, and the declared∧defined agreement check (below) guarantees either source of the value satisfies the type the checker assumed. Upstream's shadowing feature survives as a typed, declared parameter instead of an implicit override.
+
+The guarantee, stated honestly: *declared inputs cannot deliver garbage past the boundary; undeclared inputs cannot touch anything certified — they are inert, an explicit `Unknown`, or a named error. The only trust remaining is the trust written down.*
+
+#### Bindings hold values whole (descent, not flattening)
+
+`Bindings` stores what it is given — the associative-array-means-namespace heuristic is dead. Lookup does the work: an explicit dotted key wins; otherwise a namespaced lookup **descends** one level into an array binding. So `['customer' => ['turnover' => 600000]]` binds `customer` whole (a record value — coercible at the boundary as a record, member-accessible) *and* still answers `SymbolSource('turnover', 'customer')` via descent. `TypeEnvironment` mirrors the descent: a namespaced symbol whose namespace is declared record-typed resolves to that record's field type. **A namespace is the record view of a binding** — one rule, both semantics; the two concepts stop being separate.
+
+(Rejected on the way here: typed value objects at the call site — `TypedValue::of($type, $value)` bindings. They put types on the wrong side of time — certification needs types *before* values exist — reopen the two-sources-of-truth drift the declarations map closed, and presuppose hosts convert values before the boundary whose job is converting. The co-location instinct is honored where it's sound: declaration-with-enforcement on the `Expression`, not type-with-value at the call site.)
+
+#### The `Expression` types itself
+
+`Expression` owns the dialect, the definitions, and the declarations — so it can answer static questions directly: `$expression->infer()` ("what does this return?"), `$expression->check($expected)` ("is this gate boolean?"). For the common case a host never hand-assembles `TypeInference`/`TypeEnvironment`, and the declared∧defined **agreement check** rides along: a symbol that is both declared and defined must have its definition's inferred type assignable to the declaration — otherwise the no-binding call path would deliver values the checker never blessed.
+
 - **Corpus sweeps**: to migrate onto the strict runtime, a host runs `check`/`infer` across its stored programs and triages the mismatches — non-exhaustive matches, non-boolean negations, dead comparisons all surface before any evaluation happens. The sweep tool for the runtime strictness is this API, not an authoring-surface feature.
-- Statically-impossible explicit coercions (`TypeDefinition` whose declared type is disjoint from its source's inferred type under `overlaps`) surface in the same sweep.
+- False `Ascription` claims (declared type disjoint from the inferred inner type) surface in the same sweep. `Coerce` nodes do not — coercion satisfiability is deliberately not modeled statically (a lint-grade `CoercionAware` opt-in may arrive later; its absence costs a diagnostic, never soundness).
 
 ## What stays in hosts
 
@@ -338,7 +383,7 @@ Internally, the release is staged as a PR series, in this order:
   2. `supportsOverloading` honesty audit: `ComparisonOverloader` claims scalar/null/array equality and numeric ordering only; `LogicalOverloader` booleans only.
   3. Boolean-only `!` (kills PHP truthiness).
   4. `match` fall-through: `Ok(None())` → `Err`.
-- **Phase 1 — vocabulary and relations**: the sealed shape algebra + `Shaped` + `TypeRelations`/`TypeOrder`/`TypeMismatch`/`TypeDescriber`, with a full-coverage suite and a shape-soundness census (every projected or `Shaped` type must have specimens; the census fails when one doesn't).
+- **Phase 1 — vocabulary and relations**: the sealed shape algebra + `Shaped` + `TypeRelations`/`TypeOrder`/`TypeMismatch`/`TypeDescriber`, with a full-coverage suite and a shape-soundness census with two laws: **(C1)** every projected or `Shaped` type must have specimens (the census fails when one doesn't), and **(C2, shape truth)** for every record-projected type, over its specimens, every projected field must be reachable by the member-access mechanism and inhabit the field's shape — the generative enforcement of the shape-truth law.
 - **Phase 2 — typed operators**: `typeOf`/`handles` on `OperatorOverloader`; `UnaryOverloader` + manager + `NotOverloader`/`NegateOverloader`; core overloaders gain their rules; `OverloaderManager` composes and resolves as above; the agreement harness lands.
 - **Phase 3 — inference**: `TypeInference`, graph-walking `TypeEnvironment` with cycle detection, `LiteralTypeRegistry`, `TypedSource`.
 
@@ -357,7 +402,7 @@ Internally, the release is staged as a PR series, in this order:
 
 If a textual authoring surface is ever built over this engine, it builds on layers 1–3 and must ship *with* its checker wired in — there must never be a released authoring surface whose typed syntax is uncheckable. Decisions recorded now so the algebra and a future grammar can't drift:
 
-- **Wiring**: declarations seed the `TypeEnvironment`; expression bodies infer through the plugin-composed overloader stacks; assertion constructs go through `check(expr, Boolean, env)`; coercion syntax is the textual face of `TypeDefinition`; compilation results carry located diagnostics (`TypeMismatch` + a source location), each tagged behaviour-change vs latent-bug for corpus triage.
+- **Wiring**: declarations seed the `TypeEnvironment`; expression bodies infer through the plugin-composed overloader stacks; assertion constructs go through `check(expr, Boolean, env)`; coercion syntax is the textual face of `Coerce`, ascription syntax of `Ascription`; compilation results carry located diagnostics (`TypeMismatch` + a source location), each tagged behaviour-change vs latent-bug for corpus triage.
 - **Annotation grammar**: one spelling per constructor, no synonyms. All type identifiers UpperCamelCase (`Boolean`, `Number`, `String`, `List<T>`, `Dict<T>`, `Money<GBP>`), giving the lexical law *uppercase initial = type, lowercase initial = symbol*. Postfix `?` for options (`T??` canonicalizes). Infix `|` for unions with bare literals as types (`'shop' | 'office'`) — no `enum{}` form. Records named via schema declarations only. No bounds syntax in v1. `Unknown`/`Never` unspellable — derived, never authored.
 - **Functions and lambdas**: signatures on a function registry first, lambda parameter inference from expected types later, via the reserved bidirectional `check`.
 
@@ -368,6 +413,7 @@ If a textual authoring surface is ever built over this engine, it builds on laye
 3. **Agreement harness, bidirectional and cross-package** — a generative suite in Axiom checking two laws for every overloader against a specimen matrix of typed values:
    - **L1, soundness**: if `typeOf` says `Ok(T)`, then every specimen value pair of those types is claimed by `supportsOverloading`, `evaluate` succeeds on it, and the result inhabits `T`. (Skipped where an operand type is `Unknown` — gradual admission is deliberately unsound — and vacuous when `T` is `Unknown`.)
    - **L2, anti-shadowing**: if every specimen value pair of a type pair is claimed by the rule, then `typeOf` must certify it — a rule that runtime-owns values it statically refuses is hiding semantics from the checker. Exempt: refusals marked `dead` (the runtime tolerates dead tests; the checker still flags them) and the degenerate `NullOverloader` (documented in the class).
+   - **L3, the dead law**: a refusal marked `dead` is a *claim* ("this can never hold"), and claims get verified — for every specimen value pair of the refused types, the rule must either not claim the pair or evaluate it to `false`. Never `true`. This law exists because its absence let a real bug ship: dead refusals were exempt from L2 on the unverified assumption that dead ⇒ constantly-false, and PHP's loose equality (`5 == '5'` → `true`) broke the assumption silently. Value equality restored the invariant; L3 pins it generatively, for core and every extension.
 
    Packages and hosts run the same harness over their own overloaders by contributing specimens — and their specimens are thrown at *core's* overloaders too (L2, run against the pre-RFC code, would have caught `ComparisonOverloader` claiming `Money < Money` immediately).
 4. **Ambiguity is honest** — disagreement between certifying rules yields `Unknown`, so a new overload (date-period subtraction beside numeric subtraction) can never silently change an existing inference from one concrete type to another.
@@ -376,7 +422,7 @@ If a textual authoring surface is ever built over this engine, it builds on laye
 ## Alternatives considered
 
 - **Status quo: host-side mirror + conformance tests.** Keep static semantics downstream, pin them to the runtime with agreement tests. Works, and is the right staging — but the mirror is a standing invitation to drift, the tests catch divergence only after the fact, and every host pays again. Rejected as the end state.
-- **Static semantics as a sibling package (`axiom-types`).** Avoids growing the core, but `TypeDefinition` already lives in the runtime AST, and splitting `typeOf` from `evaluate` across packages reintroduces exactly the seam this RFC exists to close. Rejected.
+- **Static semantics as a sibling package (`axiom-types`).** Avoids growing the core, but the typing nodes (`Coerce`, `Ascription`) already live in the runtime AST, and splitting `typeOf` from `evaluate` across packages reintroduces exactly the seam this RFC exists to close. Rejected.
 - **Signatures as a parallel interface (`TypedOverloader`) rather than extending `OperatorOverloader`.** Permits an overloader without a typing rule — the gap becomes opt-in again. Originally this RFC proposed the parallel interface with a migration window; resolved during review to a **hard break** at 0.x: `typeOf` on the one interface, no adapter, no `Unknown`-typing legacy tier.
 - **Open shape algebra (relation rules on the shapes, double dispatch).** Would let hosts add shape constructors — and with them, mutually inconsistent relation rules ("who wins when `A->assignableFrom(B)` and `B->assignableTo(A)` disagree?"). The laws stay checkable only if the case analysis is exhaustive. Rejected in favour of the sealed algebra with projection-only extensibility.
 - **`Option`-wrapped match results (silent fall-through).** Typing non-exhaustive matches as `Option<join>` was honest but preserved a silent-absence runtime. Resolved instead to fall-through-as-error + mandatory provable exhaustiveness: authors add deliberate default arms.
@@ -393,3 +439,16 @@ Formerly "Open questions"; all resolved in the 2026-07-14 design review:
 5. **Migration window mechanics** → hard break at 0.x; `typeOf` on `OperatorOverloader`; no adapter, no legacy tier. (§2)
 6. **Enum/annotation syntax** → decided and recorded for any future authoring surface (UpperCamelCase types, postfix `?`, `|` unions with bare literals, no `enum{}`); nothing ships now. (§Future work)
 7. **Release cadence** → one breaking release `0.5.0` = Phases 0–3, with the inference API as the corpus-sweep migration tool; one migration guide. An authoring surface, if ever shipped, must ship with its checker wired in. (§Release plan, §Future work)
+
+Second round, resolved after the adversarial review of the first implementation:
+
+8. **Equality semantics** → value equality, never PHP juggling: numeric within `Number`, strict otherwise, `false` across bases; `===`/`!==` are aliases. Makes `dead` mean constant-false by construction. (Laws, §Value domain)
+9. **Dead-coercion detection** → the overlap check was the right rule on the wrong node. Resolved by splitting `TypeDefinition` into `Coerce` (runtime `coerce`, statically verbatim — the opaque boundary) and `Ascription` (runtime `assert`, statically checked: `Unknown`-or-overlaps). A per-type static coercion relation (`acceptsInput`) was rejected for the core contract — its absence costs a lint, not soundness; may return later as opt-in `CoercionAware`. (§3)
+10. **Whether `coerce` survives** → yes, demoted from language semantics to *the boundary contract*: membership vs admission; two homes (typed bindings, `Coerce`); statically opaque by design. (Laws, §Coercion is the boundary)
+11. **Null representation** → one representation in the resolution channel (`None` ≙ `null`; a bound null normalizes at lookup); the coercion channel keeps `Some(null)` vs `None` as a boundary-consumed protocol. Contra the reviewer's recommendation, which would have made null "present" everywhere and broken None-propagation engine-wide. (Laws, §Value domain)
+12. **Member access for extension types** → shape-driven with reification — but only after the **shape-truth law** made that sound: projections are census-verified truth claims (C2). The interim `HasFields` counter-proposal died in review: it patched direct access while leaving the assignability leak open. (§1, §3)
+13. **Brand constructor, revisited** → `OpaqueShape` gains structural parameters (nominal head, parameter-wise relations). The original omission's premise — "the discriminant-field record encoding is free" — died with shape truth: fictional projections are outlawed for object-valued types. Record-encoding remains legal where values genuinely are records. (§1)
+14. **Dialect ownership** → one `Dialect` value object consumed by evaluator and checker alike; packages contribute via `Extension` (abstract base, prepend semantics, loud literal collisions); `Expression::infer()/check()` so the common case cannot miscompose. (§How hosts consume)
+15. **Typed bindings** → declarations gain a runtime face: the boundary coerces/asserts declared inputs pre-evaluation, aggregated and named; shadowing a definition requires a declaration; declared∧defined symbols get an agreement check. Typed value objects at the call site were rejected (types on the wrong side of time). (§How hosts consume)
+16. **Bindings shape** → descent, not flattening: arrays bind whole; namespaced lookup descends; a namespace is the record view of a binding, statically and dynamically. (§How hosts consume)
+17. **Harness completeness** → L3, the dead law: `dead` refusals are verified constant-false-or-refused over specimens. (§Drift guarantees)

@@ -23,8 +23,10 @@ class InOverloader implements OperatorOverloader
     }
 
     /**
-     * @param list<string|null>|string|null $left
-     * @param list<string|null> $right
+     * Membership is value equality ({@see ValueEquality}), never PHP's
+     * string-comparing array_intersect.
+     *
+     * @param list<mixed> $right
      * @param 'in' $operator
      * @return Result<bool, never>
      */
@@ -37,7 +39,7 @@ class InOverloader implements OperatorOverloader
             return Ok(false);
         }
 
-        return Ok(array_intersect($left, $right) === $left);
+        return Ok(array_all($left, fn(mixed $needle) => ValueEquality::contains($right, $needle)));
     }
 
     public function handles(string $operator): bool

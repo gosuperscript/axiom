@@ -36,7 +36,7 @@ final readonly class LiteralTypeRegistry
         }
 
         return Err(new TypeMismatch(sprintf(
-            'No literal type is registered for [%s]; register one, or declare the type explicitly with a TypeDefinition.',
+            'No literal type is registered for [%s]; register one, or declare the type explicitly with a Coerce or Ascription node.',
             get_class($value),
         )));
     }

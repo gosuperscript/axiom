@@ -52,6 +52,12 @@ final class TypeEnvironment
             return Ok($this->declarations[$key]);
         }
 
+        // Descent, mirroring Bindings: a namespaced symbol whose namespace
+        // is declared resolves to that declaration's field type.
+        if ($namespace !== null && isset($this->declarations[$namespace])) {
+            return $inference->fieldTypeOf($this->declarations[$namespace], $name);
+        }
+
         if (isset($this->memo[$key])) {
             return $this->memo[$key];
         }
@@ -77,5 +83,45 @@ final class TypeEnvironment
         array_pop($this->inProgress);
 
         return $this->memo[$key] = $result;
+    }
+
+    /**
+     * The declared∧defined agreement check: a symbol that is both declared
+     * and defined must have its definition's inferred type assignable to
+     * the declaration — otherwise the no-binding call path (where the
+     * definition evaluates) would deliver values the checker never blessed,
+     * since declarations shadow definitions statically exactly as bindings
+     * shadow them at runtime.
+     *
+     * @return list<TypeMismatch>
+     */
+    public function agreementMismatches(TypeInference $inference): array
+    {
+        $mismatches = [];
+
+        foreach ($this->declarations as $key => $declared) {
+            $definition = $this->definitions->get($key);
+
+            if ($definition->isNone()) {
+                continue;
+            }
+
+            $inferred = $inference->infer($definition->unwrap(), $this);
+
+            $verdict = $inferred->andThen(fn(Type $type) => TypeRelations::isTypeAssignableTo($type, $declared));
+
+            if ($verdict->isErr()) {
+                $mismatches[] = new TypeMismatch(
+                    sprintf(
+                        'Symbol [%s] is declared %s but its definition disagrees; the definition evaluates whenever no binding is passed.',
+                        $key,
+                        TypeDescriber::describe($declared),
+                    ),
+                    [$verdict->unwrapErr()],
+                );
+            }
+        }
+
+        return $mismatches;
     }
 }

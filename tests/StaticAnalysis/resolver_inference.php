@@ -9,7 +9,7 @@ use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ListType;
@@ -20,32 +20,32 @@ use function PHPStan\Testing\assertType;
 
 /**
  * Static-analysis proof that {@see DelegatingResolver::resolve()} infers the resolved value type from
- * a {@see Source}'s `T` (a {@see TypeDefinition} or a {@see StaticSource} carries it; ordinary
+ * a {@see Source}'s `T` (a {@see Coerce} or a {@see StaticSource} carries it; ordinary
  * sources default to `mixed`). These `assertType()` calls are checked by PHPStan during
  * `composer test:types`; a regression in the return type fails the build. Not executed at runtime.
  */
 function resolve_infers_value_type_from_type_definition(DelegatingResolver $resolver, Context $context): void
 {
-    // The TypeDefinition itself carries the Type's value parameter.
+    // The Coerce itself carries the Type's value parameter.
     assertType(
-        'Superscript\Axiom\Sources\TypeDefinition<string>',
-        new TypeDefinition(new StringType(), new StaticSource('x')),
+        'Superscript\Axiom\Sources\Coerce<string>',
+        new Coerce(new StringType(), new StaticSource('x')),
     );
 
     // Resolving it narrows Option to that value type — no coercion needed by the caller.
     assertType(
         'Superscript\Monads\Result\Result<Superscript\Monads\Option\Option<string>, Throwable>',
-        $resolver->resolve(new TypeDefinition(new StringType(), new StaticSource('x')), $context),
+        $resolver->resolve(new Coerce(new StringType(), new StaticSource('x')), $context),
     );
 
     assertType(
         'Superscript\Monads\Result\Result<Superscript\Monads\Option\Option<bool>, Throwable>',
-        $resolver->resolve(new TypeDefinition(new BooleanType(), new StaticSource(true)), $context),
+        $resolver->resolve(new Coerce(new BooleanType(), new StaticSource(true)), $context),
     );
 
     assertType(
         'Superscript\Monads\Result\Result<Superscript\Monads\Option\Option<float|int>, Throwable>',
-        $resolver->resolve(new TypeDefinition(new NumberType(), new StaticSource(1)), $context),
+        $resolver->resolve(new Coerce(new NumberType(), new StaticSource(1)), $context),
     );
 }
 
@@ -58,18 +58,18 @@ function resolve_infers_composed_value_types(DelegatingResolver $resolver, Conte
 {
     assertType(
         'Superscript\Monads\Result\Result<Superscript\Monads\Option\Option<list<float|int>>, Throwable>',
-        $resolver->resolve(new TypeDefinition(new ListType(new NumberType()), new StaticSource([1])), $context),
+        $resolver->resolve(new Coerce(new ListType(new NumberType()), new StaticSource([1])), $context),
     );
 
     assertType(
         'Superscript\Monads\Result\Result<Superscript\Monads\Option\Option<array<string, string>>, Throwable>',
-        $resolver->resolve(new TypeDefinition(new DictType(new StringType()), new StaticSource(['k' => 'v'])), $context),
+        $resolver->resolve(new Coerce(new DictType(new StringType()), new StaticSource(['k' => 'v'])), $context),
     );
 }
 
 /**
  * A {@see StaticSource} carries its value type directly, so it infers the type of
- * the value it holds without a wrapping {@see TypeDefinition}.
+ * the value it holds without a wrapping {@see Coerce}.
  */
 function resolve_infers_static_source_value_type(DelegatingResolver $resolver, Context $context): void
 {

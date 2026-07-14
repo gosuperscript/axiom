@@ -146,6 +146,14 @@ final class TypeRelationsTest extends TestCase
         ];
 
         yield 'opaque to same opaque' => [new OpaqueShape('ClaimId'), new OpaqueShape('ClaimId')];
+        yield 'opaque parameters relate covariantly' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => UnionShape::of(new LiteralShape('GBP'), new LiteralShape('USD'))]),
+        ];
+        yield 'identical parameterized opaques' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+        ];
     }
 
     #[Test]
@@ -300,8 +308,35 @@ final class TypeRelationsTest extends TestCase
         yield 'list is not a dict' => [new ListShape(new NumberShape()), new DictShape(new NumberShape())];
         yield 'number is not a dict' => [new NumberShape(), new DictShape(new NumberShape())];
 
-        yield 'opaque with different identity' => [new OpaqueShape('ClaimId'), new OpaqueShape('CatalogueKey')];
+        yield 'opaque with different identity' => [
+            new OpaqueShape('ClaimId'),
+            new OpaqueShape('CatalogueKey'),
+            'nominal identities differ',
+        ];
         yield 'opaque is not structurally transparent' => [new OpaqueShape('ClaimId'), new StringShape()];
+        yield 'opaque parameters do not widen backwards' => [
+            new OpaqueShape('money', ['currency' => UnionShape::of(new LiteralShape('GBP'), new LiteralShape('USD'))]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            "Parameter 'currency' is incompatible",
+        ];
+        yield 'opaque parameter mismatch carries the parameter cause' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('USD')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            "'USD' is not assignable to 'GBP'",
+        ];
+        yield 'a record source never satisfies an opaque target' => [
+            new RecordShape(['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+        ];
+        yield 'opaques with different parameter lists' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money'),
+            'the parameter lists differ',
+        ];
+        yield 'a parameterized opaque never matches a fictional record' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new RecordShape(['currency' => new LiteralShape('GBP')]),
+        ];
         yield 'record is not a list' => [new RecordShape(['a' => new NumberShape()]), new ListShape(new NumberShape())];
     }
 
@@ -448,6 +483,21 @@ final class TypeRelationsTest extends TestCase
 
         yield 'opaque overlaps only itself' => [new OpaqueShape('ClaimId'), new OpaqueShape('ClaimId'), true];
         yield 'distinct opaques do not overlap' => [new OpaqueShape('ClaimId'), new OpaqueShape('CatalogueKey'), false];
+        yield 'parameterized opaques overlap when parameters overlap' => [
+            new OpaqueShape('money', ['currency' => UnionShape::of(new LiteralShape('GBP'), new LiteralShape('USD'))]),
+            new OpaqueShape('money', ['currency' => UnionShape::of(new LiteralShape('USD'), new LiteralShape('EUR'))]),
+            true,
+        ];
+        yield 'parameterized opaques with disjoint parameters do not overlap' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('USD')]),
+            false,
+        ];
+        yield 'opaques with mismatched parameter lists do not overlap' => [
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money'),
+            false,
+        ];
         yield 'opaque does not overlap a primitive' => [new OpaqueShape('ClaimId'), new StringShape(), false];
         yield 'list does not overlap dict' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), false];
     }
@@ -513,6 +563,18 @@ final class TypeRelationsTest extends TestCase
         $this->assertStringContainsString("Required field 'y' is forbidden by the closed record.", $described);
         $this->assertStringContainsString("Field 'a' cannot satisfy both records.", $described);
         $this->assertStringContainsString("'x' and 'y' share no values.", $described);
+    }
+
+    #[Test]
+    public function opaque_overlap_failures_carry_the_parameter_cause(): void
+    {
+        $described = TypeRelations::shapesOverlap(
+            new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]),
+            new OpaqueShape('money', ['currency' => new LiteralShape('USD')]),
+        )->unwrapErr()->describe();
+
+        $this->assertStringContainsString("Parameter 'currency' cannot satisfy both.", $described);
+        $this->assertStringContainsString("'GBP' and 'USD' share no values.", $described);
     }
 
     #[Test]

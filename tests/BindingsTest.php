@@ -80,4 +80,35 @@ final class BindingsTest extends TestCase
         $this->assertTrue($bindings->get('claims', 'policy')->isNone());
         $this->assertFalse($bindings->has('claims', 'policy'));
     }
+
+    #[Test]
+    public function an_array_binding_is_both_a_record_and_a_namespace(): void
+    {
+        // Descent, not flattening: one value, both readings.
+        $bindings = new Bindings(['customer' => ['name' => 'Ada', 'turnover' => 600000]]);
+
+        $this->assertSame(['name' => 'Ada', 'turnover' => 600000], $bindings->get('customer')->unwrap());
+        $this->assertSame(600000, $bindings->get('turnover', 'customer')->unwrap());
+        $this->assertTrue($bindings->has('customer'));
+        $this->assertTrue($bindings->has('turnover', 'customer'));
+    }
+
+    #[Test]
+    public function an_explicit_dotted_key_wins_over_descent(): void
+    {
+        $bindings = new Bindings([
+            'customer' => ['turnover' => 1],
+            'customer.turnover' => 999,
+        ]);
+
+        $this->assertSame(999, $bindings->get('turnover', 'customer')->unwrap());
+    }
+
+    #[Test]
+    public function keys_returns_the_bindings_as_given(): void
+    {
+        $bindings = new Bindings(['a' => 1, 'customer' => ['b' => 2]]);
+
+        $this->assertSame(['a', 'customer'], $bindings->keys());
+    }
 }

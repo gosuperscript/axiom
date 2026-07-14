@@ -85,17 +85,17 @@ The key idea: the expression's inputs are its **parameters**, passed at the call
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\ValueResolver;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Types\NumberType;
 
 $resolver = new DelegatingResolver([
     StaticSource::class   => StaticResolver::class,
-    TypeDefinition::class => ValueResolver::class,
+    Coerce::class => CoerceResolver::class,
 ]);
 
-$source = new TypeDefinition(
+$source = new Coerce(
     type: new NumberType(),
     source: new StaticSource('42'),
 );
@@ -147,11 +147,13 @@ new SymbolSource('claims', 'quote'); // -> quote.claims
 new SymbolSource('version');         // -> version (global)
 ```
 
-**Bindings shadow definitions.** A binding with a `null` value is still a real binding — it intentionally shadows any definition of the same name.
+**An array binding is both a record and a namespace.** `['quote' => ['claims' => 3]]` binds `quote` whole (a record value — coercible at the boundary, member-accessible) *and* answers the namespaced lookup `quote.claims` by descent. An explicit dotted key (`'quote.claims' => 3`) wins over descent.
+
+**Shadowing a definition requires a declaration.** A binding whose key collides with a definition is a boundary error unless the symbol is declared — the declaration is the typed license to shadow (and a `null` binding still shadows: it reads as a deliberate absence).
 
 ### Match Expressions
 
-`MatchExpression` provides a unified way to express conditionals, dispatch tables, and cond-style matching. A match expression has a **subject** and an ordered list of **arms**. Each arm pairs a pattern with a result expression. The first matching arm wins.
+`MatchExpression` provides a unified way to express conditionals, dispatch tables, and cond-style matching. A match expression has a **subject** and an ordered list of **arms**. Each arm pairs a pattern with a result expression. The first matching arm wins — and a match where **no** arm matches is a runtime error, so add a wildcard arm for a deliberate default (the checker enforces this: unprovable exhaustiveness is a compile diagnostic).
 
 **Patterns:**
 
@@ -204,41 +206,46 @@ $matchers = [
 $resolver->instance(MatchResolver::class, new MatchResolver($resolver, $matchers));
 ```
 
-### Static Type Checking
+### Static Type Checking and Typed Bindings
 
-Every expression has an inferable type, computed **before evaluation** from the same overloader stack and definitions the evaluator runs — so the static and runtime semantics cannot drift apart:
+Declare your input types once on the `Expression`, and it can **type itself before evaluating anything** — through the same `Dialect` (operator rules) and `Definitions` the evaluator runs, so static and runtime semantics cannot be composed differently:
 
 ```php
-use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Expression;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\Types\TypeEnvironment;
-use Superscript\Axiom\Types\TypeInference;
 
-$inference = new TypeInference(new DefaultOverloader());
+$gate = new Expression(
+    source: $condition,                                  // quote.turnover * 1.2 > 500000
+    resolver: $resolver,
+    definitions: $definitions,
+    declarations: ['quote.turnover' => new NumberType()], // one map, both faces
+);
 
-// Declare the input types (the static face of your Bindings),
-// over the same Definitions the evaluator uses.
-$environment = new TypeEnvironment($definitions, declarations: [
-    'quote.turnover' => new NumberType(),
-]);
+$gate->infer();                    // Ok(BooleanType) — what does this return?
+$gate->check(new BooleanType());   // certified
 
-// turnover * 1.2 — what does it return?
-$inference->infer($source, $environment); // Ok(NumberType)
+$gate(['quote' => ['turnover' => '600000']]);
+// the BOUNDARY coerces '600000' → 600000 through the declared type
+// before evaluation — certified expressions never see raw garbage
 
-// Is this gate condition boolean?
-$inference->check($condition, new BooleanType(), $environment); // Ok or Err(TypeMismatch)
+$gate(['quote' => ['turnover' => 'lots']]);
+// Err(BoundaryViolation): "binding [quote.turnover]: …" — aggregated,
+// named by input, before any evaluation
 ```
+
+Certification is a conditional guarantee ("*if* inputs inhabit their declared types…") and the boundary establishes the condition: declared bindings pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required inputs must be present, and a binding may shadow a definition only when declared. Undeclared inputs are the explicit gradual path.
 
 The checker reports, with a nested cause chain (`TypeMismatch::describe()`):
 
 - **Type errors** — `"abc" * 2`, `!5`, arithmetic on a possibly-absent value
-- **Dead code** — comparisons and membership tests that can never hold (`kind == "warehouse"` when `kind` is `'shop' | 'office'`)
+- **Dead code** — comparisons and membership tests that are statically constant (`kind == "warehouse"` when `kind` is `'shop' | 'office'`), flagged via `TypeMismatch::$dead`
 - **Non-exhaustive matches** — a `match` without a wildcard arm over a subject it cannot prove covered (an unmatched subject is a runtime error)
-- **Impossible coercions** — a `TypeDefinition` whose declared type is disjoint from its source
+- **False ascriptions** — an `Ascription` whose claimed type is disjoint from the value's
 - **Unbound and cyclic symbols** — including definition cycles the evaluator itself cannot survive
+- **Declaration/definition disagreement** — a symbol declared one type but defined as another
 
-Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. Gradual typing is available through `UnknownType`: it is admitted at every operand position and certifies nothing.
+Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. Gradual typing is available through `UnknownType`: it is admitted at every operand position and certifies nothing. (The lower-level `TypeInference`/`TypeEnvironment` API remains available for corpus sweeps over stored programs.)
 
 See [RFC 0001: Typesafe Axiom](docs/rfc/0001-typesafe-axiom.md) for the full design, including the sealed shape algebra and relation laws.
 
@@ -320,7 +327,8 @@ Sources represent different ways to provide data:
 
 - **StaticSource**: Direct values
 - **SymbolSource**: Named references resolved from the context's bindings or definitions
-- **TypeDefinition**: Combines a type with a source for validation and coercion
+- **Coerce**: The boundary node — converts a resolved value into the declared type via coercion (statically opaque by design)
+- **Ascription**: The author's checked type claim — verified by assert() at runtime, checked for overlap statically
 - **InfixExpression**: Mathematical/logical expressions
 - **UnaryExpression**: Single-operand expressions
 - **MatchExpression**: Conditional matching with ordered arms
@@ -331,7 +339,8 @@ Sources represent different ways to provide data:
 Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`:
 
 - **StaticResolver**: Resolves static values
-- **ValueResolver**: Applies type coercion using the `coerce()` method
+- **CoerceResolver**: Evaluates Coerce nodes via the `coerce()` method
+- **AscriptionResolver**: Evaluates Ascription nodes via the `assert()` method
 - **InfixResolver**: Evaluates binary expressions
 - **UnaryResolver**: Evaluates unary expressions
 - **SymbolResolver**: Looks up symbols from bindings (first) then definitions (with per-context memoization)
@@ -364,9 +373,9 @@ $resolver->resolve($source, $context);
 The library supports various operators through the overloader system:
 
 - **Binary arithmetic**: `+`, `-`, `*`, `/` — two present numbers
-- **Comparison**: `=`/`==`, `===`, `!=`, `!==` for scalars, `null`, and lists of them; ordering (`<`, `<=`, `>`, `>=`) for **numbers only** — PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own overloader)
+- **Comparison**: `=`/`==`, `===`, `!=`, `!==` for scalars, `null`, and lists of them — **value equality, never PHP juggling**: numeric within `Number` (`1 == 1.0`), strict otherwise, `false` across bases (`5 == '5'` is `false`; `===`/`!==` are aliases); ordering (`<`, `<=`, `>`, `>=`) for **numbers only** — PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own overloader)
 - **Logical**: `&&`, `||`, `xor` — two present booleans
-- **Set**: `has`, `in`, `intersects` — list membership and intersection
+- **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never array_intersect string juggling)
 - **Unary**: `!`/`not` (booleans only), `-` (numbers only), overloader-driven via `UnaryOverloader`
 
 Every overloader owns **both semantics**: `evaluate()` is the runtime face, `typeOf()` the static face, and `supportsOverloading()` must claim only values the rule genuinely owns — an honesty contract enforced by a generative agreement harness. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
@@ -389,7 +398,7 @@ interface ResolutionInspector
 | Resolver | Annotations |
 |----------|-------------|
 | `StaticResolver` | `label`: `"static(int)"`, `"static(string)"`, etc. |
-| `ValueResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
+| `CoerceResolver` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
 | `InfixResolver` | `label`: operator (e.g. `"+"`, `"&&"`); `left`, `right`, `result` |
 | `UnaryResolver` | `label`: operator (e.g. `"!"`, `"-"`); `result` |
 | `SymbolResolver` | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"`; `result` |

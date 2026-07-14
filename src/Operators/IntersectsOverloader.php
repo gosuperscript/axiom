@@ -27,8 +27,9 @@ class IntersectsOverloader implements OperatorOverloader
     }
 
     /**
-     * @param list<string|null>|string|null $left
-     * @param list<string|null>|string|null $right
+     * Intersection is value equality ({@see ValueEquality}), never PHP's
+     * string-comparing array_intersect.
+     *
      * @param 'intersects' $operator
      * @return Result<bool, never>
      */
@@ -37,7 +38,7 @@ class IntersectsOverloader implements OperatorOverloader
         $left = Vec\filter_nulls(is_array($left) ? $left : [$left]);
         $right = Vec\filter_nulls(is_array($right) ? $right : [$right]);
 
-        return Ok(count(array_intersect($left, $right)) > 0);
+        return Ok(array_any($left, fn(mixed $needle) => ValueEquality::contains($right, $needle)));
     }
 
     public function handles(string $operator): bool

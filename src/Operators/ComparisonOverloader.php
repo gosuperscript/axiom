@@ -48,16 +48,18 @@ final readonly class ComparisonOverloader implements OperatorOverloader
     }
 
     /**
+     * Equality is value equality ({@see ValueEquality}), never PHP juggling.
+     * === and !== are aliases of ==/!= — strictness was only distinct while
+     * == juggled.
+     *
      * @param value-of<self::equalityOperators>|value-of<self::orderingOperators> $operator
      * @return Result<bool, never>
      */
     public function evaluate(mixed $left, mixed $right, string $operator): Result
     {
         return Ok(match ($operator) {
-            '=', '==' => $left == $right,
-            '===' => $left === $right,
-            '!=' => $left != $right,
-            '!==' => $left !== $right,
+            '=', '==', '===' => ValueEquality::equals($left, $right),
+            '!=', '!==' => !ValueEquality::equals($left, $right),
             '<' => $left < $right,
             '<=' => $left <= $right,
             '>' => $left > $right,
@@ -83,10 +85,18 @@ final readonly class ComparisonOverloader implements OperatorOverloader
     public function typeOf(string $operator, Type $left, Type $right): Result
     {
         if (in_array($operator, self::equalityOperators)) {
+            $negated = in_array($operator, ['!=', '!==']);
+
             return TypeRelations::overlaps($left, $right)
                 ->map(fn() => new BooleanType())
                 ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
-                    sprintf('[%s] between %s and %s can never hold.', $operator, TypeDescriber::describe($left), TypeDescriber::describe($right)),
+                    sprintf(
+                        '[%s] between %s and %s is constant: it %s.',
+                        $operator,
+                        TypeDescriber::describe($left),
+                        TypeDescriber::describe($right),
+                        $negated ? 'always holds' : 'can never hold',
+                    ),
                     [$cause],
                     dead: true,
                 ));

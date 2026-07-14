@@ -117,8 +117,10 @@ class SymbolResolverTest extends TestCase
 
         $result = $resolver->resolve(new SymbolSource('A'), $context);
 
-        $this->assertTrue($result->unwrap()->isSome());
-        $this->assertNull($result->unwrap()->unwrap());
+        // The definition is shadowed, and the bound null enters the
+        // resolution channel in its canonical representation: None. The
+        // channel has exactly one representation of null.
+        $this->assertTrue($result->unwrap()->isNone());
     }
 
     #[Test]

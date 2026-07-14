@@ -6,16 +6,19 @@ namespace Superscript\Axiom\Resolvers;
 
 use Superscript\Axiom\Context;
 use Superscript\Axiom\Source;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 use function class_basename;
 
 /**
- * @implements Resolver<TypeDefinition>
+ * Evaluates the Coerce boundary node: the resolved value is converted into
+ * the declared type via coerce(), the lenient admission policy.
+ *
+ * @implements Resolver<Coerce>
  */
-final readonly class ValueResolver implements Resolver
+final readonly class CoerceResolver implements Resolver
 {
     public function __construct(
         private Resolver $resolver,

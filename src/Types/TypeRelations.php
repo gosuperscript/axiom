@@ -8,6 +8,7 @@ use Superscript\Axiom\Types\Shapes\DictShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
+use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
 use Superscript\Axiom\Types\Shapes\Shape;
@@ -178,7 +179,40 @@ final class TypeRelations
             return self::recordAssignableToDict($source, $target);
         }
 
+        if ($source instanceof OpaqueShape && $target instanceof OpaqueShape) {
+            return self::opaqueAssignable($source, $target);
+        }
+
         return self::mismatch($source, $target);
+    }
+
+    /**
+     * Nominal head, structural parameters: same identity required, then
+     * parameter-wise assignability (covariant).
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    private static function opaqueAssignable(OpaqueShape $source, OpaqueShape $target): Result
+    {
+        if ($source->identity !== $target->identity) {
+            return self::mismatch($source, $target, 'nominal identities differ');
+        }
+
+        if (array_keys($source->parameters) !== array_keys($target->parameters)) {
+            return self::mismatch($source, $target, 'the parameter lists differ');
+        }
+
+        $causes = [];
+
+        foreach ($target->parameters as $name => $parameter) {
+            $result = self::assignable($source->parameters[$name], $parameter);
+
+            if ($result->isErr()) {
+                $causes[] = new TypeMismatch(sprintf("Parameter '%s' is incompatible.", $name), [$result->unwrapErr()]);
+            }
+        }
+
+        return $causes === [] ? Ok(true) : Err(self::mismatchWith($source, $target, $causes));
     }
 
     /**
@@ -255,7 +289,33 @@ final class TypeRelations
             return self::recordOverlapsDict($b, $a);
         }
 
+        if ($a instanceof OpaqueShape && $b instanceof OpaqueShape) {
+            return self::opaquesOverlap($a, $b);
+        }
+
         return Err(self::noOverlap($a, $b));
+    }
+
+    /**
+     * @return Result<bool, TypeMismatch>
+     */
+    private static function opaquesOverlap(OpaqueShape $a, OpaqueShape $b): Result
+    {
+        if ($a->identity !== $b->identity || array_keys($a->parameters) !== array_keys($b->parameters)) {
+            return Err(self::noOverlap($a, $b));
+        }
+
+        $causes = [];
+
+        foreach ($a->parameters as $name => $parameter) {
+            $result = self::shapesOverlap($parameter, $b->parameters[$name]);
+
+            if ($result->isErr()) {
+                $causes[] = new TypeMismatch(sprintf("Parameter '%s' cannot satisfy both.", $name), [$result->unwrapErr()]);
+            }
+        }
+
+        return $causes === [] ? Ok(true) : Err(self::noOverlap($a, $b, $causes));
     }
 
     /**

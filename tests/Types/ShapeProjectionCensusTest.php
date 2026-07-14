@@ -50,6 +50,9 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(RecordType::class)]
 #[UsesClass(UnionType::class)]
 #[UsesClass(UnknownType::class)]
+#[UsesClass(\Superscript\Axiom\Types\OpaqueType::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(BooleanShape::class)]
 #[UsesClass(DictShape::class)]
 #[UsesClass(ListShape::class)]
@@ -86,5 +89,48 @@ final class ShapeProjectionCensusTest extends TestCase
         yield [new RecordType(['a' => new NumberType()]), RecordShape::class];
         yield [new UnknownType(), UnknownShape::class];
         yield [new NeverType(), NeverShape::class];
+        yield [new \Superscript\Axiom\Types\OpaqueType('ClaimId'), \Superscript\Axiom\Types\Shapes\OpaqueShape::class];
+    }
+
+    /**
+     * C2, the shape-truth law: a record projection is a claim that the
+     * member-access mechanism can reach every projected field on every
+     * value and obtain an inhabitant of the field's shape. Verified over
+     * specimens — trust, but generatively verify. Packages extend this by
+     * contributing their own record-projected types and specimens.
+     *
+     * @param array<string, mixed> $specimen
+     */
+    #[Test]
+    #[DataProvider('recordProjections')]
+    public function record_projections_are_true(Type $type, array $specimen): void
+    {
+        $shape = $type->shape();
+        $this->assertInstanceOf(RecordShape::class, $shape);
+
+        foreach ($shape->fields as $name => $field) {
+            $this->assertArrayHasKey(
+                $name,
+                $specimen,
+                sprintf("C2: projected field '%s' is not reachable on a specimen — the shape lies about its shape", $name),
+            );
+
+            $this->assertTrue(
+                \Superscript\Axiom\Types\TypeReifier::reify($field)->coerce($specimen[$name])->isOk(),
+                sprintf("C2: specimen field '%s' does not inhabit its projected shape", $name),
+            );
+        }
+    }
+
+    public static function recordProjections(): \Generator
+    {
+        yield 'closed record' => [
+            new RecordType(['name' => new StringType(), 'age' => new NumberType()]),
+            ['name' => 'Ada', 'age' => 36],
+        ];
+        yield 'record with optional field' => [
+            new RecordType(['note' => new OptionType(new StringType())]),
+            ['note' => null],
+        ];
     }
 }
