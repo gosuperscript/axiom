@@ -53,6 +53,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(StringShape::class)]
 #[UsesClass(UnionShape::class)]
 #[UsesClass(UnknownShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class TypeOrderTest extends TestCase
 {
     #[Test]

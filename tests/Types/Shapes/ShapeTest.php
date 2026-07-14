@@ -34,6 +34,7 @@ use Superscript\Axiom\Types\Shapes\UnknownShape;
 #[CoversClass(UnknownShape::class)]
 #[CoversClass(NeverShape::class)]
 #[CoversClass(OpaqueShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class ShapeTest extends TestCase
 {
     #[Test]

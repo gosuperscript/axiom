@@ -106,6 +106,14 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\ExpressionMatcher::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\LiteralMatcher::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\WildcardMatcher::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Resolvers\MatchResolver::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\LiteralPattern::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\MatchArm::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\MatchExpression::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function resolver(): DelegatingResolver

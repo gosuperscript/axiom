@@ -61,13 +61,10 @@ final class DefinitionGraph
             return;
         }
 
-        $source = $definitions->get($key);
+        // Keys come from the definitions themselves, so the source exists.
+        $source = $definitions->get($key)->unwrap();
 
-        if ($source->isNone()) {
-            return;
-        }
-
-        foreach (UnboundSymbols::in($source->unwrap()) as $reference) {
+        foreach (UnboundSymbols::in($source) as $reference) {
             $referenced = self::key($reference);
 
             // References that are not definitions are parameters — leaves of

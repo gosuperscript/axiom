@@ -26,6 +26,8 @@ use Superscript\Axiom\Sources\UnaryExpression;
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Extension::class)]
 class UnaryResolverTest extends TestCase
 {
     #[Test]

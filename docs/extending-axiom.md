@@ -222,7 +222,7 @@ Composition rules worth knowing: extension rules **prepend** core's, so when two
 
 Because your `-` rule certifies `(Date, Period) → Date` while core's arithmetic refuses it, the checker takes your verdict; with `Unknown` operands both may certify with different types, and the honest composed answer is `Unknown`.
 
-(You can still compose `OverloaderManager`/`UnaryOverloaderManager` stacks by hand and wire them into the resolver container yourself — the legacy path — but then keeping the checker's stacks identical is your discipline rather than the API's. Prefer the `Dialect`.)
+There is no other wiring path: resolvers hold no operator state, and the dialect travels with each evaluation in the `Context` — the same instance the checker reads — so running with different rules than you check with is not representable. An overloader bound directly on a resolver container is inert.
 
 ### Advanced: writing a rule by hand
 
@@ -385,7 +385,7 @@ public function record_projections_are_true(Type $type, array $specimen): void
 
 **The agreement harness.** For every overloader, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values), check three laws:
 
-- **Soundness**: where `typeOf` certifies `Ok(T)`, every specimen pair the rule claims and successfully evaluates produces a value that `T::assert` accepts.
+- **Soundness (total)**: where `typeOf` certifies `Ok(T)`, **every** specimen pair of those types must be claimed by `supportsOverloading` — an unclaimed specimen is a failure, never a skip; a verdict over values your runtime doesn't claim is a certified crash — and every claimed pair that evaluates successfully produces a value that `T::assert` accepts.
 - **Anti-shadowing**: where `typeOf` refuses (and the mismatch is not `dead`), the rule must not claim every specimen pair of those types — a rule that runtime-owns values it statically refuses is hiding semantics from the checker.
 - **The dead law**: where `typeOf` refuses with `dead: true` ("statically constant"), all claimed specimen pairs must evaluate to one identical boolean. A dead verdict is a claim, and claims get verified — this law exists because its absence let PHP's loose equality ship a lie (`5 == '5'` was true while the checker said "can never hold").
 

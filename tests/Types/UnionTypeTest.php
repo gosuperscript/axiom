@@ -32,6 +32,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(NumberShape::class)]
 #[UsesClass(StringShape::class)]
 #[UsesClass(UnionShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class UnionTypeTest extends TestCase
 {
     #[Test]

@@ -18,6 +18,7 @@ use Superscript\Axiom\Types\Shapes\OpaqueShape;
 #[UsesClass(LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(OpaqueShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class OpaqueTypeTest extends TestCase
 {
     #[Test]

@@ -51,6 +51,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(StringShape::class)]
 #[UsesClass(UnionShape::class)]
 #[UsesClass(UnknownShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class TypeRelationsTest extends TestCase
 {
     #[Test]

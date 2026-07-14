@@ -59,6 +59,7 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
 class ResolutionInspectorTest extends TestCase
 {
     // -- StaticResolver --

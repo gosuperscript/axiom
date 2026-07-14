@@ -64,8 +64,44 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 final class TypeOfTest extends TestCase
 {
+    /**
+     * A host-owned opaque domain type: object values no core rule claims.
+     */
+    private static function opaque(): Type
+    {
+        return new class implements Type {
+            public function assert(mixed $value): \Superscript\Monads\Result\Result
+            {
+                return \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some($value));
+            }
+
+            public function coerce(mixed $value): \Superscript\Monads\Result\Result
+            {
+                return $this->assert($value);
+            }
+
+            public function compare(mixed $a, mixed $b): bool
+            {
+                return $a === $b;
+            }
+
+            public function format(mixed $value): string
+            {
+                return 'money';
+            }
+
+            public function shape(): \Superscript\Axiom\Types\Shapes\Shape
+            {
+                return new \Superscript\Axiom\Types\Shapes\OpaqueShape('money');
+            }
+        };
+    }
+
     /**
      * @param class-string<Type> $expected
      */
@@ -126,6 +162,9 @@ final class TypeOfTest extends TestCase
         $in = new InOverloader();
         yield 'element in list' => [$in, 'in', new LiteralType(5), new ListType(new NumberType()), BooleanType::class];
         yield 'subset in list' => [$in, 'in', new ListType(new NumberType()), new ListType(new NumberType()), BooleanType::class];
+        yield 'a fully-claimed union needle is judged member-wise' => [
+            $in, 'in', new UnionType(new LiteralType(1), new NumberType()), new ListType(new NumberType()), BooleanType::class,
+        ];
 
         $intersects = new IntersectsOverloader();
         yield 'lists intersect' => [$intersects, 'intersects', new ListType(new StringType()), new ListType(new StringType()), BooleanType::class];
@@ -166,6 +205,18 @@ final class TypeOfTest extends TestCase
         yield 'arithmetic refuses unhandled operators' => [$binary, 'has', new NumberType(), new NumberType(), 'Arithmetic does not handle [has].'];
 
         $comparison = new ComparisonOverloader();
+        // Totality: Ok certifies EVERY value of the operand types, and this
+        // rule's runtime never claims objects — so opaque-typed operands are
+        // unsupported (not dead: the runtime errs, it does not evaluate).
+        yield 'equality refuses an opaque left operand' => [
+            $comparison, '==', self::opaque(), new NumberType(), 'object equality belongs to the rule that owns the type',
+        ];
+        yield 'equality refuses an opaque right operand' => [
+            $comparison, '!=', new NumberType(), self::opaque(), 'does not claim the right operand',
+        ];
+        yield 'equality refuses an opaque buried in a union' => [
+            $comparison, '==', new UnionType(new NumberType(), self::opaque()), new NumberType(), 'object equality belongs to the rule that owns the type',
+        ];
         yield 'a dead comparison is refused as dead' => [
             $comparison, '==', new NumberType(), new StringType(), 'can never hold', true,
         ];
@@ -200,6 +251,16 @@ final class TypeOfTest extends TestCase
         $null = new NullOverloader();
         yield 'the null rule contributes nothing' => [
             $null, '+', new OptionType(new NeverType()), new OptionType(new NeverType()), 'contributes no static admissibility',
+        ];
+
+        $in = new InOverloader();
+        // Universal over union members: one supported branch certifies
+        // nothing, and opaque needles are objects the runtime never claims.
+        yield 'a union needle with an unclaimed branch is refused' => [
+            $in, 'in', new UnionType(new NumberType(), new DictType(new NumberType())), new ListType(new NumberType()), 'must be a scalar or a list',
+        ];
+        yield 'an opaque needle is refused' => [
+            $in, 'in', self::opaque(), new ListType(new NumberType()), 'must be a scalar or a list',
         ];
 
         $has = new HasOverloader();

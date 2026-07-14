@@ -35,8 +35,6 @@ The top-level API is `Expression`: wrap a `Source` tree with the resolver stack 
 
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
@@ -44,13 +42,16 @@ use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Types\NumberType;
 
 $resolver = new DelegatingResolver([
     StaticSource::class   => StaticResolver::class,
     SymbolSource::class   => SymbolResolver::class,
     InfixExpression::class => InfixResolver::class,
 ]);
-$resolver->instance(OperatorOverloader::class, new DefaultOverloader());
+// Resolvers hold no operator state: the operator rules (the Dialect)
+// travel with each evaluation, so one resolver graph serves any number
+// of expressions with different dialects.
 
 // area = PI * radius * radius
 $source = new InfixExpression(
@@ -67,6 +68,7 @@ $area = new Expression(
     source: $source,
     resolver: $resolver,
     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
+    declarations: ['radius' => new NumberType()],
 );
 
 $area->parameters(); // ['radius']
@@ -75,7 +77,7 @@ $area(['radius' => 5])->unwrap()->unwrap();  // ~78.54
 $area(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 ```
 
-The key idea: the expression's inputs are its **parameters**, passed at the call site.
+The key idea: the expression's inputs are its **parameters**, passed at the call site — and the declaration list is the expression's complete public signature (undeclared binding keys never enter; a parameter you cannot type yet is declared `Unknown` explicitly).
 
 ### Basic Type Transformation
 
@@ -149,7 +151,7 @@ new SymbolSource('version');         // -> version (global)
 
 **An array binding is both a record and a namespace.** `['quote' => ['claims' => 3]]` binds `quote` whole (a record value — coercible at the boundary, member-accessible) *and* answers the namespaced lookup `quote.claims` by descent. An explicit dotted key (`'quote.claims' => 3`) wins over descent.
 
-**Shadowing a definition requires a declaration.** A binding whose key collides with a definition is a boundary error unless the symbol is declared — the declaration is the typed license to shadow (and a `null` binding still shadows: it reads as a deliberate absence).
+**Declarations and definitions are disjoint namespaces.** A symbol is a *parameter* (declared, supplied by bindings) or a *derived value* (defined), never both — a collision, including through the record view (declaring `customer` as a record with a `turnover` field declares `customer.turnover`), is a constructor error. The boundary strips undeclared binding keys before evaluation, so shadowing a definition is unrepresentable. To let callers override a derived value, model the override in-language: an `Option`-typed parameter the definition consults.
 
 ### Match Expressions
 
@@ -157,7 +159,7 @@ new SymbolSource('version');         // -> version (global)
 
 **Patterns:**
 
-- **LiteralPattern**: Matches via strict equality (`===`)
+- **LiteralPattern**: Matches via **value equality** — the same one definition the comparison operators and the exhaustiveness analysis use (`5` matches `5.0`; never PHP juggling across bases)
 - **WildcardPattern**: Always matches (the default/catch-all arm)
 - **ExpressionPattern**: Wraps a `Source` — resolves it and compares to the subject
 
@@ -234,7 +236,7 @@ $gate(['quote' => ['turnover' => 'lots']]);
 // named by input, before any evaluation
 ```
 
-Certification is a conditional guarantee ("*if* inputs inhabit their declared types…") and the boundary establishes the condition: declared bindings pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required inputs must be present, and a binding may shadow a definition only when declared. Undeclared inputs are the explicit gradual path.
+Certification is a conditional guarantee ("*if* inputs inhabit their declared types…") and the boundary establishes the condition: declared bindings pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required inputs must be present, and every undeclared binding key is stripped — the declaration list is the expression's complete public signature. A parameter this scope cannot type is declared `Unknown` explicitly; that is the gradual path.
 
 The checker reports, with a nested cause chain (`TypeMismatch::describe()`):
 
@@ -242,8 +244,7 @@ The checker reports, with a nested cause chain (`TypeMismatch::describe()`):
 - **Dead code** — comparisons and membership tests that are statically constant (`kind == "warehouse"` when `kind` is `'shop' | 'office'`), flagged via `TypeMismatch::$dead`
 - **Non-exhaustive matches** — a `match` without a wildcard arm over a subject it cannot prove covered (an unmatched subject is a runtime error)
 - **False ascriptions** — an `Ascription` whose claimed type is disjoint from the value's
-- **Unbound and cyclic symbols** — including definition cycles the evaluator itself cannot survive
-- **Declaration/definition disagreement** — a symbol declared one type but defined as another
+- **Unbound and cyclic symbols** — definition cycles are a standalone graph pass (declarations answer typing, never termination), and the runtime backstops it: re-entrant resolution errs by name instead of recursing unboundedly
 
 Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. Gradual typing is available through `UnknownType`: it is admitted at every operand position and certifies nothing. (The lower-level `TypeInference`/`TypeEnvironment` API remains available for corpus sweeps over stored programs.)
 
@@ -361,6 +362,8 @@ $context = new Context(
     bindings: new Bindings(['radius' => 5]),
     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
     inspector: $inspector, // optional
+    dialect: $dialect,     // optional — Dialect::core() by default; the
+                           // operator rules travel with the call
 );
 
 $resolver->resolve($source, $context);

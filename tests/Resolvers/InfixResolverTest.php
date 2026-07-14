@@ -30,6 +30,7 @@ use Superscript\Axiom\Sources\StaticSource;
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
 class InfixResolverTest extends TestCase
 {
     #[Test]

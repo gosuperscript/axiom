@@ -25,6 +25,7 @@ use Superscript\Axiom\Sources\WildcardPattern;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
 class ExpressionMatcherTest extends TestCase
 {
     #[Test]

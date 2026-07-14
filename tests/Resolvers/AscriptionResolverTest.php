@@ -29,6 +29,7 @@ use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 #[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
 final class AscriptionResolverTest extends TestCase
 {
     #[Test]

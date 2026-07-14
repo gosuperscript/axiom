@@ -19,6 +19,9 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(Definitions::class)]
 #[UsesClass(UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\InfixExpression::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\StaticSource::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\SymbolSource::class)]
 final class DefinitionGraphTest extends TestCase
 {
     #[Test]

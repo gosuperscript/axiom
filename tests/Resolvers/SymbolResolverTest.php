@@ -30,8 +30,33 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Resolvers\DelegatingResolver::class)]
 class SymbolResolverTest extends TestCase
 {
+    #[Test]
+    public function re_entrant_resolution_is_a_named_error_not_unbounded_recursion(): void
+    {
+        // The runtime backstop for definition cycles: the memo cannot break
+        // one (it is written only after resolution completes), so re-entry
+        // errs by name instead of recursing until the stack dies.
+        $delegating = new \Superscript\Axiom\Resolvers\DelegatingResolver([
+            SymbolSource::class => SymbolResolver::class,
+        ]);
+
+        $context = new Context(
+            definitions: new Definitions([
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $result = $delegating->resolve(new SymbolSource('a'), $context);
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('Cyclic symbol definition [a]', $result->unwrapErr()->getMessage());
+    }
+
     #[Test]
     public function it_can_resolve_a_value_from_definitions(): void
     {

@@ -29,6 +29,7 @@ use Superscript\Axiom\Types\NumberType;
 #[UsesClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
 class DelegatingResolverTest extends TestCase
 {
     #[Test]

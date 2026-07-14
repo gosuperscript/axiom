@@ -63,6 +63,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 class MatchResolverTest extends TestCase
 {
     private function makeResolver(?StaticResolver $staticResolver = null): MatchResolver

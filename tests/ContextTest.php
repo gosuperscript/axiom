@@ -19,6 +19,9 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(Context::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Definitions::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 final class ContextTest extends TestCase
 {
     #[Test]
@@ -43,6 +46,33 @@ final class ContextTest extends TestCase
 
         $this->assertTrue($context->hasMemoizedSymbol('A'));
         $this->assertSame($result, $context->getMemoizedSymbol('A'));
+    }
+
+    #[Test]
+    public function it_builds_the_dialect_operator_stacks_lazily_and_once(): void
+    {
+        // One manager instance serves the whole evaluation — the rules
+        // travel with the call, composed exactly once.
+        $context = new Context();
+
+        $this->assertSame($context->operators(), $context->operators());
+        $this->assertSame($context->unaryOperators(), $context->unaryOperators());
+    }
+
+    #[Test]
+    public function it_marks_symbols_in_progress_during_resolution(): void
+    {
+        // The runtime backstop for definition cycles: re-entry is refused
+        // while a symbol's definition is being followed, and allowed again
+        // once resolution completed.
+        $context = new Context();
+
+        $this->assertTrue($context->beginSymbolResolution('a'));
+        $this->assertFalse($context->beginSymbolResolution('a'));
+
+        $context->endSymbolResolution('a');
+
+        $this->assertTrue($context->beginSymbolResolution('a'));
     }
 
     #[Test]

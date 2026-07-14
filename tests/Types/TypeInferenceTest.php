@@ -101,6 +101,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null): TypeInference
@@ -382,6 +384,19 @@ final class TypeInferenceTest extends TestCase
 
         $right = $inference->infer(new InfixExpression(new StaticSource(1), '+', new SymbolSource('ghost')), self::env());
         $this->assertStringContainsString('Unbound symbol [ghost]', $right->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function a_null_only_match_over_the_null_literal_is_exhaustive(): void
+    {
+        // null infers as Option<Never>; the null pattern covers the {null}
+        // member and Never is vacuously covered — it has no inhabitants.
+        $result = self::inference()->infer(new MatchExpression(
+            subject: new StaticSource(null),
+            arms: [new MatchArm(new LiteralPattern(null), new StaticSource('ok'))],
+        ), self::env());
+
+        $this->assertSame("'ok'", self::describe($result));
     }
 
     #[Test]
