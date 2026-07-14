@@ -158,29 +158,16 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
-    public function declared_and_defined_symbols_are_checked_for_agreement(): void
+    public function a_declaration_answers_the_typing_question_as_a_leaf(): void
     {
+        // Disjoint namespaces (enforced by Expression at construction) make
+        // a declared symbol a true leaf: no definition can sit under it, so
+        // the declaration is the whole answer to the typing question.
         $environment = new TypeEnvironment(
-            definitions: new \Superscript\Axiom\Definitions([
-                'rate' => new StaticSource('not a number'),
-                'flag' => new StaticSource(5),
-                'agreeing' => new StaticSource(5),
-            ]),
-            declarations: [
-                // only-declared first: its skip must not end the sweep.
-                'only-declared' => new NumberType(),
-                'rate' => new NumberType(),
-                'flag' => new \Superscript\Axiom\Types\BooleanType(),
-                'agreeing' => new NumberType(),
-            ],
+            declarations: ['rate' => new NumberType()],
         );
 
-        $mismatches = $environment->agreementMismatches(self::inference());
-
-        $this->assertCount(2, $mismatches);
-        $this->assertStringContainsString('Symbol [rate] is declared Number but its definition disagrees', $mismatches[0]->describe());
-        $this->assertStringContainsString('is not assignable to Number', $mismatches[0]->describe());
-        $this->assertStringContainsString('Symbol [flag] is declared Boolean', $mismatches[1]->describe());
+        $this->assertInstanceOf(NumberType::class, $environment->typeOfSymbol('rate', null, self::inference())->unwrap());
     }
 
     #[Test]

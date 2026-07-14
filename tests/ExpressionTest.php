@@ -76,6 +76,10 @@ final class ExpressionTest extends TestCase
                 right: new SymbolSource('b'),
             ),
             resolver: $this->fullResolver(),
+            declarations: [
+                'a' => new \Superscript\Axiom\Types\NumberType(),
+                'b' => new \Superscript\Axiom\Types\NumberType(),
+            ],
         );
 
         $result = $expression(['a' => 2, 'b' => 3]);
@@ -159,25 +163,23 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
-    public function declared_bindings_override_definitions(): void
+    public function a_symbol_cannot_be_both_declared_and_defined(): void
     {
-        // Shadowing a definition requires a declaration — the typed license
-        // to shadow. The checker used the declaration, the boundary enforces
-        // it, and the agreement check ties the definition to the same type,
-        // so either source of the value satisfies what was certified.
-        $expression = new Expression(
+        // Disjoint namespaces: a symbol is a parameter or a derived value,
+        // never both — shadowing is unrepresentable, not licensed.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('[x] is both declared and defined');
+
+        new Expression(
             source: new SymbolSource('x'),
             resolver: $this->fullResolver(),
             definitions: new Definitions(['x' => new StaticSource(1)]),
             declarations: ['x' => new \Superscript\Axiom\Types\NumberType()],
         );
-
-        $this->assertSame(1, $expression()->unwrap()->unwrap());
-        $this->assertSame(99, $expression(['x' => 99])->unwrap()->unwrap());
     }
 
     #[Test]
-    public function undeclared_shadowing_is_a_boundary_violation(): void
+    public function an_undeclared_binding_is_stripped_and_cannot_shadow_a_definition(): void
     {
         $expression = new Expression(
             source: new SymbolSource('x'),
@@ -185,11 +187,9 @@ final class ExpressionTest extends TestCase
             definitions: new Definitions(['x' => new StaticSource(1)]),
         );
 
-        $result = $expression(['x' => 'oops']);
-
-        $this->assertTrue($result->isErr());
-        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\BoundaryViolation::class, $result->unwrapErr());
-        $this->assertStringContainsString('binding [x] shadows a definition', $result->unwrapErr()->getMessage());
+        // The binding is not in the signature, so it never enters: the
+        // definition evaluates as if the caller had passed nothing.
+        $this->assertSame(1, $expression(['x' => 'oops'])->unwrap()->unwrap());
     }
 
     #[Test]

@@ -103,12 +103,4 @@ final class BindingsTest extends TestCase
 
         $this->assertSame(999, $bindings->get('turnover', 'customer')->unwrap());
     }
-
-    #[Test]
-    public function keys_returns_the_bindings_as_given(): void
-    {
-        $bindings = new Bindings(['a' => 1, 'customer' => ['b' => 2]]);
-
-        $this->assertSame(['a', 'customer'], $bindings->keys());
-    }
 }

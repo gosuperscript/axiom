@@ -17,10 +17,12 @@ use function Superscript\Monads\Result\Ok;
  * defined symbol's type is inferred from the same Definitions the evaluator
  * will use — one registry, both semantics.
  *
- * Declarations terminate recursion and, like bindings at runtime, take
- * precedence over definitions. Results are memoized; a cyclic definition —
- * which the evaluator cannot even survive — is reported as a mismatch
- * naming the cycle.
+ * Declarations terminate recursion — for the *typing* question only:
+ * declarations and definitions are disjoint namespaces (enforced by
+ * Expression at construction), so a declared symbol is a leaf. Results are
+ * memoized. Termination is not this class's question: well-foundedness of
+ * the definition graph is a separate graph pass (see DefinitionGraph),
+ * because declarations answer typing, never termination.
  *
  * Unbound is an error; a scope that tolerates unknown symbols declares them
  * as UnknownType explicitly.
@@ -85,43 +87,4 @@ final class TypeEnvironment
         return $this->memo[$key] = $result;
     }
 
-    /**
-     * The declared∧defined agreement check: a symbol that is both declared
-     * and defined must have its definition's inferred type assignable to
-     * the declaration — otherwise the no-binding call path (where the
-     * definition evaluates) would deliver values the checker never blessed,
-     * since declarations shadow definitions statically exactly as bindings
-     * shadow them at runtime.
-     *
-     * @return list<TypeMismatch>
-     */
-    public function agreementMismatches(TypeInference $inference): array
-    {
-        $mismatches = [];
-
-        foreach ($this->declarations as $key => $declared) {
-            $definition = $this->definitions->get($key);
-
-            if ($definition->isNone()) {
-                continue;
-            }
-
-            $inferred = $inference->infer($definition->unwrap(), $this);
-
-            $verdict = $inferred->andThen(fn(Type $type) => TypeRelations::isTypeAssignableTo($type, $declared));
-
-            if ($verdict->isErr()) {
-                $mismatches[] = new TypeMismatch(
-                    sprintf(
-                        'Symbol [%s] is declared %s but its definition disagrees; the definition evaluates whenever no binding is passed.',
-                        $key,
-                        TypeDescriber::describe($declared),
-                    ),
-                    [$verdict->unwrapErr()],
-                );
-            }
-        }
-
-        return $mismatches;
-    }
 }

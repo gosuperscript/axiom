@@ -25,10 +25,14 @@ use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\LiteralPattern;
+use Superscript\Axiom\Sources\MatchArm;
+use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
+use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
@@ -106,13 +110,22 @@ final class TypedExpressionTest extends TestCase
 {
     private function resolver(): DelegatingResolver
     {
-        return new DelegatingResolver([
+        $resolver = new DelegatingResolver([
             StaticSource::class => StaticResolver::class,
             SymbolSource::class => SymbolResolver::class,
             InfixExpression::class => InfixResolver::class,
             UnaryExpression::class => UnaryResolver::class,
             MemberAccessSource::class => \Superscript\Axiom\Resolvers\MemberAccessResolver::class,
+            MatchExpression::class => \Superscript\Axiom\Resolvers\MatchResolver::class,
         ]);
+
+        $resolver->instance(\Superscript\Axiom\Resolvers\MatchResolver::class, new \Superscript\Axiom\Resolvers\MatchResolver($resolver, [
+            new \Superscript\Axiom\Patterns\WildcardMatcher(),
+            new \Superscript\Axiom\Patterns\LiteralMatcher(),
+            new \Superscript\Axiom\Patterns\ExpressionMatcher($resolver),
+        ]));
+
+        return $resolver;
     }
 
     private function gate(): Expression
@@ -211,16 +224,39 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function a_declared_symbol_satisfied_by_a_definition_needs_no_binding(): void
+    public function a_symbol_cannot_be_both_declared_and_defined(): void
     {
-        $expression = new Expression(
+        // Disjoint namespaces: a symbol is a parameter or a derived value,
+        // never both — the collision is a construction error, before any
+        // call. An override is modeled in-language instead: an Option-typed
+        // parameter the definition consults.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('[rate] is both declared and defined');
+
+        new Expression(
             source: new SymbolSource('rate'),
             resolver: $this->resolver(),
             definitions: new Definitions(['rate' => new StaticSource(1.2)]),
             declarations: ['rate' => new NumberType()],
         );
+    }
 
-        $this->assertSame(1.2, $expression()->unwrap()->unwrap());
+    #[Test]
+    public function a_record_declaration_collides_with_a_definition_through_the_record_view(): void
+    {
+        // Declaring customer as a record with a turnover field declares
+        // customer.turnover — so a definition there is the same collision,
+        // and the nested-binding side door (finding: a raw array binding
+        // silently shadowing a namespaced definition) is unrepresentable.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('[customer.turnover] is both declared and defined');
+
+        new Expression(
+            source: new SymbolSource('turnover', 'customer'),
+            resolver: $this->resolver(),
+            definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
+            declarations: ['customer' => new RecordType(['turnover' => new NumberType()])],
+        );
     }
 
     #[Test]
@@ -255,19 +291,29 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function declared_and_defined_symbols_must_agree(): void
+    public function an_override_is_modeled_as_an_option_typed_parameter(): void
     {
+        // The blessed replacement for binding-over-definition shadowing:
+        // the override is an explicit, typed, optional parameter and the
+        // derived value consults it — both paths certified, nothing
+        // implicit. rate = match rateOverride { null => 1.2, _ => override }
         $expression = new Expression(
             source: new SymbolSource('rate'),
             resolver: $this->resolver(),
-            definitions: new Definitions(['rate' => new StaticSource('not a number')]),
-            declarations: ['rate' => new NumberType()],
+            definitions: new Definitions([
+                'rate' => new MatchExpression(
+                    subject: new SymbolSource('rateOverride'),
+                    arms: [
+                        new MatchArm(new LiteralPattern(null), new StaticSource(1.2)),
+                        new MatchArm(new WildcardPattern(), new SymbolSource('rateOverride')),
+                    ],
+                ),
+            ]),
+            declarations: ['rateOverride' => new OptionType(new NumberType())],
         );
 
-        $result = $expression->infer();
-
-        $this->assertStringContainsString('Declarations and definitions disagree.', $result->unwrapErr()->describe());
-        $this->assertStringContainsString('Symbol [rate] is declared Number but its definition disagrees', $result->unwrapErr()->describe());
+        $this->assertSame(1.2, $expression()->unwrap()->unwrap());
+        $this->assertSame(2.5, $expression(['rateOverride' => 2.5])->unwrap()->unwrap());
     }
 
     #[Test]

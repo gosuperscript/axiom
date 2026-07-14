@@ -59,17 +59,6 @@ final readonly class Bindings
         return new None();
     }
 
-    /**
-     * The binding keys as given — used by the boundary to police shadowing
-     * and by diagnostics.
-     *
-     * @return list<string>
-     */
-    public function keys(): array
-    {
-        return array_keys($this->values);
-    }
-
     private function key(string $name, ?string $namespace): string
     {
         return $namespace !== null ? $namespace . '.' . $name : $name;

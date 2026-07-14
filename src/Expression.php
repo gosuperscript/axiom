@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use InvalidArgumentException;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Types\Shapes\OptionShape;
+use Superscript\Axiom\Types\Shapes\RecordShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeEnvironment;
@@ -41,10 +43,15 @@ use function Superscript\Monads\Result\Ok;
  * Certification is conditional — "if inputs inhabit their declared types" —
  * and the boundary establishes the condition: declared bindings pass
  * through their declared types (coerce by default, assert for strict
- * hosts) before evaluation, with violations aggregated and named. The
- * guarantee: declared inputs cannot deliver garbage past the boundary;
- * undeclared inputs cannot touch anything certified — they are inert, an
- * explicit Unknown, or a named error.
+ * hosts) before evaluation, with violations aggregated and named; every
+ * undeclared binding key is stripped before evaluation begins. The
+ * declaration list is the expression's complete public signature —
+ * declarations and definitions are disjoint namespaces (a symbol is a
+ * parameter or a derived value, never both; enforced at construction), so
+ * shadowing a definition is unrepresentable. The guarantee: declared
+ * inputs cannot deliver garbage past the boundary; undeclared inputs
+ * cannot touch anything at all — they are stripped, an explicit Unknown,
+ * or a named error.
  */
 final readonly class Expression
 {
@@ -63,6 +70,39 @@ final readonly class Expression
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
+
+        $collisions = [];
+
+        foreach ($this->declarations as $key => $type) {
+            if ($this->definitions->has($key)) {
+                $collisions[] = $key;
+            }
+
+            // The record view of a declaration declares its fields:
+            // declaring customer as a record with a turnover field declares
+            // customer.turnover, so a definition there collides too.
+            $shape = $type->shape();
+
+            if ($shape instanceof OptionShape) {
+                $shape = $shape->inner;
+            }
+
+            if ($shape instanceof RecordShape) {
+                foreach (array_keys($shape->fields) as $field) {
+                    if ($this->definitions->has($key . '.' . $field)) {
+                        $collisions[] = $key . '.' . $field;
+                    }
+                }
+            }
+        }
+
+        if ($collisions !== []) {
+            throw new InvalidArgumentException(sprintf(
+                'Declarations and definitions are disjoint namespaces, but [%s] %s both declared and defined. A symbol is a parameter or a derived value, never both; model an override as an Option-typed parameter the definition consults.',
+                implode('], [', $collisions),
+                count($collisions) === 1 ? 'is' : 'are',
+            ));
+        }
     }
 
     /**
@@ -92,23 +132,13 @@ final readonly class Expression
     /**
      * What does this expression return? Inferred through the dialect's own
      * stacks over the same Definitions the evaluator walks, with declared
-     * inputs as the environment's leaves. Fails when a declared∧defined
-     * symbol disagrees (see TypeEnvironment::agreementMismatches).
+     * inputs as the environment's leaves.
      *
      * @return Result<Type, TypeMismatch>
      */
     public function infer(): Result
     {
-        $environment = $this->environment();
-        $inference = $this->inference();
-
-        $disagreements = $environment->agreementMismatches($inference);
-
-        if ($disagreements !== []) {
-            return Err(new TypeMismatch('Declarations and definitions disagree.', $disagreements));
-        }
-
-        return $inference->infer($this->source, $environment);
+        return $this->inference()->infer($this->source, $this->environment());
     }
 
     /**
@@ -165,12 +195,12 @@ final readonly class Expression
 
     /**
      * The boundary: every declared binding passes through its declared type
-     * (coerce or assert, per policy) before evaluation; required declared
-     * inputs must be present unless a definition can satisfy them; a binding
-     * may shadow a definition only when declared — the declaration is the
-     * typed license to shadow. Violations aggregate, named by binding.
-     * Admitted values enter as explicit dotted keys, which win over descent,
-     * so the typed value shadows the raw one at lookup.
+     * (coerce or assert, per policy) before evaluation, and every
+     * undeclared key is stripped — the declaration list is the expression's
+     * complete public signature, and disjointness (enforced at
+     * construction) means no admitted binding can name a definition.
+     * Violations aggregate, named by binding. Admitted values enter as
+     * explicit dotted keys, which win over descent at lookup.
      *
      * @param array<string, mixed> $raw
      * @return Result<Bindings, BoundaryViolation>
@@ -180,12 +210,6 @@ final readonly class Expression
         $bindings = new Bindings($raw);
         $violations = [];
         $overlay = [];
-
-        foreach ($bindings->keys() as $key) {
-            if ($this->definitions->has($key) && !isset($this->declarations[$key])) {
-                $violations[] = sprintf('binding [%s] shadows a definition; declare its type to permit this', $key);
-            }
-        }
 
         foreach ($this->declarations as $key => $type) {
             $namespace = null;
@@ -199,7 +223,7 @@ final readonly class Expression
                 // Required-ness is a property of the projection, not the
                 // concrete class: Union(Option<Number>, String) has shape
                 // (Number | String)? and a missing binding is legal absence.
-                if (!($type->shape() instanceof OptionShape) && !$this->definitions->has($name, $namespace)) {
+                if (!($type->shape() instanceof OptionShape)) {
                     $violations[] = sprintf('required input [%s] is missing', $key);
                 }
 
@@ -235,7 +259,12 @@ final readonly class Expression
             return Err(new BoundaryViolation($violations));
         }
 
-        return Ok(new Bindings([...$raw, ...$overlay]));
+        // The declaration list is the expression's complete public
+        // signature: only the admitted, declared slice enters evaluation.
+        // Stripping is what makes undeclared inputs inert — they can never
+        // feed an undeclared symbol or reach a definition, top-level or by
+        // descent — while superset contexts stay legal to pass.
+        return Ok(new Bindings($overlay));
     }
 
     private function environment(): TypeEnvironment

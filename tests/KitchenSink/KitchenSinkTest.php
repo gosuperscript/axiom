@@ -71,6 +71,7 @@ class KitchenSinkTest extends TestCase
             source: $source,
             resolver: $this->fullResolver(),
             definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
+            declarations: ['radius' => new NumberType()],
         );
 
         $this->assertEqualsWithDelta(78.54, $area(['radius' => 5])->unwrap()->unwrap(), 0.01);
@@ -138,7 +139,11 @@ class KitchenSinkTest extends TestCase
             ],
         );
 
-        $expression = new Expression($source, $this->fullResolver());
+        $expression = new Expression(
+            $source,
+            $this->fullResolver(),
+            declarations: ['quote.claims' => new NumberType()],
+        );
 
         $this->assertEquals(25.0, $expression(['quote' => ['claims' => 3]])->unwrap()->unwrap());
         $this->assertEquals(0, $expression(['quote' => ['claims' => 1]])->unwrap()->unwrap());
@@ -157,7 +162,11 @@ class KitchenSinkTest extends TestCase
             ],
         );
 
-        $multiplier = new Expression($source, $this->fullResolver());
+        $multiplier = new Expression(
+            $source,
+            $this->fullResolver(),
+            declarations: ['tier' => new \Superscript\Axiom\Types\StringType()],
+        );
 
         $this->assertEquals(1.3, $multiplier(['tier' => 'micro'])->unwrap()->unwrap());
         $this->assertEquals(1.1, $multiplier(['tier' => 'small'])->unwrap()->unwrap());
@@ -199,7 +208,14 @@ class KitchenSinkTest extends TestCase
             ],
         );
 
-        $rate = new Expression($source, $this->fullResolver());
+        $rate = new Expression(
+            $source,
+            $this->fullResolver(),
+            declarations: [
+                'quote.claims' => new NumberType(),
+                'quote.turnover' => new NumberType(),
+            ],
+        );
 
         $this->assertEquals(0.5, $rate(['quote' => ['claims' => 5, 'turnover' => 100]])->unwrap()->unwrap());
         $this->assertEquals(0.35, $rate(['quote' => ['claims' => 1, 'turnover' => 600000]])->unwrap()->unwrap());
@@ -223,7 +239,11 @@ class KitchenSinkTest extends TestCase
             ),
         );
 
-        $expression = new Expression($source, $this->fullResolver());
+        $expression = new Expression(
+            $source,
+            $this->fullResolver(),
+            declarations: ['A' => new NumberType()],
+        );
 
         $this->assertEquals(7, $expression(['A' => 2])->unwrap()->unwrap());
         $this->assertEquals(16, $expression(['A' => 5])->unwrap()->unwrap());
