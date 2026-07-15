@@ -20,8 +20,10 @@ use Superscript\Axiom\Types\Type;
 abstract class Extension
 {
     /**
-     * Binary operator rules. Prepended to the dialect's existing rules,
-     * so a specialization wins ties over core.
+     * Binary operator rules, joined to the dialect's existing rules. Order
+     * carries no meaning: no tie is ever resolvable — two rules for one
+     * operator with jointly admissible slots are refused at construction,
+     * whichever contributed them.
      *
      * @return list<OperatorOverloader>
      */
@@ -31,7 +33,7 @@ abstract class Extension
     }
 
     /**
-     * Unary operator rules, same prepend semantics.
+     * Unary operator rules, same join semantics.
      *
      * @return list<UnaryOverloader>
      */
