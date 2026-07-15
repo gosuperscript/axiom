@@ -11,7 +11,7 @@ use Throwable;
 /**
  * @template T = mixed
  */
-interface Type
+interface Type extends Shaped
 {
     /**
      * Assert that a value is of type T and return it wrapped in Option
@@ -26,13 +26,6 @@ interface Type
      * @return Result<Option<T>, Throwable>
      */
     public function coerce(mixed $value): Result;
-
-    /**
-     * @param T $a
-     * @param T $b
-     * @return bool
-     */
-    public function compare(mixed $a, mixed $b): bool;
 
     /**
      * @param T $value

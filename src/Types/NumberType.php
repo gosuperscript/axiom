@@ -6,7 +6,6 @@ namespace Superscript\Axiom\Types;
 
 use NumberFormatter;
 use Superscript\Axiom\Exceptions\TransformValueException;
-use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
 
@@ -37,7 +36,7 @@ class NumberType implements Type
         if (is_string($value) && ($value === '' || $value === 'null')) {
             return Ok(None());
         }
-        
+
         return (match (true) {
             numeric_string()->matches($value) || num()->matches($value) => Ok(num()->coerce($value)),
             is_string($value) && numeric_string()->matches(before($value, '%')) => Ok(num()->coerce(before($value, '%')) / 100),
@@ -45,18 +44,15 @@ class NumberType implements Type
         })->map(fn(int|float $value) => Some($value));
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
-    }
-
     public function format(mixed $value): string
     {
         $formatter = new NumberFormatter('en_GB', NumberFormatter::DECIMAL);
 
         return string()->assert($formatter->format($value));
+    }
+
+    public function shape(): Shapes\Shape
+    {
+        return new Shapes\NumberShape();
     }
 }

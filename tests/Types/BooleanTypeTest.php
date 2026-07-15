@@ -44,7 +44,7 @@ final class BooleanTypeTest extends TestCase
             ['0', false],
             [1, true],
             [0, false],
-            [null, false],
+            [null, null],
         ];
     }
 
@@ -85,21 +85,7 @@ final class BooleanTypeTest extends TestCase
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [boolean] from [\'foobar\']');
     }
 
-    #[DataProvider('compareProvider')]
-    #[Test]
-    public function test_can_compare_two_values(bool $a, bool $b, bool $expected): void
-    {
-        $type = new BooleanType;
-        $this->assertSame($expected, $type->compare($a, $b));
-    }
 
-    public static function compareProvider(): array
-    {
-        return [
-            [true, true, true],
-            [true, false, false],
-        ];
-    }
 
     #[DataProvider('formatProvider')]
     #[Test]

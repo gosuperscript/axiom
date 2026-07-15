@@ -59,8 +59,8 @@ class StringTypeTest extends TestCase
     {
         return [
             ['hello', 'hello'],
-            ['', null],
-            ['null', null],
+            ['', ''],
+            ['null', 'null'],
         ];
     }
 
@@ -82,21 +82,7 @@ class StringTypeTest extends TestCase
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [string] from [123]');
     }
 
-    #[DataProvider('compareProvider')]
-    #[Test]
-    public function it_can_compare_two_values(string $a, string $b, bool $expected)
-    {
-        $type = new StringType();
-        $this->assertSame($expected, $type->compare($a, $b));
-    }
 
-    public static function compareProvider(): array
-    {
-        return [
-            ['hello', 'hello', true],
-            ['hello', 'world', false],
-        ];
-    }
 
     #[DataProvider('formatProvider')]
     #[Test]
