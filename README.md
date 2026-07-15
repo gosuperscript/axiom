@@ -154,7 +154,7 @@ new SymbolSource('version');         // -> version (global)
 
 **Patterns:**
 
-- **LiteralPattern**: Matches via strict equality (`===`)
+- **LiteralPattern**: Matches via Axiom value equality (numeric values compare across `int`/`float`; other scalar bases remain strict)
 - **WildcardPattern**: Always matches (the default/catch-all arm)
 - **ExpressionPattern**: Wraps a `Source` — resolves it and compares to the subject
 

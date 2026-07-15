@@ -79,6 +79,8 @@ final class ShapeDomainTest extends TestCase
         yield 'a fully-claimed union passes' => [UnionShape::of(new NumberShape(), new StringShape()), true];
 
         yield 'containers recurse element-wise: list' => [new ListShape(new OpaqueShape('money')), false];
+        yield 'a statically empty list never observes its element' => [new ListShape(new OpaqueShape('money'), max: 0), true];
+        yield 'a possibly non-empty list still observes its element' => [new ListShape(new OpaqueShape('money'), max: 1), false];
         yield 'containers recurse element-wise: dict' => [new DictShape(new OpaqueShape('money')), false];
         yield 'containers recurse element-wise: record' => [new RecordShape(['price' => new OpaqueShape('money')]), false];
         yield 'a record of claimed fields passes' => [new RecordShape(['n' => new NumberShape()]), true];
