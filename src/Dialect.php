@@ -147,7 +147,7 @@ final readonly class Dialect
      * Rows are statically comparable, so a dialect refuses two rows for the
      * same operator whose slots are jointly admissible — some operand type
      * would resolve both, and with no precedence rule the compiler could
-     * never pick (RFC item 36). Value overlap is deliberately not the test:
+     * never pick. Value overlap is deliberately not the test:
      * dispatch sees operand types, never values, so a List row beside a
      * Dict row is a legal pair even though the empty array inhabits both.
      *
