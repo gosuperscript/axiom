@@ -107,18 +107,6 @@ final readonly class RecordType implements Type
         return Ok(Some($record));
     }
 
-    /**
-     * Members of an exact record carry exactly the declared fields (transform
-     * canonicalizes), so comparison and formatting range over the fields.
-     */
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return array_all(
-            array_keys($this->fields),
-            fn(string $key) => $this->fields[$key]->compare($a[$key], $b[$key]),
-        );
-    }
-
     public function format(mixed $value): string
     {
         $parts = [];

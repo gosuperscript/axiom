@@ -89,14 +89,6 @@ class DictType implements Type
         }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return array_keys($a) === array_keys($b) && array_all(
-            array_keys($a),
-            fn(int|string $key) => $this->type->compare($a[$key], $b[$key])
-        );
-    }
-
     public function format(mixed $value): string
     {
         /** @var array<string> $parts */

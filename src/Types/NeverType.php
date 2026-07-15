@@ -28,11 +28,6 @@ final class NeverType implements Type
         return $this->assert($value);
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return false;
-    }
-
     public function format(mixed $value): string
     {
         return '';

@@ -107,23 +107,7 @@ class NumberTypeTest extends TestCase
         $this->assertTrue($nullStringResult->isOk(), 'String "null" should return Ok(None), not an error');
     }
 
-    #[DataProvider('compareProvider')]
-    #[Test]
-    public function it_can_compare_two_values(int|float $a, int|float $b, bool $expected)
-    {
-        $type = new NumberType();
-        $this->assertSame($expected, $type->compare($a, $b));
-    }
 
-    public static function compareProvider(): array
-    {
-        return [
-            [1, 1, true],
-            [1.1, 1.1, true],
-            [1, 1.1, false],
-            [1, 2, false],
-        ];
-    }
 
     #[DataProvider('formatProvider')]
     #[Test]

@@ -41,12 +41,10 @@ final class OpaqueTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_compares_strictly_and_formats_via_export(): void
+    public function it_formats_via_export(): void
     {
         $type = new OpaqueType('ClaimId');
 
-        $this->assertTrue($type->compare('a', 'a'));
-        $this->assertFalse($type->compare('a', 'b'));
         $this->assertSame("'a'", $type->format('a'));
     }
 

@@ -88,12 +88,10 @@ final class LiteralTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_compares_and_formats_through_its_base(): void
+    public function it_formats_through_its_base(): void
     {
         $shop = new LiteralType('shop');
 
-        $this->assertTrue($shop->compare('shop', 'shop'));
-        $this->assertFalse($shop->compare('shop', 'office'));
         $this->assertSame('shop', $shop->format('shop'));
         $this->assertSame('5', (new LiteralType(5))->format(5));
     }

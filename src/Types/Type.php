@@ -28,13 +28,6 @@ interface Type extends Shaped
     public function coerce(mixed $value): Result;
 
     /**
-     * @param T $a
-     * @param T $b
-     * @return bool
-     */
-    public function compare(mixed $a, mixed $b): bool;
-
-    /**
      * @param T $value
      * @return string
      */
