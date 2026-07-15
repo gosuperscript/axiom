@@ -75,12 +75,28 @@ class DictTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_coerces_an_empty_dict_to_absence(): void
+    public function it_coerces_the_empty_array_to_an_empty_dict(): void
     {
+        // [] inhabits every Dict, so the two admission faces agree: a
+        // caller who bound [] gets an empty map, not an absence reading —
+        // "empty reads as missing" is spelled Option<Dict<T>>.
         $type = new DictType(new NumberType());
         $result = $type->coerce([]);
         $this->assertTrue($result->isOk());
-        $this->assertTrue($result->unwrap()->isNone());
+        $this->assertSame([], $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_rejects_a_non_empty_list_in_both_faces(): void
+    {
+        // A list is not a representation of a dict — there is no conversion
+        // to perform, and PHP would normalize stringified numeric keys right
+        // back to integers: the "coerced" value would fail the type's own
+        // assert behind a certified boundary.
+        $type = new DictType(new NumberType());
+
+        $this->assertTrue($type->coerce([1, 2])->isErr());
+        $this->assertTrue($type->assert([1, 2])->isErr());
     }
 
     #[Test]

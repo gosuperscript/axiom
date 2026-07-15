@@ -203,9 +203,10 @@ final class SoundnessRegressionTest extends TestCase
                 'xs' => new ListType(new NumberType()),
                 'ys' => new DictType(new NumberType()),
             ],
-            boundary: Boundary::Assert,
         );
 
+        // The default coercing boundary admits [] as an empty dict (the
+        // faces agree on the value domain), so no Assert workaround here.
         $this->assertFalse($expression->infer()->isErr(), 'a live comparison, not a dead one');
         $this->assertTrue($expression(['xs' => [], 'ys' => []])->unwrap()->unwrap());
         $this->assertFalse($expression(['xs' => [1], 'ys' => ['a' => 1]])->unwrap()->unwrap());

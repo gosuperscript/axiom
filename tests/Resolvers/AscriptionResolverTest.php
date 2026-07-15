@@ -52,10 +52,27 @@ final class AscriptionResolverTest extends TestCase
     }
 
     #[Test]
-    public function an_absent_value_passes_through(): void
+    public function absence_cannot_cross_a_non_optional_claim(): void
     {
+        // The checker takes the claim at its word (Ascription : T), so a
+        // silent None here would deliver null into an expression certified
+        // to receive a Number.
         $resolver = new AscriptionResolver(new StaticResolver());
         $claim = new Ascription(new NumberType(), new StaticSource(null));
+
+        $result = $resolver->resolve($claim, new Context());
+
+        $this->assertStringContainsString(
+            'reads as missing, but the claim Number is required; claim Number?',
+            $result->unwrapErr()->getMessage(),
+        );
+    }
+
+    #[Test]
+    public function an_absent_value_inhabits_an_optional_claim(): void
+    {
+        $resolver = new AscriptionResolver(new StaticResolver());
+        $claim = new Ascription(new \Superscript\Axiom\Types\OptionType(new NumberType()), new StaticSource(null));
 
         $this->assertTrue($resolver->resolve($claim, new Context())->unwrap()->isNone());
     }

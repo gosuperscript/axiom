@@ -11,7 +11,6 @@ use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Result;
 
 use function Psl\Vec\map;
-use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
@@ -69,15 +68,17 @@ class DictType implements Type
             $value = $decoded;
         }
 
-        if (! is_array($value)) {
+        // A non-empty list is not a representation of a dict — there is no
+        // conversion to perform, so coerce rejects it exactly as assert
+        // does (coerce output must inhabit the type). The empty array IS a
+        // dict ([] inhabits both List and Dict): a caller who bound [] gets
+        // an empty map, not an absence reading — "empty reads as missing"
+        // is spelled Option<Dict<T>> by the host that wants it.
+        if (! is_array($value) || ($value !== [] && array_is_list($value))) {
             return Err(new TransformValueException(
                 type: 'dict',
                 value: $value,
             ));
-        }
-
-        if (empty($value)) {
-            return Ok(None());
         }
 
         return Result::collect(map($value, function (mixed $item) {
