@@ -213,7 +213,7 @@ The compiler refuses, with a nested cause chain (`TypeMismatch::describe()`):
 - **False ascriptions** — an `Ascription` whose claimed type is disjoint from the value's
 - **Unbound and cyclic symbols** — definition cycles are a standalone graph pass (declarations answer typing, never termination); a cyclic program cannot be compiled, and only compiled programs run
 - **Inert `Unknown`** — an `Unknown`-typed value at an operator, comparison, or member access is refused with the fix in the message: bridge it with `Coerce` or `Ascription`
-- **Ambiguity** — two rules resolving the same operator over overlapping operand types is an error naming both rules, never a precedence question
+- **Ambiguity** — two rules resolving the same operator over jointly admissible operand types (some operand type would resolve both) is an error naming both rules, never a precedence question
 
 Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. (The lower-level `TypeInference`/`TypeEnvironment` API remains available for corpus sweeps over stored programs.)
 
@@ -346,7 +346,7 @@ The core dialect ships these rules:
 - **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never array_intersect string juggling)
 - **Unary**: `!`/`not` (booleans only), `-` (numbers only)
 
-Every rule answers one question — `resolve(operator, operand types)` — whose success carries the return type *and* the evaluation, so the two cannot drift: they are one statement. Most rules are declarative rows built with the signature builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (overlapping rows) or compile time (multiple resolutions), never absorbed. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
+Every rule answers one question — `resolve(operator, operand types)` — whose success carries the return type *and* the evaluation, so rule selection and evaluation cannot drift apart: they are one statement. (That the evaluation honors its stated type is your certified obligation, tested by the totality harness — see the guide.) Most rules are declarative rows built with the signature builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (jointly admissible rows) or compile time (multiple resolutions), never absorbed. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
 
 ### Resolution Inspector
 

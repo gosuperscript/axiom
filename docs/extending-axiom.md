@@ -145,7 +145,7 @@ The closure's contract:
 
 The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the compiled node short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
 
-**Ambiguity is refused, never ranked.** Two rows for the same operator whose operand types overlap are a `Dialect` construction error — some value pair would have two owners, and which evaluation runs must never depend on registration order. Declare disjoint rows (the money pattern below), or hand-write a type function that refuses what another rule owns.
+**Ambiguity is refused, never ranked.** Two rows for the same operator whose slots are **jointly admissible** — some operand type would resolve both — are a `Dialect` construction error, and which evaluation runs must never depend on registration order. The relation is about operand *types*, not values: a `List` row beside a `Dict` row is a legal pair (the empty array inhabits both types, but no compilable operand type reaches both rows), while a `Literal(5)` row beside a `Number` row is refused (a `5`-typed operand resolves both, and there is no precedence to pick a winner — specialization included). Declare disjoint rows (the money pattern below), or hand-write a type function that refuses what another rule owns.
 
 ### Parameterized families: enumerate
 
@@ -218,7 +218,7 @@ $program = $expression->compile()->unwrap();
 $program(['effective' => $date]);                   // ...and the program runs what it resolved.
 ```
 
-Composition rules worth knowing: overlapping rows for one operator are a **construction error** (list order decides nothing — ambiguity is refused at the earliest moment it exists); duplicate literal registrations across extensions are equally loud, never a precedence question. `Extension` is an abstract class with empty defaults — override only what you contribute, and future hooks (matchers) can be added without breaking you.
+Composition rules worth knowing: jointly admissible rows for one operator are a **construction error** (list order decides nothing — ambiguity is refused at the earliest moment it exists); duplicate literal registrations across extensions are equally loud, never a precedence question. `Extension` is an abstract class with empty defaults — override only what you contribute, and future hooks (matchers) can be added without breaking you.
 
 Because your `-` row resolves `(Date, Period) → Date` while core's arithmetic refuses it, the compiler takes your lone resolution. If two rules both resolved the same operand types, compilation fails naming both — there is no silent winner.
 
@@ -257,8 +257,10 @@ interface OperatorOverloader
 Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
 
 - `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability, pessimistic on unions, with **no `Unknown` hole**: `Unknown` is inert, and your rule should refuse it too (using `admits` gives you that for free). It is also how "refuses `Option`" falls out: `Option<Number>` is not assignable to a present `Number` slot.
-- `TypeRelations::overlaps($a, $b)` — could any value satisfy both? The judgment for equality and membership.
-- `TypeOrder::hasDefinedOrder($type)` — is ranking meaningful? (Number-only in core; your dialect can ship ordered domain rows.)
+- `TypeRelations::overlaps($a, $b)` — could any *value* satisfy both? The judgment for equality and membership.
+- `TypeRelations::jointlyAdmissible($a, $b)` — could any operand *type* be admitted by both slots? The row-ambiguity judgment the `Dialect` runs at construction; useful when your hand-written rule needs to reason about collisions the way the dialect does.
+
+(There is deliberately no orderability oracle: "is `<` meaningful for this type?" has exactly one authority — whether the dialect resolves `<` for it. Shipping ordering rows *is* declaring the type ordered.)
 
 Core's rules (`src/Operators/`) are the reference implementations — `EqualityOverloader` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `HasOverloader`/`InOverloader` show shared operand judgments via `SetOperands`.
 
@@ -360,7 +362,13 @@ public function coerce_output_always_passes_assert(Type $type): void
 
 **The totality harness.** For every rule of your composed dialect, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values): wherever `resolve` certifies operand types, **every** specimen value pair of those types must evaluate without escaping — no `TypeError` from a closure narrower than its claim, no throw — and every successful result must inhabit the resolved return type. Value-dependent `Err`s (division by zero) are legal; escapes are defects.
 
-Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time.
+Be clear about what the harness quantifies over (RFC item 38). Its semantics come in three tiers:
+
+- **Enumerated** — the specimen family itself: a finite set of types covering every shape constructor your rules touch, each with hand-picked edge values (empty list, `None`, zero, negatives, the empty string, and your domain's own edges). This is the part you curate — **your obligation is to add specimens for every type your rules mention**: each opaque type, each literal class you register. A money package adds `Money<GBP>`/`Money<USD>` specimens, and the sweep covers money×money, money×number, money×everything automatically.
+- **Generated** — the sweep over every certified pair of the family. Nobody hand-writes cases.
+- **Trusted** — everything outside the family. The harness is *evidence, not proof*: a certification test sampling the domain at its edges. Totality over the full domain is the obligation you certified when your rule answered `Ok`; the library trusts it and never re-checks results at runtime.
+
+Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time. (The same obligation applies to a `TypedSource`: it is an operator rule with zero operands — its evaluation must land in the type it declares, and your suite should prove it on real fixtures.)
 
 ## What stays yours
 
