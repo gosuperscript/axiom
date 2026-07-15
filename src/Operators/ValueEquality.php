@@ -5,13 +5,18 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 /**
- * The one equality authority (RFC item 39) — consumed by the equality
- * operator, membership, literal-shape identity, and match coverage; no
- * second definition exists. Numeric comparison when both operands are
- * numbers (1 == 1.0 holds — one Number base), strict identity otherwise,
- * element-wise for arrays, and false across bases (5 never equals '5';
- * true never equals 1). Never PHP juggling — this is what makes a dead
- * verdict honest by construction.
+ * Defines what "equal" means for engine values, in three rules:
+ *
+ * - Two numbers (int or float) compare numerically: 1 equals 1.0.
+ * - Two arrays compare entry-wise: same keys in the same order, every
+ *   value equal by these same rules.
+ * - Everything else compares by strict identity: 5 never equals '5',
+ *   true never equals 1.
+ *
+ * PHP's own == juggles types across bases; this never does. Every place
+ * the engine compares values — the equality operator, has/in/intersects,
+ * literal patterns in match, literal types — calls this class, so no two
+ * of them can disagree about what "equal" means.
  */
 final class ValueEquality
 {

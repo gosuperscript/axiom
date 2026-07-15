@@ -14,9 +14,11 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The statically unnameable. Admits every value; certifies nothing.
- * Derived by inference (or bound explicitly by a scope that tolerates
- * unknown symbols) — never authored as a declaration.
+ * The type of a value nothing is known about. Every value passes assert
+ * and coerce, but no operator, comparison, or member access accepts an
+ * Unknown operand — convert the value with Coerce or claim its type with
+ * Ascription first. Produced by inference (or bound explicitly by a scope
+ * that tolerates unknown symbols) — never authored as a declaration.
  *
  * @implements Type<mixed>
  */

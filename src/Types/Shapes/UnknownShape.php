@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types\Shapes;
 
 /**
- * The statically unnameable. Admissible at every operand position (nothing
- * can be ruled out); certifies nothing under assignability (accepted only
- * by itself). Derived, never authored.
+ * The shape of a value nothing is known about. Under assignability it is
+ * accepted only by itself; at operand positions it is refused outright
+ * (bridge with Coerce or Ascription); under overlap it matches everything,
+ * because an unknown value can never be ruled out. Derived, never
+ * authored.
  */
 final class UnknownShape extends Shape
 {
