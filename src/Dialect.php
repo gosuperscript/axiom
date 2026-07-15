@@ -33,11 +33,11 @@ use function Superscript\Monads\Result\attempt;
  * runtime to miscompose.
  *
  * Most core rules are dispatch-table rows (the signature builder's
- * output); equality and the set operators are type functions. Ambiguity is
- * refused at the earliest moment it exists: two rows for the same operator
- * with overlapping operand types are a construction error here, and any
- * remaining multi-resolution is a compile error in the manager. List order
- * decides nothing.
+ * output); equality and the set operators compute their answer from the
+ * operand types. Ambiguity is refused at the earliest moment it exists:
+ * two rows for the same operator whose slots admit a common operand type
+ * are a construction error here, and any remaining multi-resolution is a
+ * compile error in the manager. List order decides nothing.
  *
  * Packages contribute through {@see Extension}; duplicate literal
  * registrations are loud errors.

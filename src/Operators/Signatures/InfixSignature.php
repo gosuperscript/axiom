@@ -17,15 +17,16 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * A dispatch-table row: one declaration of operand ownership, one verdict.
- * Resolution is admissibility against the declared operand types; success
- * carries the declared return type and the declared evaluation, so the
- * static and runtime semantics are one statement. The closure only ever
- * sees values of the operand types it declared — the compiler proved them.
+ * A dispatch-table row: this operator, over these operand types, returns
+ * this type via this closure. Resolution checks the incoming operand
+ * types against the declared slots (TypeRelations::admits) and, on a
+ * match, returns the declared return type with the declared evaluation.
+ * The closure only ever sees values of the operand types it declared —
+ * the compiler proved them — so it may take natively typed parameters.
  *
- * The operand types are public so Dialect composition can refuse two rows
- * for the same operator with overlapping operand types — ambiguity is a
- * construction error, never a precedence question.
+ * The operand types are public so Dialect construction can refuse two
+ * rows for the same operator that admit a common operand type — ambiguity
+ * is a construction error, never a precedence question.
  */
 final readonly class InfixSignature implements OperatorOverloader
 {

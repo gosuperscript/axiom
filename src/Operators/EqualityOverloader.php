@@ -18,17 +18,22 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * Equality is a type function, not a dispatch row: its verdict is computed
- * from the operand types. Both operand types must lie within the claimed
- * domain (scalar/null/array values — no objects, whose equality belongs to
- * the rule that owns the type, now expressible as an ordinary row; no
- * Unknown, which is inert) and must overlap — a comparison that can never
- * hold is dead code, not a boolean. Absence is tolerated: options always
- * overlap, and equality against the null literal is the emptiness test.
+ * The equality rule (==, ===, !=, !==). Unlike a dispatch row, its answer
+ * is computed from the operand types:
  *
- * Evaluation is value equality ({@see ValueEquality}), never PHP juggling;
- * === and !== are aliases of ==/!= — strictness was only distinct while ==
- * juggled. The negation is baked into the closure at resolution.
+ * - Both operand types must consist of scalars, null, and arrays of them.
+ *   Objects are refused — object equality belongs to the package that
+ *   owns the type, as its own rule — and so is Unknown.
+ * - The types must overlap: if no value could inhabit both, the
+ *   comparison has a constant answer, and that is reported as a `dead`
+ *   mismatch (a probable author bug) rather than resolved to a boolean.
+ * - Absence is fine: options always overlap, so x == null works as the
+ *   emptiness test.
+ *
+ * Evaluation is {@see ValueEquality}, so 1 == 1.0 and 5 != '5'; === and
+ * !== are plain aliases of == and != (strictness only meant something
+ * when == juggled types). Negation is baked into the closure when the
+ * operator is != or !==.
  */
 final readonly class EqualityOverloader implements OperatorOverloader
 {

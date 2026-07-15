@@ -17,9 +17,10 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The unary twin of {@see InfixSignature}: one declaration, one verdict.
- * The operand type is public for the same reason — Dialect composition
- * refuses overlapping rows per operator at construction.
+ * The unary twin of {@see InfixSignature}: this operator, over this
+ * operand type, returns this type via this closure. The operand type is
+ * public for the same reason — Dialect construction refuses two rows for
+ * the same operator that admit a common operand type.
  */
 final readonly class PrefixSignature implements UnaryOverloader
 {
