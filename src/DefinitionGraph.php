@@ -57,7 +57,7 @@ final class DefinitionGraph
             return;
         }
 
-        if (isset($explored[$key])) {
+        if ($explored[$key] ?? false) {
             return;
         }
 

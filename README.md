@@ -335,6 +335,22 @@ Sources represent different ways to provide data:
 - **MatchExpression**: Conditional matching with ordered arms
 - **MemberAccessSource**: Chained property/array-key access
 
+**When do you reach for `Coerce` vs `Ascription` in practice?**
+
+- **`Coerce` is for input you don't control.** Wrap the exact spot where a messy external value enters the program — a CSV cell, a form field, a JSON fragment — and evaluation converts it (`'42' → 42`, `'' → absence`) before anything downstream sees it. Most programs never write an explicit `Coerce` node at all: the typed-bindings boundary (`declarations` on the `Expression`) is the same conversion applied to every declared input at once, which is where conversion usually belongs. Reach for the node itself when a single value needs converting *mid-expression* — e.g. a host source that returns a stringly lookup cell.
+
+  ```php
+  new Coerce(new NumberType(), $rawLookupCell)   // '42 ' → 42; the checker takes Number on faith
+  ```
+
+- **`Ascription` is for narrowing what you already have.** The value exists and should *already* inhabit the type — you are recording a claim the engine cannot infer, most commonly refining a host source that honestly returns `Unknown`. The checker verifies the claim is *possible* (the types overlap; claiming `Number` on something inferred `String` is a compile error), and the runtime verifies it actually *holds* (`assert`), so a false claim is a loud error at the exact node that lied — never silent corruption downstream.
+
+  ```php
+  new Ascription(new NumberType(), $unknownHostSource)  // "trust me, this is a number" — and it's checked twice
+  ```
+
+Rule of thumb: converting? `Coerce`, preferably via declarations at the boundary. Claiming? `Ascription`. If you find yourself ascribing to paper over a conversion, the value wanted a boundary declaration instead.
+
 ### Resolvers
 
 Resolvers handle the evaluation of sources. They are **stateless** — all per-call state (bindings, definitions, the inspector, and the symbol memo) lives on a `Context` threaded through `resolve(Source, Context)`:

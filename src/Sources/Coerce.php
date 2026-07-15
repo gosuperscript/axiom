@@ -15,9 +15,6 @@ use Superscript\Axiom\Types\Type;
  * never reasons about satisfiability. For a checked claim about a value
  * that already inhabits a type, use {@see Ascription}.
  *
- * (Formerly named TypeDefinition — retired because it always behaved as
- * coercion while "definition" read as annotation.)
- *
  * @template T = mixed
  * @implements Source<T>
  */

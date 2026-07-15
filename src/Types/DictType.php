@@ -8,8 +8,6 @@ use Illuminate\Support\Arr;
 use InvalidArgumentException;
 use Superscript\Monads\Option\Option;
 use Superscript\Axiom\Exceptions\TransformValueException;
-use Superscript\Monads\Result\Err;
-use Superscript\Monads\Result\Ok;
 use Superscript\Monads\Result\Result;
 
 use function Psl\Vec\map;
@@ -51,7 +49,7 @@ class DictType implements Type
         // The empty array inhabits both List and Dict — PHP has one value
         // where the algebra has two types.
         if (! is_array($value) || ($value !== [] && array_is_list($value))) {
-            return new Err(new TransformValueException(
+            return Err(new TransformValueException(
                 type: 'dict',
                 value: $value,
             ));
@@ -72,14 +70,14 @@ class DictType implements Type
         }
 
         if (! is_array($value)) {
-            return new Err(new TransformValueException(
+            return Err(new TransformValueException(
                 type: 'dict',
                 value: $value,
             ));
         }
 
         if (empty($value)) {
-            return new Ok(None());
+            return Ok(None());
         }
 
         return Result::collect(map($value, function (mixed $item) {

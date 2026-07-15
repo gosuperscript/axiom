@@ -60,19 +60,27 @@ final class ContextTest extends TestCase
     }
 
     #[Test]
+    public function it_carries_the_exact_dialect_it_was_given(): void
+    {
+        // The same instance the checker reads is the one the evaluation
+        // runs — not a fresh default that happens to look similar.
+        $dialect = \Superscript\Axiom\Dialect::core();
+
+        $this->assertSame($dialect, (new Context(dialect: $dialect))->dialect);
+    }
+
+    #[Test]
     public function it_marks_symbols_in_progress_during_resolution(): void
     {
-        // The runtime backstop for definition cycles: re-entry is refused
-        // while a symbol's definition is being followed, and allowed again
-        // once resolution completed.
+        // The runtime backstop for definition cycles: re-entry while a
+        // symbol's definition is being followed is refused. Marks are never
+        // cleared — a completed resolution is memoized before any repeated
+        // lookup, so only a genuine cycle re-enters this guard.
         $context = new Context();
 
         $this->assertTrue($context->beginSymbolResolution('a'));
         $this->assertFalse($context->beginSymbolResolution('a'));
-
-        $context->endSymbolResolution('a');
-
-        $this->assertTrue($context->beginSymbolResolution('a'));
+        $this->assertTrue($context->beginSymbolResolution('b'));
     }
 
     #[Test]

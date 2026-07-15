@@ -59,8 +59,6 @@ final readonly class SymbolResolver implements Resolver
             ->andThen(fn(Source $definition) => $this->resolver->resolve($definition, $context)->transpose())
             ->transpose();
 
-        $context->endSymbolResolution($key);
-
         $context->memoizeSymbol($key, $result);
 
         $context->inspector?->annotate('label', $key);

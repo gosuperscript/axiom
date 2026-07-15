@@ -24,7 +24,7 @@ Hosts want to answer, before evaluating anything, questions the engine currently
 
 - `Types\Type` is a **runtime contract**: `assert`, `coerce`, `compare`, `format`. It answers "does this value inhabit this type?" — never "how does this type relate to that one?".
 - Operators are **value-directed**: `OperatorOverloader::supportsOverloading(mixed $left, mixed $right, string $operator)` dispatches on runtime values; an ordered stack (`OverloaderManager`) composes a dialect.
-- The runtime AST (`Source`) already contains one static-typing node, historically named `TypeDefinition` (evaluated via coercion). This RFC splits it into two nodes with distinct semantics: `Coerce` and `Ascription` (§3).
+- The runtime AST (`Source`) has a single static-typing node, `TypeDefinition` (evaluated via coercion). This RFC splits it into two nodes with distinct semantics: `Coerce` and `Ascription` (§3).
 
 What's missing is the middle: a **static semantics** connecting declared types to expressions.
 

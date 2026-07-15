@@ -250,6 +250,22 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
+    public function an_optional_record_declaration_also_collides_through_the_record_view(): void
+    {
+        // The record view looks through optionality: Option<Record> still
+        // declares its fields, so the collision holds.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('[customer.turnover] is both declared and defined');
+
+        new Expression(
+            source: new SymbolSource('turnover', 'customer'),
+            resolver: $this->resolver(),
+            definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
+            declarations: ['customer' => new OptionType(new RecordType(['turnover' => new NumberType()]))],
+        );
+    }
+
+    #[Test]
     public function a_record_declaration_collides_with_a_definition_through_the_record_view(): void
     {
         // Declaring customer as a record with a turnover field declares

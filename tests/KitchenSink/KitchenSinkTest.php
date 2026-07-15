@@ -264,4 +264,139 @@ class KitchenSinkTest extends TestCase
 
         $this->assertEquals(5, $resolver->resolve($source, $context)->unwrap()->unwrap());
     }
+
+    #[Test]
+    public function certify_a_gate_before_evaluating_anything(): void
+    {
+        // The corpus-sweep workflow: a host holds a stored gate expression
+        // and asks, before any evaluation, "is this condition boolean, and
+        // is it meaningful for the declared inputs?"
+        $gate = new Expression(
+            source: new InfixExpression(
+                left: new InfixExpression(new SymbolSource('turnover', 'quote'), '*', new StaticSource(1.2)),
+                operator: '>',
+                right: new StaticSource(500_000),
+            ),
+            resolver: $this->fullResolver(),
+            declarations: ['quote.turnover' => new NumberType()],
+        );
+
+        $this->assertTrue($gate->check(new \Superscript\Axiom\Types\BooleanType())->isOk());
+
+        // The same declarations then guard the call: the boundary coerces
+        // a stringly CSV cell before evaluation, so the certified
+        // expression never sees raw input.
+        $this->assertTrue($gate(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
+        $this->assertFalse($gate(['quote' => ['turnover' => '100000']])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function the_checker_flags_dead_comparisons_and_unprovable_matches(): void
+    {
+        $tier = new \Superscript\Axiom\Types\UnionType(
+            new \Superscript\Axiom\Types\LiteralType('micro'),
+            new \Superscript\Axiom\Types\LiteralType('small'),
+        );
+
+        // 'enormous' is not a member of tier's enum: the comparison can
+        // never hold, and the checker says so before any quote runs it.
+        $dead = new Expression(
+            source: new InfixExpression(new SymbolSource('tier'), '==', new StaticSource('enormous')),
+            resolver: $this->fullResolver(),
+            declarations: ['tier' => $tier],
+        );
+
+        $verdict = $dead->infer();
+
+        $this->assertTrue($verdict->isErr());
+        $this->assertTrue($verdict->unwrapErr()->dead);
+
+        // A match that covers only one of the two tiers is unprovable —
+        // an unmatched subject is a runtime error, so the checker demands
+        // the missing arm (or a wildcard) instead of letting it ship.
+        $partial = new Expression(
+            source: new MatchExpression(
+                subject: new SymbolSource('tier'),
+                arms: [new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3))],
+            ),
+            resolver: $this->fullResolver(),
+            declarations: ['tier' => $tier],
+        );
+
+        $this->assertStringContainsString('may not be exhaustive', $partial->infer()->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_overridable_derived_value_is_an_option_typed_parameter(): void
+    {
+        // Callers may not override internals implicitly (declarations and
+        // definitions are disjoint; undeclared bindings are stripped). An
+        // override is modeled in-language instead: an optional, typed
+        // parameter the derived value consults — certified on both paths.
+        $rate = new Expression(
+            source: new InfixExpression(new SymbolSource('turnover'), '*', new SymbolSource('riskFactor')),
+            resolver: $this->fullResolver(),
+            definitions: new Definitions([
+                // riskFactor = match riskFactorOverride { null => 1.5, _ => riskFactorOverride }
+                'riskFactor' => new MatchExpression(
+                    subject: new SymbolSource('riskFactorOverride'),
+                    arms: [
+                        new MatchArm(new LiteralPattern(null), new StaticSource(1.5)),
+                        new MatchArm(new WildcardPattern(), new SymbolSource('riskFactorOverride')),
+                    ],
+                ),
+            ]),
+            declarations: [
+                'turnover' => new NumberType(),
+                'riskFactorOverride' => new \Superscript\Axiom\Types\OptionType(new NumberType()),
+            ],
+        );
+
+        $this->assertEquals(150, $rate(['turnover' => 100])->unwrap()->unwrap());
+        $this->assertEquals(200, $rate(['turnover' => 100, 'riskFactorOverride' => 2.0])->unwrap()->unwrap());
+
+        // The old implicit path is gone: an undeclared key aimed at the
+        // internal is stripped, not honored.
+        $this->assertEquals(150, $rate(['turnover' => 100, 'riskFactor' => 99.0])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_domain_operator_is_one_declaration_checked_and_run_alike(): void
+    {
+        // A host teaches the language a domain operator with the signature
+        // builder: one declaration yields the runtime claim and the static
+        // verdict, and the same Dialect instance serves check() and call().
+        $percentage = new class extends \Superscript\Axiom\Extension {
+            public function operators(): array
+            {
+                return [
+                    \Superscript\Axiom\Operators\Operator::infix('%of')
+                        ->signature(new NumberType(), new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int|float $percent, int|float $total) => $total * $percent / 100),
+                ];
+            }
+        };
+
+        $commission = new Expression(
+            source: new InfixExpression(new SymbolSource('rate'), '%of', new SymbolSource('premium')),
+            resolver: $this->fullResolver(),
+            dialect: \Superscript\Axiom\Dialect::core()->with($percentage),
+            declarations: ['rate' => new NumberType(), 'premium' => new NumberType()],
+        );
+
+        $this->assertInstanceOf(NumberType::class, $commission->infer()->unwrap());
+        $this->assertEquals(125.0, $commission(['rate' => 25, 'premium' => 500])->unwrap()->unwrap());
+
+        // And the checker refuses what the rule's runtime would refuse:
+        // strings are outside the declared signature.
+        $misuse = new Expression(
+            source: new InfixExpression(new StaticSource('a quarter'), '%of', new SymbolSource('premium')),
+            resolver: $this->fullResolver(),
+            dialect: \Superscript\Axiom\Dialect::core()->with($percentage),
+            declarations: ['premium' => new NumberType()],
+        );
+
+        $this->assertTrue($misuse->infer()->isErr());
+    }
 }

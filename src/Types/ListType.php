@@ -7,7 +7,6 @@ namespace Superscript\Axiom\Types;
 use InvalidArgumentException;
 use Superscript\Monads\Option\Option;
 use Superscript\Axiom\Exceptions\TransformValueException;
-use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
 
 use function Psl\Vec\map;
@@ -35,22 +34,20 @@ class ListType implements Type
         // Strict membership: an associative array is not a list, and
         // asserting never converts — reindexing belongs to coerce.
         if (!is_array($value) || !array_is_list($value)) {
-            return new Err(new TransformValueException(
+            return Err(new TransformValueException(
                 type: 'list',
                 value: $value,
             ));
         }
 
-        if ($outOfBounds = $this->checkBounds($value)) {
-            return new Err($outOfBounds);
-        }
-
-        return Result::collect(map($value, function (mixed $item) {
-            return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('List item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
-            ));
-        }))->map(fn(array $items) => Some($items));
+        return $this->checkBounds($value)->andThen(
+            fn(array $items) => Result::collect(map($items, function (mixed $item) {
+                return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
+                    default: Err(new InvalidArgumentException('List item can not be a None')),
+                    f: fn(mixed $value) => Ok($value),
+                ));
+            }))->map(fn(array $items) => Some($items)),
+        );
     }
 
     public function coerce(mixed $value): Result
@@ -60,22 +57,20 @@ class ListType implements Type
         }
 
         if (!is_array($value)) {
-            return new Err(new TransformValueException(
+            return Err(new TransformValueException(
                 type: 'list',
                 value: $value,
             ));
         }
 
-        if ($outOfBounds = $this->checkBounds($value)) {
-            return new Err($outOfBounds);
-        }
-
-        return Result::collect(map($value, function (mixed $item) {
-            return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('List item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
-            ));
-        }))->map(fn(array $items) => Some($items));
+        return $this->checkBounds($value)->andThen(
+            fn(array $items) => Result::collect(map($items, function (mixed $item) {
+                return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
+                    default: Err(new InvalidArgumentException('List item can not be a None')),
+                    f: fn(mixed $value) => Ok($value),
+                ));
+            }))->map(fn(array $items) => Some($items)),
+        );
     }
 
     public function compare(mixed $a, mixed $b): bool
@@ -98,19 +93,20 @@ class ListType implements Type
 
     /**
      * @param array<array-key, mixed> $value
+     * @return Result<array<array-key, mixed>, InvalidArgumentException>
      */
-    private function checkBounds(array $value): ?InvalidArgumentException
+    private function checkBounds(array $value): Result
     {
         $count = count($value);
 
         if ($this->min !== null && $count < $this->min) {
-            return new InvalidArgumentException(sprintf('List has %d items but requires at least %d.', $count, $this->min));
+            return Err(new InvalidArgumentException(sprintf('List has %d items but requires at least %d.', $count, $this->min)));
         }
 
         if ($this->max !== null && $count > $this->max) {
-            return new InvalidArgumentException(sprintf('List has %d items but allows at most %d.', $count, $this->max));
+            return Err(new InvalidArgumentException(sprintf('List has %d items but allows at most %d.', $count, $this->max)));
         }
 
-        return null;
+        return Ok($value);
     }
 }

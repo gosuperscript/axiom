@@ -46,6 +46,19 @@ final class ShapeDomainTest extends TestCase
         $this->assertSame($expected, ShapeDomain::all($shape, self::noOpaques()));
     }
 
+    #[Test]
+    public function unknown_and_never_pass_without_consulting_the_leaf(): void
+    {
+        // The sanctioned hole and the vacuous case are the traversal's own
+        // law, not the rule's: even a leaf that refuses everything cannot
+        // veto them.
+        $refuseEverything = fn(Shape $leaf) => false;
+
+        $this->assertTrue(ShapeDomain::all(new UnknownShape(), $refuseEverything));
+        $this->assertTrue(ShapeDomain::all(new NeverShape(), $refuseEverything));
+        $this->assertFalse(ShapeDomain::all(new NumberShape(), $refuseEverything), 'ordinary leaves do consult the predicate');
+    }
+
     public static function cases(): \Generator
     {
         yield 'a scalar leaf passes' => [new NumberShape(), true];

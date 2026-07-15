@@ -349,6 +349,20 @@ final class TypeRelationsTest extends TestCase
         $this->assertSame($expected, TypeRelations::shapesOverlap($b, $a)->isOk());
     }
 
+    #[Test]
+    public function a_non_empty_list_dict_refusal_carries_the_empty_array_cause(): void
+    {
+        $result = TypeRelations::shapesOverlap(
+            new ListShape(new NumberShape(), min: 1),
+            new DictShape(new NumberShape()),
+        );
+
+        $this->assertStringContainsString(
+            'Only the empty array inhabits both a list and a dict, and this list cannot be empty.',
+            $result->unwrapErr()->describe(),
+        );
+    }
+
     public static function overlapCases(): \Generator
     {
         yield 'unknown overlaps everything' => [new UnknownShape(), new NumberShape(), true];
@@ -501,9 +515,13 @@ final class TypeRelationsTest extends TestCase
         ];
         yield 'opaque does not overlap a primitive' => [new OpaqueShape('ClaimId'), new StringShape(), false];
         // The empty array inhabits both List and Dict — one PHP value, two
-        // types — so overlap holds exactly when the list admits emptiness.
+        // types — so overlap holds exactly when the list admits emptiness,
+        // and for no other pairing of the two container heads.
         yield 'list overlaps dict at the empty array' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), true];
         yield 'a non-empty list does not overlap dict' => [new ListShape(new NumberShape(), min: 1), new DictShape(new NumberShape()), false];
+        yield 'a list does not overlap a record' => [new ListShape(new NumberShape()), new RecordShape(['a' => new NumberShape()]), false];
+        yield 'a number does not overlap a list' => [new NumberShape(), new ListShape(new NumberShape()), false];
+        yield 'a number does not overlap a dict' => [new NumberShape(), new DictShape(new NumberShape()), false];
     }
 
     #[Test]

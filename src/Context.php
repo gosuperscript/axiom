@@ -80,23 +80,20 @@ final class Context
      * break one (it is written only after resolution completes), so a
      * symbol marks itself in-progress before its definition is followed.
      * Re-entry means the definition graph is cyclic — a named error, where
-     * unguarded recursion would run unbounded.
+     * unguarded recursion would run unbounded. Marks are never cleared: a
+     * completed resolution is memoized before any repeated lookup could
+     * reach this guard, so only a genuine cycle re-enters.
      *
      * @return bool false when the symbol is already being resolved
      */
     public function beginSymbolResolution(string $key): bool
     {
-        if (isset($this->resolvingSymbols[$key])) {
+        if ($this->resolvingSymbols[$key] ?? false) {
             return false;
         }
 
         $this->resolvingSymbols[$key] = true;
 
         return true;
-    }
-
-    public function endSymbolResolution(string $key): void
-    {
-        unset($this->resolvingSymbols[$key]);
     }
 }

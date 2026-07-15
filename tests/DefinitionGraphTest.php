@@ -65,6 +65,52 @@ final class DefinitionGraphTest extends TestCase
     }
 
     #[Test]
+    public function a_cycle_among_later_keys_is_still_found(): void
+    {
+        // The walk covers every definition, not just the first: a cycle
+        // that no earlier key reaches must still surface.
+        $definitions = new Definitions([
+            'ok' => new StaticSource(1),
+            'a' => new SymbolSource('b'),
+            'b' => new SymbolSource('a'),
+        ]);
+
+        $this->assertCount(1, DefinitionGraph::cycles($definitions));
+    }
+
+    #[Test]
+    public function the_reported_cycle_starts_at_its_entry_not_at_the_walk_root(): void
+    {
+        // entry → a → b → a: the cycle is a → b → a; entry merely reaches
+        // it and must not appear in the report.
+        $definitions = new Definitions([
+            'entry' => new SymbolSource('a'),
+            'a' => new SymbolSource('b'),
+            'b' => new SymbolSource('a'),
+        ]);
+
+        $cycles = DefinitionGraph::cycles($definitions);
+
+        $this->assertCount(1, $cycles);
+        $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $cycles[0]->describe());
+        $this->assertStringNotContainsString('entry', $cycles[0]->describe());
+    }
+
+    #[Test]
+    public function every_distinct_cycle_is_reported(): void
+    {
+        // Two independent cycles → two diagnostics: the triage view of a
+        // corpus sweep must show the whole damage, not the first hit.
+        $definitions = new Definitions([
+            'a' => new SymbolSource('a'),
+            'b' => new SymbolSource('c'),
+            'c' => new SymbolSource('b'),
+        ]);
+
+        $this->assertCount(2, DefinitionGraph::cycles($definitions));
+    }
+
+    #[Test]
     public function a_namespaced_cycle_is_walked_through_dotted_keys(): void
     {
         $definitions = new Definitions([
