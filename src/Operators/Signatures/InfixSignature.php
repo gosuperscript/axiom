@@ -17,16 +17,19 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * A dispatch-table row: this operator, over these operand types, returns
- * this type via this closure. Resolution checks the incoming operand
- * types against the declared slots (TypeRelations::admits) and, on a
- * match, returns the declared return type with the declared evaluation.
- * The closure only ever sees values of the operand types it declared —
- * the compiler proved them — so it may take natively typed parameters.
+ * One binary operator rule, declared as data: "the operator [-], taking
+ * (Date, Period), returns Date, computed by this closure". Built via the
+ * Operator::infix() builder.
  *
- * The operand types are public so Dialect construction can refuse two
- * rows for the same operator that admit a common operand type — ambiguity
- * is a construction error, never a precedence question.
+ * resolve() answers Ok when the asked-about operator is this row's and
+ * both operand types fit the declared slots; the answer carries the
+ * declared return type and closure. Because the compiler only ever calls
+ * the closure with values of the declared operand types, the closure may
+ * declare native parameter types (fn (Date $d, Period $p) => ...).
+ *
+ * The operator and operand types are public properties because Dialect
+ * reads them at construction to detect two rows that could both match
+ * the same expression, which it refuses as ambiguous.
  */
 final readonly class InfixSignature implements OperatorOverloader
 {

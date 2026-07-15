@@ -6,31 +6,45 @@ The design principle behind every seam: **a rule's typing and its evaluation are
 
 ## Custom types
 
-A type implements `Type`, which is both a **runtime contract** (`assert`, `coerce`, `compare`, `format`) and — via `Shaped` — a **static contract** (`shape()`).
+A type implements `Type`, which is both a **runtime contract** (`assert`, `coerce`, `format`) and — via `Shaped` — a **static contract** (`shape()`).
 
 ### The runtime contract
 
 - `assert(mixed): Result<Option<T>>` — strict membership: is this value already of the type? Never lenient.
 - `coerce(mixed): Result<Option<T>>` — the lenient input boundary: convert what can reasonably be read as the type. Absence readings (an empty CSV cell meaning "no value") belong here, and *only* here.
-- `compare(T, T): bool` — value equality within the type.
 - `format(T): string` — human rendering.
+
+Deliberately *not* part of the contract: equality. The engine has exactly one definition of "equal" (`ValueEquality`, used by `==` and the set operators), and a type cannot override it — two values of your type compare however their underlying representation compares. If your domain type needs its own equality semantics (money comparing by amount and currency), ship an `==` operator rule for it (§Custom operators); that is the only place equality behavior can live.
 
 ### The static contract: projection into the shape algebra
 
 Relations between types (assignability, overlap, …) are not defined on your class — they are defined by structural recursion over a **sealed vocabulary of shapes** (`Superscript\Axiom\Types\Shapes`). Your type *projects* into that vocabulary via `shape()`; it can never add a constructor or edit a relation. Adding a type is adding a shape — an unmodelled type is unrepresentable, not silently incompatible.
 
-**The shape-truth law — the one rule everything else depends on:** your projection is a *truth claim about the runtime structure of your values*. Every relation trusts it, and member access is certified from it, so it must be load-bearing-true: project `RecordShape` **only if** the member-access mechanism can genuinely reach every projected field on every value of your type. This is not honor-system — copy the census pattern (§Testing your extension) and the test suite verifies your projection against real specimens.
+**The shape-truth law — the one rule everything else depends on:** whatever shape you project is a *claim about what your values look like at runtime*, and the compiler certifies programs against that claim without ever re-checking it. Project a `NumberShape` and your values had better be numbers; project a `RecordShape(['lat' => …])` and every value of your type had better be something member access can read `lat` from. A projection that promises more than the values deliver produces programs that are certified and still crash. This is not honor-system — copy the census pattern (§Testing your extension) and the test suite verifies your projection against real specimens.
 
-Pick your projection:
+Pick your projection, then read its section below for the specifics:
 
 | Your type is… | Project as |
 | --- | --- |
-| Values genuinely are records — arrays/objects whose fields the resolver can reach (an address, a JSON-shaped position) | `RecordShape([...fields])` — records are exact, and member access on your fields is certified for free |
+| Values genuinely are records — arrays whose fields member access can reach (an address, a JSON-shaped position) | `RecordShape([...fields])` |
 | Nominal — identity matters, structure shouldn't leak (a claim ID) | `OpaqueShape('ClaimId')` |
-| **Object-valued domain type needing parameterized subtyping** (a `Money` class with a currency) | `OpaqueShape` **with structural parameters** — see below |
-| A refinement of a scalar (an email is a string) | The base shape (`StringShape`) — the refinement is enforced at runtime by `assert`/`coerce`; statically it is a `String` |
+| **Object-valued domain type needing parameterized subtyping** (a `Money` class with a currency) | `OpaqueShape` **with structural parameters** |
+| A refinement of a scalar (an email is a string) | The base shape (`StringShape`) |
 
-The parameterized opaque is how a money package gets currency subtyping *without lying about structure*:
+#### Records: exact fields, reachable fields
+
+Project `RecordShape` only when your values *are* array-shaped records the member-access mechanism can read. What you get: member access on every declared field is certified, and field types flow into inference. What to watch:
+
+- **Records are exact.** Your fields fully describe the value set — undeclared extras make a value a non-member under `assert` (though `coerce` takes the declared slice of wide input). "These fields plus who-knows-what" is not a record; it's a `Dict`.
+- **An optional field is a field whose shape is `OptionShape`** — there is no presence flag, and record coercion canonicalizes a missing optional key to a present `null`.
+- **Never project fictional fields.** Encoding a brand as a record with literal discriminant fields (`{kind: 'money', currency: 'GBP', amount: Number}`) is how TypeScript's branded types work — safe there only because TS types are erased and never meet a runtime. Here the projection leaks through assignability into record slots whose certified member accesses then crash on the real object. The record encoding is legal exactly when values *genuinely are* such arrays — and the census will hold you to it.
+
+#### Opaques: identity first, parameters for subtyping
+
+Project `OpaqueShape` for object-valued domain types and nominal identities. What you get: your type relates only to opaques of the same identity, so no core rule ever accidentally claims your values. What to watch:
+
+- **No structural claims means no member access**: `money.amount` is a compile error unless your host exposes it another way. That is the point — nothing is certified your object can't deliver.
+- **Parameters give you subtyping without structure.** Parameters relate by the ordinary rules under the same identity, so `Money<GBP>` is assignable to a `Money<GBP|USD>` slot (`'GBP' ⊆ 'GBP'|'USD'`), while `Money<GBP>` vs `Money<USD>` share no values — and no relation code anywhere mentions money:
 
 ```php
 use Superscript\Axiom\Types\Shapes;
@@ -39,7 +53,7 @@ final readonly class MoneyType implements Type
 {
     public function __construct(private string $currency) {}
 
-    // ... assert / coerce / compare / format ...
+    // ... assert / coerce / format ...
 
     public function shape(): Shapes\Shape
     {
@@ -50,9 +64,14 @@ final readonly class MoneyType implements Type
 }
 ```
 
-Opaques relate nominally first, then parameter-wise: `Money<GBP>` is assignable to a `Money<GBP|USD>` slot (same identity, `'GBP' ⊆ 'GBP'|'USD'`), `Money<GBP> == Money<USD>` is a *dead comparison* the checker flags, and no relation code anywhere mentions money. And because opaques make **no structural claims**, nothing is certified that your `Money` object can't deliver — `money.amount` is refused unless you expose it structurally.
+- **Operators must be yours.** Core refuses opaques everywhere (including `==` — object equality belongs to you), so every operation on your type is a rule you ship (§Custom operators).
 
-**Do not project fictional fields.** An earlier version of this guide recommended encoding the brand as a closed record with literal discriminant fields (`{kind: 'money', currency: 'GBP', amount: Number}`). That trick is how TypeScript's *branded types* work — and it is safe there only because TS types are erased and never meet a runtime. Here, shapes drive a checker that must agree with a live evaluator: a fictional record projection leaks through assignability into record slots whose certified member accesses then crash on the real object. The record encoding remains legal for exactly one case: types whose runtime values *genuinely are* such records (e.g. a host where money literally is `['kind' => 'money', 'currency' => 'GBP', 'amount' => 100]`) — and the census will hold you to it.
+#### Scalar refinements: strict at the boundary, plain inside
+
+Project the base shape (`StringShape` for an email) when your type is a validated subset of a scalar. What to watch:
+
+- **The refinement lives only in `assert`/`coerce`** — it is enforced whenever a value crosses a boundary (typed bindings, `Coerce`, `Ascription`), and nowhere else. Statically your type *is* the base: an email fills any `String` slot, `email == string` compares as strings, and core's string rules apply unchanged.
+- That is usually exactly right for refinements. If it isn't — if treating your values as plain scalars ever produces wrong behavior — you wanted an opaque, not a refinement.
 
 A complete refinement-type example:
 
@@ -69,6 +88,7 @@ final class EmailType implements Type
 {
     public function assert(mixed $value): Result
     {
+        // Strict membership: only an actual, valid email string passes.
         if (is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL)) {
             return Ok(Some($value));
         }
@@ -82,12 +102,10 @@ final class EmailType implements Type
             return new Err(new TransformValueException(type: 'email', value: $value));
         }
 
+        // The conversions: Stringable objects become strings, surrounding
+        // whitespace is dropped (' a@b.co ' reads as an email) — then the
+        // result must pass strict membership like any other value.
         return $this->assert(trim((string) $value));
-    }
-
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
     }
 
     public function format(mixed $value): string
@@ -139,38 +157,20 @@ The closure's contract:
 
 - It may take its parameters **natively typed** (`fn (Carbon $l, Period $r) => …`) — the values are proven.
 - A **plain return value** is the result — it is wrapped in `Ok` for you.
-- A **returned `Result` passes through** — the door for value-dependent partiality (division by zero, an overflowing add). Corollary: a closure cannot produce a literal `Result` as its evaluation *value*.
-- A **thrown exception propagates.** The compiler guarantees the closure only sees values of its declared types, so a throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
+- **Errors that depend on the values** — division by zero, an overflowing add, a date outside your calendar's range — are signaled by **returning an `Err`**. The type check cannot rule these out (the types were fine; the values weren't), so they are legitimate evaluation results the program reports to its caller. Core's division does exactly this:
+
+  ```php
+  Operator::infix('/')->signature($number, $number)->returns($number)
+      ->evaluate(fn (int|float $l, int|float $r) => attempt(fn () => $l / $r)),
+      // attempt() catches DivisionByZeroError and returns it as Err
+  ```
+
+- A **thrown exception propagates.** The compiler guarantees the closure only sees values of its declared types, so an uncaught throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
 - It must be **total** over its declared operand types: every value of them evaluates without escaping. This is the one obligation you carry, and the totality harness checks it generatively (§Testing).
 
 The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the compiled node short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
 
 **Ambiguity is refused, never ranked.** Two rows for the same operator whose slots are **jointly admissible** — some operand type would resolve both — are a `Dialect` construction error, and which evaluation runs must never depend on registration order. The relation is about operand *types*, not values: a `List` row beside a `Dict` row is a legal pair (the empty array inhabits both types, but no compilable operand type reaches both rows), while a `Literal(5)` row beside a `Number` row is refused (a `5`-typed operand resolves both, and there is no precedence to pick a winner — specialization included). Declare disjoint rows (the money pattern below), or hand-write a type function that refuses what another rule owns.
-
-### Parameterized families: enumerate
-
-A signature's return type is fixed. Rules whose typing is *parameterized* — money, where `Money<'GBP'> + Money<'GBP'> → Money<'GBP'>` but `Money<'GBP'> + Money<'USD'>` must be refused — are declared by **enumeration over the parameter space**, which is host-finite at composition time:
-
-```php
-final class MoneyExtension extends Extension
-{
-    /** @param non-empty-list<string> $currencies the host's configured set */
-    public function __construct(private readonly array $currencies) {}
-
-    public function operators(): array
-    {
-        return array_map(
-            fn (string $c) => Operator::infix('+')
-                ->signature(new MoneyType($c), new MoneyType($c))
-                ->returns(new MoneyType($c))
-                ->evaluate(fn (Money $a, Money $b) => $a->plus($b)),
-            $this->currencies,
-        );
-    }
-}
-```
-
-This works because currency is part of the type's *value set*, so the rows are disjoint: same-currency pairs resolve to their row; a cross-currency pair matches *no* row, so the compiler reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and no program containing that expression can be compiled, let alone run. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
 
 ### Packaging it: the `Extension` and the `Dialect`
 
@@ -198,6 +198,7 @@ final class TimeExtension extends Extension
 
     public function literals(): array
     {
+        // Types a Date object embedded in an expression — see §Literal registration.
         return [Date::class => fn(Date $d) => new DateType()];
     }
 }
@@ -223,6 +224,31 @@ Composition rules worth knowing: jointly admissible rows for one operator are a 
 Because your `-` row resolves `(Date, Period) → Date` while core's arithmetic refuses it, the compiler takes your lone resolution. If two rules both resolved the same operand types, compilation fails naming both — there is no silent winner.
 
 There is no other wiring path: a compiled program embeds the resolutions of the dialect it was compiled with and carries no dialect at runtime, so running with different rules than you compiled with is not representable.
+
+### Parameterized families: enumerate
+
+A signature's return type is fixed. Rules whose typing is *parameterized* — money, where `Money<'GBP'> + Money<'GBP'> → Money<'GBP'>` but `Money<'GBP'> + Money<'USD'>` must be refused — are declared by **enumeration over the parameter space**, which is host-finite at composition time:
+
+```php
+final class MoneyExtension extends Extension
+{
+    /** @param non-empty-list<string> $currencies the host's configured set */
+    public function __construct(private readonly array $currencies) {}
+
+    public function operators(): array
+    {
+        return array_map(
+            fn (string $c) => Operator::infix('+')
+                ->signature(new MoneyType($c), new MoneyType($c))
+                ->returns(new MoneyType($c))
+                ->evaluate(fn (Money $a, Money $b) => $a->plus($b)),
+            $this->currencies,
+        );
+    }
+}
+```
+
+This works because currency is part of the type's *value set*, so the rows are disjoint: same-currency pairs resolve to their row; a cross-currency pair matches *no* row, so the compiler reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and no program containing that expression can be compiled, let alone run. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
 
 ### Advanced: writing a rule by hand
 
@@ -275,7 +301,9 @@ public function literals(): array
 }
 ```
 
-The factory receives the value, so the type can be as precise as the value determines (`Money('GBP', 100)` types as `Money<GBP>`, not just "money"). An unregistered object literal is an inference *error*, with a message pointing at the registry — never a silent `Unknown`. For domain literals whose class determines nothing, wrap the source in a `Coerce` or `Ascription` node: the author's explicit type.
+The factory receives the value, so the type can be as precise as the value determines (`Money('GBP', 100)` types as `Money<GBP>`, not just "money"). This is a purely static lookup — the object is already part of the program, so nothing is converted or validated here; values arriving at *runtime* are admitted by `assert`/`coerce` at the boundary and the bridge nodes, which never consult this registry. The factory's one obligation is honesty: the type it returns must `assert` the very value it was derived from, and the census (§Testing) checks exactly that.
+
+An unregistered object literal is an inference *error*, with a message pointing at the registry — never a silent `Unknown`. For domain literals whose class determines nothing, wrap the source in a `Coerce` or `Ascription` node: the author's explicit type.
 
 ## Host sources
 
