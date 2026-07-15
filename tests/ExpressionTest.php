@@ -8,57 +8,58 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Bindings;
-use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Operators\BinaryOverloader;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\NullOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\InfixResolver;
-use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\SymbolResolver;
+use Superscript\Axiom\Program;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
+use Superscript\Axiom\Tests\Fixtures\SpyInspector;
+use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\UnboundSymbols;
-use Superscript\Monads\Result\Result;
 
 #[CoversClass(Expression::class)]
+#[CoversClass(Program::class)]
 #[UsesClass(UnboundSymbols::class)]
-#[UsesClass(Context::class)]
-#[UsesClass(Bindings::class)]
+#[UsesClass(\Superscript\Axiom\Bindings::class)]
+#[UsesClass(\Superscript\Axiom\CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Runtime::class)]
+#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
-#[UsesClass(DelegatingResolver::class)]
-#[UsesClass(StaticResolver::class)]
-#[UsesClass(SymbolResolver::class)]
-#[UsesClass(InfixResolver::class)]
+#[UsesClass(\Superscript\Axiom\Dialect::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
-#[UsesClass(DefaultOverloader::class)]
-#[UsesClass(BinaryOverloader::class)]
-#[UsesClass(NullOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\BoundaryViolation::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeInference::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
+#[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
+#[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(NumberType::class)]
+#[UsesClass(BooleanType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
 final class ExpressionTest extends TestCase
 {
-    private function fullResolver(): DelegatingResolver
-    {
-        $resolver = new DelegatingResolver([
-            StaticSource::class => StaticResolver::class,
-            SymbolSource::class => SymbolResolver::class,
-            InfixExpression::class => InfixResolver::class,
-        ]);
-
-        $resolver->instance(OperatorOverloader::class, new DefaultOverloader());
-
-        return $resolver;
-    }
-
     #[Test]
-    public function invoke_returns_a_result(): void
+    public function an_expression_compiles_to_a_callable_program(): void
     {
         $expression = new Expression(
             source: new InfixExpression(
@@ -66,41 +67,81 @@ final class ExpressionTest extends TestCase
                 operator: '+',
                 right: new SymbolSource('b'),
             ),
-            resolver: $this->fullResolver(),
+            declarations: [
+                'a' => new NumberType(),
+                'b' => new NumberType(),
+            ],
         );
 
-        $result = $expression(['a' => 2, 'b' => 3]);
+        $program = $expression->compile()->unwrap();
 
-        $this->assertInstanceOf(Result::class, $result);
-        $this->assertSame(5, $result->unwrap()->unwrap());
+        $this->assertInstanceOf(Program::class, $program);
+        $this->assertInstanceOf(NumberType::class, $program->returns);
+        $this->assertSame(5, $program(['a' => 2, 'b' => 3])->unwrap()->unwrap());
     }
 
     #[Test]
-    public function invoke_returns_ok_none_when_a_symbol_is_unbound(): void
+    public function an_unbound_symbol_does_not_compile(): void
     {
-        $expression = new Expression(
-            source: new SymbolSource('unknown'),
-            resolver: $this->fullResolver(),
-        );
+        // Under value-directed evaluation an unbound symbol quietly
+        // resolved to absence; a program that runs has passed the check,
+        // and the check refuses it.
+        $expression = new Expression(source: new SymbolSource('unknown'));
 
-        $result = $expression();
+        $result = $expression->compile();
 
-        $this->assertTrue($result->unwrap()->isNone());
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('Unbound symbol [unknown]', $result->unwrapErr()->describe());
     }
 
     #[Test]
-    public function call_returns_the_same_result_as_invoke(): void
+    public function call_and_invoke_agree_on_the_program(): void
     {
-        $expression = new Expression(
-            source: new StaticSource(42),
-            resolver: $this->fullResolver(),
+        $program = (new Expression(source: new StaticSource(42)))->compile()->unwrap();
+
+        $this->assertSame(42, $program()->unwrap()->unwrap());
+        $this->assertSame(42, $program->call()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function infer_is_the_type_of_the_compiled_program(): void
+    {
+        $expression = new Expression(source: new StaticSource(42));
+
+        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $expression->infer()->unwrap());
+    }
+
+    #[Test]
+    public function check_is_compile_plus_assignability(): void
+    {
+        $gate = new Expression(
+            source: new InfixExpression(new SymbolSource('turnover'), '>', new StaticSource(500000)),
+            declarations: ['turnover' => new NumberType()],
         );
 
-        $invoked = $expression();
-        $called = $expression->call();
+        $this->assertTrue($gate->check(new BooleanType())->isOk());
+        $this->assertStringContainsString(
+            'is not assignable to',
+            $gate->check(new NumberType())->unwrapErr()->describe(),
+        );
+    }
 
-        $this->assertInstanceOf(Result::class, $called);
-        $this->assertSame($invoked->unwrap()->unwrap(), $called->unwrap()->unwrap());
+    #[Test]
+    public function a_cyclic_definition_graph_does_not_compile(): void
+    {
+        $expression = new Expression(
+            source: new SymbolSource('a'),
+            definitions: new Definitions([
+                'a' => new InfixExpression(new SymbolSource('b'), '+', new StaticSource(1)),
+                'b' => new InfixExpression(new SymbolSource('a'), '+', new StaticSource(1)),
+            ]),
+        );
+
+        $result = $expression->compile();
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('a → b → a', $result->unwrapErr()->describe());
     }
 
     #[Test]
@@ -112,7 +153,6 @@ final class ExpressionTest extends TestCase
                 operator: '*',
                 right: new SymbolSource('radius'),
             ),
-            resolver: $this->fullResolver(),
             definitions: new Definitions(['PI' => new StaticSource(3.14)]),
         );
 
@@ -128,7 +168,6 @@ final class ExpressionTest extends TestCase
                 operator: '*',
                 right: new SymbolSource('width'),
             ),
-            resolver: $this->fullResolver(),
         );
 
         $this->assertSame(['height', 'width'], $expression->parameters());
@@ -143,53 +182,61 @@ final class ExpressionTest extends TestCase
                 operator: '>',
                 right: new StaticSource(2),
             ),
-            resolver: $this->fullResolver(),
         );
 
         $this->assertSame(['quote.claims'], $expression->parameters());
     }
 
     #[Test]
-    public function bindings_override_definitions(): void
+    public function a_symbol_cannot_be_both_declared_and_defined(): void
     {
-        $expression = new Expression(
-            source: new SymbolSource('x'),
-            resolver: $this->fullResolver(),
-            definitions: new Definitions(['x' => new StaticSource(1)]),
-        );
+        // Disjoint namespaces: a symbol is a parameter or a derived value,
+        // never both — shadowing is unrepresentable, not licensed.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('[x] is both declared and defined');
 
-        $this->assertSame(1, $expression()->unwrap()->unwrap());
-        $this->assertSame(99, $expression(['x' => 99])->unwrap()->unwrap());
+        new Expression(
+            source: new SymbolSource('x'),
+            definitions: new Definitions(['x' => new StaticSource(1)]),
+            declarations: ['x' => new NumberType()],
+        );
+    }
+
+    #[Test]
+    public function an_undeclared_binding_is_stripped_and_cannot_shadow_a_definition(): void
+    {
+        $program = (new Expression(
+            source: new SymbolSource('x'),
+            definitions: new Definitions(['x' => new StaticSource(1)]),
+        ))->compile()->unwrap();
+
+        // The binding is not in the signature, so it never enters: the
+        // definition evaluates as if the caller had passed nothing.
+        $this->assertSame(1, $program(['x' => 'oops'])->unwrap()->unwrap());
     }
 
     #[Test]
     public function with_definitions_swaps_the_definitions(): void
     {
-        $expression = new Expression(
-            source: new SymbolSource('x'),
-            resolver: $this->fullResolver(),
-        );
+        $expression = new Expression(source: new SymbolSource('x'));
 
-        $this->assertTrue($expression()->unwrap()->isNone());
+        $this->assertTrue($expression->compile()->isErr());
 
         $swapped = $expression->withDefinitions(new Definitions(['x' => new StaticSource(7)]));
 
-        $this->assertSame(7, $swapped()->unwrap()->unwrap());
-        $this->assertTrue($expression()->unwrap()->isNone(), 'original is unchanged');
+        $this->assertSame(7, $swapped->compile()->unwrap()->call()->unwrap()->unwrap());
+        $this->assertTrue($expression->compile()->isErr(), 'original is unchanged');
     }
 
     #[Test]
-    public function with_inspector_attaches_an_inspector_to_the_context(): void
+    public function with_inspector_attaches_an_inspector_to_the_compiled_program(): void
     {
-        $expression = new Expression(
-            source: new StaticSource(42),
-            resolver: $this->fullResolver(),
-        );
+        $expression = new Expression(source: new StaticSource(42));
 
         $inspector = new SpyInspector();
         $inspected = $expression->withInspector($inspector);
 
-        $inspected();
+        $inspected->compile()->unwrap()->call();
 
         $this->assertSame('static(int)', $inspector->annotations['label']);
         $this->assertNull($expression->inspector, 'original is unchanged');

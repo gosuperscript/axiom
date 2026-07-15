@@ -16,7 +16,7 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
@@ -33,7 +33,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(ExpressionPattern::class)]
 #[UsesClass(MemberAccessSource::class)]
-#[UsesClass(TypeDefinition::class)]
+#[UsesClass(Coerce::class)]
 #[UsesClass(NumberType::class)]
 final class UnboundSymbolsTest extends TestCase
 {
@@ -150,7 +150,7 @@ final class UnboundSymbolsTest extends TestCase
     {
         $quote = new SymbolSource('quote');
 
-        $source = new TypeDefinition(
+        $source = new Coerce(
             type: new NumberType(),
             source: new MemberAccessSource(
                 object: $quote,
