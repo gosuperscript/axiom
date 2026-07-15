@@ -340,7 +340,7 @@ What remains at runtime is semantics, not dispatch: absence short-circuits, matc
 The core dialect ships these rules:
 
 - **Binary arithmetic**: `+`, `-`, `*`, `/` — rows over two present numbers
-- **Equality**: `=`/`==`, `===`, `!=`, `!==` for scalars, `null`, and lists of them — **value equality, never PHP juggling**: numeric within `Number` (`1 == 1.0`), strict otherwise, `false` across bases (`===`/`!==` are aliases); a comparison whose operand types cannot overlap is a *dead* compile diagnostic
+- **Equality**: `=`/`==`, `===`, `!=`, `!==` over domains supported by built-in value equality — numeric within `Number` (`1 == 1.0`), strict otherwise, `false` across bases (`===`/`!==` are aliases). Support is established before overlap is used for a *dead* compile diagnostic; opaque values get equality from their owning package.
 - **Ordering**: `<`, `<=`, `>`, `>=` — rows over **numbers only**; PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own row)
 - **Logical**: `&&`, `||`, `xor` — rows over two present booleans
 - **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never array_intersect string juggling)

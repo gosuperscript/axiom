@@ -20,6 +20,9 @@ use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
 
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
@@ -59,6 +62,7 @@ use Superscript\Axiom\Types\Type;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ListShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 final class DialectTest extends TestCase
@@ -93,6 +97,29 @@ final class DialectTest extends TestCase
 
         $absolute = $dialect->unaryOperators()->resolve('abs', new NumberType())->unwrap();
         $this->assertSame(7, $absolute->evaluate(-7)->unwrap());
+    }
+
+    #[Test]
+    public function a_package_owned_equality_row_resolves_opaque_values_core_refuses(): void
+    {
+        $dialect = Dialect::core()->with(new MoneyExtension(['GBP', 'EUR']));
+        $sterling = new MoneyType('GBP');
+        $equality = $dialect->operators()->resolve('==', $sterling, $sterling)->unwrap();
+        $inequality = $dialect->operators()->resolve('!=', $sterling, $sterling)->unwrap();
+
+        $onePound = new Money(100, 'GBP');
+        $anotherPound = new Money(100, 'GBP');
+        $twoPounds = new Money(200, 'GBP');
+
+        $this->assertTrue($equality->evaluate($onePound, $anotherPound)->unwrap());
+        $this->assertFalse($equality->evaluate($onePound, $twoPounds)->unwrap());
+        $this->assertTrue($inequality->evaluate($onePound, $twoPounds)->unwrap());
+
+        $literalType = $dialect->literals()->resolve($onePound)->unwrap();
+        $this->assertEquals($sterling, $literalType);
+
+        $crossCurrency = $dialect->operators()->resolve('==', $sterling, new MoneyType('EUR'));
+        $this->assertTrue($crossCurrency->isErr(), 'different currency parameters match no package equality row');
     }
 
     #[Test]

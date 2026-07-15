@@ -8,12 +8,10 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\Shapes\DictShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
-use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
-use Superscript\Axiom\Types\Shapes\UnknownShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -105,6 +103,14 @@ final class SetOperands
             )));
         }
 
+        $left = $listSide === 'left' ? $list : $needle;
+        $right = $listSide === 'left' ? $needle : $list;
+        $support = self::supportsValueEquality($left, $right, $operator);
+
+        if ($support->isErr()) {
+            return Err($support->unwrapErr());
+        }
+
         if ($needleShape instanceof NeverShape || $listShape->element instanceof NeverShape) {
             return Ok(new BooleanType());
         }
@@ -122,9 +128,9 @@ final class SetOperands
      * The element judgment for a side that may be a scalar, a list of
      * scalars, or absent (Option stripped — the evaluation filters nulls).
      * Returns null when the side is not element-shaped: dicts and records
-     * (the rules claim only scalars, null, and lists), opaques (objects —
-     * never claimed; membership over a domain type belongs to the rule
-     * that owns it), and Unknown (inert — bridge it first).
+     * (the rules claim only scalars, null, and lists). Opaque and Unknown
+     * shapes remain visible so ValueEquality::supports can give the
+     * operation-independent totality diagnosis.
      */
     public static function elements(Type $operand): ?Shape
     {
@@ -162,10 +168,27 @@ final class SetOperands
             return UnionShape::of(...$members);
         }
 
-        if ($shape instanceof DictShape || $shape instanceof RecordShape || $shape instanceof OpaqueShape || $shape instanceof UnknownShape) {
+        if ($shape instanceof DictShape || $shape instanceof RecordShape) {
             return null;
         }
 
         return $shape;
+    }
+
+    /**
+     * @return Result<bool, TypeMismatch>
+     */
+    public static function supportsValueEquality(Type $left, Type $right, string $operator): Result
+    {
+        return ValueEquality::supports($left, $right)
+            ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
+                sprintf(
+                    '[%s] cannot compare %s and %s by value equality.',
+                    $operator,
+                    TypeDescriber::describe($left),
+                    TypeDescriber::describe($right),
+                ),
+                [$cause],
+            ));
     }
 }

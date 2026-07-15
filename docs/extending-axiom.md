@@ -248,11 +248,22 @@ final class MoneyExtension extends Extension
 
 This works because currency is part of the type's *value set*, so the rows are disjoint: same-currency pairs resolve to their row; a cross-currency pair matches *no* row, so the compiler reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and no program containing that expression can be compiled, let alone run. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
 
+The package owns value equality for its opaque values in exactly the same way. For a Brick Money-backed type, a same-currency row can bind Brick's domain comparison rather than PHP object identity:
+
+```php
+Operator::infix('==')
+    ->signature(new MoneyType($currency), new MoneyType($currency))
+    ->returns(new BooleanType())
+    ->evaluate(fn (Money $left, Money $right) => $left->isSameValueAs($right));
+```
+
+Core's equality rule refuses these opaque operands; the package row is therefore the lone successful resolution. Register the negated aliases as separate rows with the negation captured in their evaluation, just as core does for its own aliases.
+
 ### Advanced: writing a rule by hand
 
 A signature is a row; some rules are not rows. Implement `BinaryOperatorRule` (binary) or `UnaryOperatorRule` directly when you need:
 
-- **Verdicts that are relations, not slots** — core's equality resolves operand types that *overlap*, something no fixed operand type expresses.
+- **Verdicts that are relations, not slots** — core's equality first establishes that its value evaluator supports both operand domains, then asks whether they overlap; no fixed operand type expresses that pair of judgments.
 - **Dead findings** — returning `DeadOperation` for an operation that is *statically constant*, so hosts can render it as a probable author bug rather than an unsupported operation.
 - **Return types computed from operand types** over an unbounded space (`List<T> ++ List<U> → List<T|U>`).
 - **Absence-tolerant rules** — a rule that wants absence-as-zero arithmetic resolves operand types where a side is `Option`-shaped (and *refuses present-present pairs*, which stay core's — that disjointness is what keeps the composition unambiguous). Its closure then handles `null`.
@@ -306,12 +317,12 @@ final readonly class AddWithAbsentAsZero implements BinaryOperatorRule
 Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
 
 - `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability, pessimistic on unions, with **no `Unknown` hole**: `Unknown` is inert, and your rule should refuse it too (using `admits` gives you that for free). It is also how "refuses `Option`" falls out: `Option<Number>` is not assignable to a present `Number` slot.
-- `TypeRelations::overlaps($a, $b)` — could any *value* satisfy both? The judgment for equality and membership.
+- `TypeRelations::overlaps($a, $b)` — could any *value* satisfy both? A liveness judgment used only after the operation has established support; it does not make types comparable by itself.
 - `TypeRelations::jointlyAdmissible($a, $b)` — could any operand *type* be admitted by both slots? The row-ambiguity judgment the `Dialect` runs at construction; useful when your hand-written rule needs to reason about collisions the way the dialect does.
 
 Orderability has exactly one authority: whether the dialect resolves `<` for the type. Shipping ordering rows *is* declaring the type ordered.
 
-Core's rules (`src/Operators/`) are the reference implementations — `Equality` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `Has`/`In` show shared operand judgments via `SetOperands`.
+Core's rules (`src/Operators/`) are the reference implementations — `Equality` separates `ValueEquality::supports()` from overlap-based dead verdicts and bakes negation into the closure at resolve time; `Has`/`In` show shared operand judgments via `SetOperands`.
 
 ## Literal registration
 

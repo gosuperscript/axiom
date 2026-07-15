@@ -33,6 +33,14 @@ final readonly class Intersects implements BinaryOperatorRule
             ));
         }
 
+        $support = SetOperands::supportsValueEquality($left, $right, $this->operator());
+
+        if ($support->isErr()) {
+            $mismatch = $support->unwrapErr();
+
+            return new UnsupportedOperation($mismatch->message, $mismatch->causes);
+        }
+
         $operation = new ResolvedOperation(
             new BooleanType(),
             static fn(mixed $left, mixed $right): bool => SetOperands::anyShared($left, $right),

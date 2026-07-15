@@ -202,7 +202,7 @@ final class SoundnessRegressionTest extends TestCase
 
         $this->assertTrue($verdict->isErr(), 'refused at compile time');
         $this->assertFalse($verdict->unwrapErr()->dead, 'unsupported, not dead: no rule owns object equality here');
-        $this->assertStringContainsString('object equality belongs to the rule that owns the type', $verdict->unwrapErr()->describe());
+        $this->assertStringContainsString('package that owns an opaque type define its equality', $verdict->unwrapErr()->describe());
     }
 
     #[Test]

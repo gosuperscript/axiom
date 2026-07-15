@@ -263,16 +263,16 @@ final class ResolveTest extends TestCase
         // equality makes no claim about objects — so opaque-typed operands
         // are unsupported (not dead: no evaluation exists for them here).
         yield 'equality refuses an opaque left operand' => [
-            self::equality('=='), '==', self::opaque(), new NumberType(), 'object equality belongs to the rule that owns the type',
+            self::equality('=='), '==', self::opaque(), new NumberType(), 'package that owns an opaque type define its equality',
         ];
         yield 'equality refuses an opaque right operand' => [
-            self::equality('!='), '!=', new NumberType(), self::opaque(), 'does not claim the right operand',
+            self::equality('!='), '!=', new NumberType(), self::opaque(), 'right operand thing contains Unknown or opaque values',
         ];
         yield 'equality refuses an opaque buried in a union' => [
-            self::equality('=='), '==', new UnionType(new NumberType(), self::opaque()), new NumberType(), 'object equality belongs to the rule that owns the type',
+            self::equality('=='), '==', new UnionType(new NumberType(), self::opaque()), new NumberType(), 'package that owns an opaque type define its equality',
         ];
         yield 'equality refuses an inert Unknown' => [
-            self::equality('=='), '==', new UnknownType(), new NumberType(), 'does not claim the left operand',
+            self::equality('=='), '==', new UnknownType(), new NumberType(), 'left operand Unknown contains Unknown or opaque values',
         ];
         yield 'a dead comparison is refused as dead' => [
             self::equality('=='), '==', new NumberType(), new StringType(), 'can never hold', true,
@@ -299,7 +299,7 @@ final class ResolveTest extends TestCase
             $has, 'has', new UnknownType(), new StringType(), 'must be a present list',
         ];
         yield 'has refuses an inert Unknown needle' => [
-            $has, 'has', new ListType(new StringType()), new UnknownType(), 'must be a scalar or a list',
+            $has, 'has', new ListType(new StringType()), new UnknownType(), 'claim or coerce Unknown first',
         ];
         yield 'has refuses a dict left side' => [$has, 'has', new DictType(new StringType()), new StringType(), 'must be a present list'];
         yield 'has refuses a record needle' => [
@@ -319,7 +319,7 @@ final class ResolveTest extends TestCase
             $in, 'in', new UnionType(new NumberType(), new DictType(new NumberType())), new ListType(new NumberType()), 'must be a scalar or a list',
         ];
         yield 'an opaque needle is refused' => [
-            $in, 'in', self::opaque(), new ListType(new NumberType()), 'must be a scalar or a list',
+            $in, 'in', self::opaque(), new ListType(new NumberType()), 'package that owns an opaque type define its equality',
         ];
         yield 'in refuses a non-list right side' => [$in, 'in', new StringType(), new StringType(), 'must be a present list'];
         yield 'dead in-membership is refused as dead' => [
@@ -340,7 +340,7 @@ final class ResolveTest extends TestCase
             $intersects, 'intersects', new ListType(new StringType()), new RecordType(['a' => new NumberType()]), 'got {a: Number}',
         ];
         yield 'intersects refuses an inert Unknown' => [
-            $intersects, 'intersects', new UnknownType(), new ListType(new StringType()), 'requires lists or scalars',
+            $intersects, 'intersects', new UnknownType(), new ListType(new StringType()), 'claim or coerce Unknown first',
         ];
     }
 }
