@@ -59,4 +59,9 @@ class NumberType implements Type
 
         return string()->assert($formatter->format($value));
     }
+
+    public function shape(): Shapes\Shape
+    {
+        return new Shapes\NumberShape();
+    }
 }
