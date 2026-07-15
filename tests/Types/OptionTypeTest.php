@@ -59,55 +59,7 @@ final class OptionTypeTest extends TestCase
         $this->assertNull($coerced->unwrap());
     }
 
-    #[Test]
-    public function it_compares_null_aware(): void
-    {
-        $type = new OptionType(new NumberType());
 
-        $this->assertTrue($type->compare(null, null));
-        $this->assertFalse($type->compare(null, 5));
-        $this->assertFalse($type->compare(5, null));
-        $this->assertTrue($type->compare(5, 5));
-        $this->assertFalse($type->compare(5, 6));
-    }
-
-    #[Test]
-    public function absence_comparison_never_reaches_the_inner_type(): void
-    {
-        $inner = new class implements \Superscript\Axiom\Types\Type {
-            public function assert(mixed $value): \Superscript\Monads\Result\Result
-            {
-                return \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some($value));
-            }
-
-            public function coerce(mixed $value): \Superscript\Monads\Result\Result
-            {
-                return $this->assert($value);
-            }
-
-            public function compare(mixed $a, mixed $b): bool
-            {
-                return ($a === null) !== ($b === null);
-            }
-
-            public function format(mixed $value): string
-            {
-                return '';
-            }
-
-            public function shape(): \Superscript\Axiom\Types\Shapes\Shape
-            {
-                return new \Superscript\Axiom\Types\Shapes\NumberShape();
-            }
-        };
-
-        $type = new OptionType($inner);
-
-        $this->assertTrue($type->compare(null, null));
-        $this->assertFalse($type->compare(null, 5));
-        $this->assertFalse($type->compare(5, null));
-        $this->assertFalse($type->compare(5, 5));
-    }
 
     #[Test]
     public function it_formats_absence_as_empty(): void

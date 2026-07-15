@@ -94,21 +94,7 @@ class ListTypeTest extends TestCase
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [list] from [stdClass Object ()]');
     }
 
-    #[DataProvider('compareProvider')]
-    #[Test]
-    public function it_can_compare_two_values(array $a, array $b, bool $expected)
-    {
-        $type = new ListType(new NumberType());
-        $this->assertSame($expected, $type->compare($a, $b));
-    }
 
-    public static function compareProvider(): array
-    {
-        return [
-            [[1, 2], [1, 2], true],
-            [[1, 2], ['1', '2'], false],
-        ];
-    }
 
     #[DataProvider('formatProvider')]
     #[Test]

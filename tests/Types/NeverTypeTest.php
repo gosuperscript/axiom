@@ -27,11 +27,6 @@ final class NeverTypeTest extends TestCase
         $this->assertTrue($type->coerce('anything')->isErr());
     }
 
-    #[Test]
-    public function nothing_compares_equal(): void
-    {
-        $this->assertFalse((new NeverType())->compare(1, 1));
-    }
 
     #[Test]
     public function it_formats_to_nothing(): void

@@ -13,6 +13,8 @@ use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\DictType;
+use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
@@ -42,6 +44,8 @@ use Superscript\Axiom\Types\Type;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(BooleanType::class)]
+#[UsesClass(DictType::class)]
+#[UsesClass(ListType::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OptionType::class)]
@@ -50,6 +54,8 @@ use Superscript\Axiom\Types\Type;
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\DictShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\ListShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
@@ -92,7 +98,7 @@ final class DialectTest extends TestCase
     public function two_rows_for_one_operator_with_overlapping_operands_are_refused_at_composition(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The dialect is ambiguous: two [+] rows overlap');
+        $this->expectExceptionMessage('The dialect is ambiguous: two [+] rows collide');
 
         Dialect::core()->with(new class extends Extension {
             public function operators(): array
@@ -105,6 +111,58 @@ final class DialectTest extends TestCase
                         ->signature(new OptionType(new NumberType()), new OptionType(new NumberType()))
                         ->returns(new NumberType())
                         ->evaluate(fn(?int $a, ?int $b) => ($a ?? 0) + ($b ?? 0)),
+                ];
+            }
+        });
+    }
+
+    #[Test]
+    public function a_list_row_beside_a_dict_row_is_a_legal_pair(): void
+    {
+        // The empty array inhabits both List and Dict, but dispatch sees
+        // operand types, never values: no compilable operand type reaches
+        // both rows, so this pair can never tie (RFC item 36). The old
+        // value-overlap check wrongly refused it.
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('++')
+                        ->signature(new ListType(new NumberType()), new ListType(new NumberType()))
+                        ->returns(new ListType(new NumberType()))
+                        ->evaluate(fn(array $a, array $b) => [...$a, ...$b]),
+                    Operator::infix('++')
+                        ->signature(new DictType(new NumberType()), new DictType(new NumberType()))
+                        ->returns(new DictType(new NumberType()))
+                        ->evaluate(fn(array $a, array $b) => [...$a, ...$b]),
+                ];
+            }
+        });
+
+        $lists = $dialect->operators()->resolve('++', new ListType(new NumberType()), new ListType(new NumberType()))->unwrap();
+        $this->assertSame([1, 2], $lists->evaluate([1], [2])->unwrap());
+
+        $dicts = $dialect->operators()->resolve('++', new DictType(new NumberType()), new DictType(new NumberType()))->unwrap();
+        $this->assertSame(['a' => 1, 'b' => 2], $dicts->evaluate(['a' => 1], ['b' => 2])->unwrap());
+    }
+
+    #[Test]
+    public function a_literal_specialization_of_an_existing_row_is_refused(): void
+    {
+        // A 5-typed operand is admitted by both Number and Literal(5)
+        // slots, and no precedence rule exists to pick a winner: ties are
+        // refused, never resolved — specialization is not a licence.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The dialect is ambiguous: two [+] rows collide');
+
+        Dialect::core()->with(new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('+')
+                        ->signature(new LiteralType(5), new LiteralType(5))
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int $a, int $b) => 10),
                 ];
             }
         });
@@ -133,7 +191,7 @@ final class DialectTest extends TestCase
         // original keys would skip the very next row — letting two
         // overlapping rows slip through, undetected, adjacent or not.
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The dialect is ambiguous: two [++] rows overlap');
+        $this->expectExceptionMessage('The dialect is ambiguous: two [++] rows collide');
 
         Dialect::core()->with(new class extends Extension {
             public function operators(): array
@@ -157,7 +215,7 @@ final class DialectTest extends TestCase
     public function adjacent_overlapping_prefix_rows_are_refused(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows overlap');
+        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows collide');
 
         Dialect::core()->with(new class extends Extension {
             public function unaryOperators(): array
@@ -187,7 +245,7 @@ final class DialectTest extends TestCase
         };
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows overlap');
+        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows collide');
 
         Dialect::core()->with(new class($nonRow) extends Extension {
             public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOverloader $nonRow) {}
@@ -232,7 +290,7 @@ final class DialectTest extends TestCase
     public function two_prefix_rows_with_overlapping_operands_are_refused_at_composition(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The dialect is ambiguous: two unary [-] rows overlap');
+        $this->expectExceptionMessage('The dialect is ambiguous: two unary [-] rows collide');
 
         Dialect::core()->with(new class extends Extension {
             public function unaryOperators(): array

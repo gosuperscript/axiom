@@ -84,14 +84,6 @@ class ListType implements Type
         );
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return count($a) === count($b) && array_all(
-            array_keys($a),
-            fn(int|string $key) => $this->type->compare($a[$key], $b[$key])
-        );
-    }
-
     public function format(mixed $value): string
     {
         return implode(', ', array_map(fn(mixed $item) => $this->type->format($item), $value));

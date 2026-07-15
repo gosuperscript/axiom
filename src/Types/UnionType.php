@@ -60,11 +60,6 @@ final readonly class UnionType implements Type
         return new Err(new TransformValueException(type: TypeDescriber::describe($this), value: $value));
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
-    }
-
     public function format(mixed $value): string
     {
         foreach ($this->members as $member) {

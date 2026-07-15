@@ -117,22 +117,7 @@ class DictTypeTest extends TestCase
         $this->assertEquals($result->unwrapErr()->getMessage(), 'Unable to transform into [dict] from [stdClass Object ()]');
     }
 
-    #[DataProvider('compareProvider')]
-    #[Test]
-    public function it_can_compare_two_values(array $a, array $b, bool $expected)
-    {
-        $type = new DictType(new NumberType());
-        $this->assertSame($expected, $type->compare($a, $b));
-    }
 
-    public static function compareProvider(): array
-    {
-        return [
-            [['a' => 1, 'b' => 2], ['a' => 1, 'b' => 2], true],
-            [['a' => 1, 'b' => 2], ['a' => '1', 'b' => '2'], false],
-            [['a' => 1, 'b' => 2], ['a' => 1, 'c' => 2], false],
-        ];
-    }
 
     #[DataProvider('formatProvider')]
     #[Test]
