@@ -16,7 +16,7 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Sources\TypeDefinition;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Tests\Sources\Fixtures\UndescribablePattern;
@@ -28,7 +28,8 @@ use Superscript\Axiom\Types\StringType;
 
 #[CoversClass(StaticSource::class)]
 #[CoversClass(SymbolSource::class)]
-#[CoversClass(TypeDefinition::class)]
+#[CoversClass(Coerce::class)]
+#[CoversClass(\Superscript\Axiom\Sources\Ascription::class)]
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(UnaryExpression::class)]
 #[CoversClass(MemberAccessSource::class)]
@@ -86,39 +87,53 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function the_symbol_key_is_the_flat_dotted_name(): void
+    {
+        $this->assertSame('pi', SymbolSource::key('pi', null));
+        $this->assertSame('math.pi', SymbolSource::key('pi', 'math'));
+    }
+
+    #[Test]
     public function type_definition_describes_as_type(): void
     {
-        $source = new TypeDefinition(new NumberType(), new SymbolSource('price'));
+        $source = new Coerce(new NumberType(), new SymbolSource('price'));
         $this->assertSame('price (as number)', $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_string_type(): void
     {
-        $source = new TypeDefinition(new StringType(), new StaticSource('hello'));
+        $source = new Coerce(new StringType(), new StaticSource('hello'));
         $this->assertSame("'hello' (as string)", $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_boolean_type(): void
     {
-        $source = new TypeDefinition(new BooleanType(), new SymbolSource('active'));
+        $source = new Coerce(new BooleanType(), new SymbolSource('active'));
         $this->assertSame('active (as boolean)', $source->describe());
     }
 
     #[Test]
     public function type_definition_describes_list_type(): void
     {
-        $source = new TypeDefinition(new ListType(new NumberType()), new SymbolSource('values'));
+        $source = new Coerce(new ListType(new NumberType()), new SymbolSource('values'));
         $this->assertSame('values (as list)', $source->describe());
     }
 
     #[Test]
     public function type_definition_with_non_describable_source_falls_back_to_class_name(): void
     {
-        $source = new TypeDefinition(new NumberType(), new UndescribableSource());
+        $source = new Coerce(new NumberType(), new UndescribableSource());
 
         $this->assertSame('UndescribableSource (as number)', $source->describe());
+    }
+
+    #[Test]
+    public function an_ascription_describes_as_a_claim(): void
+    {
+        $source = new \Superscript\Axiom\Sources\Ascription(new NumberType(), new SymbolSource('blob'));
+        $this->assertSame('blob (is number)', $source->describe());
     }
 
     #[Test]
@@ -351,7 +366,7 @@ class DescribableTest extends TestCase
     public function complex_nested_expression(): void
     {
         $source = new InfixExpression(
-            new TypeDefinition(
+            new Coerce(
                 new NumberType(),
                 new SymbolSource('price'),
             ),
@@ -359,7 +374,7 @@ class DescribableTest extends TestCase
             new InfixExpression(
                 new StaticSource(1),
                 '-',
-                new TypeDefinition(
+                new Coerce(
                     new NumberType(),
                     new SymbolSource('discount', 'rates'),
                 ),

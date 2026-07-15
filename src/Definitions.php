@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Option\Option;
 
 use function Psl\Type\dict;
@@ -38,7 +39,7 @@ final readonly class Definitions
                 dict(string(), instance_of(Source::class))->assert($value);
 
                 foreach ($value as $name => $source) {
-                    $entries[$key . '.' . $name] = $source;
+                    $entries[SymbolSource::key($name, $key)] = $source;
                 }
 
                 continue;
@@ -54,7 +55,18 @@ final readonly class Definitions
 
     public function has(string $name, ?string $namespace = null): bool
     {
-        return array_key_exists($this->key($name, $namespace), $this->entries);
+        return array_key_exists(SymbolSource::key($name, $namespace), $this->entries);
+    }
+
+    /**
+     * Every defined symbol, as flat dotted keys — the node set of the
+     * definition graph.
+     *
+     * @return list<string>
+     */
+    public function keys(): array
+    {
+        return array_keys($this->entries);
     }
 
     /**
@@ -62,11 +74,6 @@ final readonly class Definitions
      */
     public function get(string $name, ?string $namespace = null): Option
     {
-        return Option::from($this->entries[$this->key($name, $namespace)] ?? null);
-    }
-
-    private function key(string $name, ?string $namespace): string
-    {
-        return $namespace !== null ? $namespace . '.' . $name : $name;
+        return Option::from($this->entries[SymbolSource::key($name, $namespace)] ?? null);
     }
 }

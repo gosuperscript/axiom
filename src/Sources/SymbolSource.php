@@ -14,10 +14,19 @@ final readonly class SymbolSource implements Source, Describable
         public ?string $namespace = null,
     ) {}
 
+    /**
+     * The flat dotted key a namespaced symbol occupies — the one naming
+     * convention every symbol lookup (bindings, definitions, the definition
+     * graph, the type environment) answers to. A namespace is a naming
+     * convention, not a view into structure, so the key is the whole story.
+     */
+    public static function key(string $name, ?string $namespace): string
+    {
+        return $namespace !== null ? "{$namespace}.{$name}" : $name;
+    }
+
     public function describe(): string
     {
-        return $this->namespace !== null
-            ? sprintf('%s.%s', $this->namespace, $this->name)
-            : $this->name;
+        return self::key($this->name, $this->namespace);
     }
 }

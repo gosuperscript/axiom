@@ -12,9 +12,11 @@ use PHPUnit\Framework\TestCase;
 use Psl\Type\Exception\AssertException;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
 
 #[CoversClass(Definitions::class)]
 #[UsesClass(StaticSource::class)]
+#[UsesClass(SymbolSource::class)]
 final class DefinitionsTest extends TestCase
 {
     #[Test]
@@ -38,6 +40,17 @@ final class DefinitionsTest extends TestCase
         $this->assertTrue($result->isSome());
         $this->assertInstanceOf(StaticSource::class, $result->unwrap());
         $this->assertSame(1, $result->unwrap()->value);
+    }
+
+    #[Test]
+    public function keys_lists_every_defined_symbol_as_flat_dotted_keys(): void
+    {
+        $definitions = new Definitions([
+            'rate' => new StaticSource(1.2),
+            'customer' => ['turnover' => new StaticSource(2)],
+        ]);
+
+        $this->assertSame(['rate', 'customer.turnover'], $definitions->keys());
     }
 
     #[Test]
