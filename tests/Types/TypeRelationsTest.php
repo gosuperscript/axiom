@@ -656,4 +656,97 @@ final class TypeRelationsTest extends TestCase
         $this->assertStringContainsString('Ascription', $unknown->unwrapErr()->message);
         $this->assertStringContainsString('Coerce', $unknown->unwrapErr()->message);
     }
+
+    #[Test]
+    #[DataProvider('jointAdmissibilityCases')]
+    public function it_decides_joint_admissibility_symmetrically(Shape $a, Shape $b, bool $expected): void
+    {
+        $this->assertSame($expected, TypeRelations::shapesJointlyAdmissible($a, $b)->isOk());
+        $this->assertSame($expected, TypeRelations::shapesJointlyAdmissible($b, $a)->isOk());
+    }
+
+    public static function jointAdmissibilityCases(): \Generator
+    {
+        // Where dispatch truth and value truth agree.
+        yield 'same base' => [new NumberShape(), new NumberShape(), true];
+        yield 'literal against its base: a 5-typed operand reaches both slots' => [new LiteralShape(5), new NumberShape(), true];
+        yield 'two literals of one value' => [new LiteralShape(5), new LiteralShape(5), true];
+        yield 'two literals of different values' => [new LiteralShape(5), new LiteralShape(6), false];
+        yield 'cross-base scalars' => [new NumberShape(), new StringShape(), false];
+        yield 'options always: Option<Never>, the type of null, is admitted by both' => [new OptionShape(new NumberShape()), new OptionShape(new StringShape()), true];
+        yield 'option against its present type' => [new OptionShape(new NumberShape()), new NumberShape(), true];
+        yield 'option against a foreign present type' => [new OptionShape(new NumberShape()), new StringShape(), false];
+        yield 'union member shared' => [UnionShape::of(new LiteralShape('a'), new LiteralShape('b')), UnionShape::of(new LiteralShape('b'), new LiteralShape('c')), true];
+        yield 'unions fully disjoint' => [UnionShape::of(new LiteralShape('a'), new LiteralShape('b')), UnionShape::of(new LiteralShape('c'), new LiteralShape('d')), false];
+        yield 'never admits nothing inhabited' => [new NeverShape(), new NumberShape(), false];
+        yield 'empty-capable lists: List<Never, 0, 0> is admitted by both' => [new ListShape(new NumberShape()), new ListShape(new StringShape()), true];
+        yield 'non-empty lists need jointly admissible elements' => [new ListShape(new NumberShape(), min: 1), new ListShape(new StringShape(), min: 1), false];
+        yield 'list bounds that cannot intersect' => [new ListShape(new NumberShape(), min: 3), new ListShape(new NumberShape(), min: 0, max: 2), false];
+        yield 'dicts always: Dict<Never> is inhabited by the empty dict' => [new DictShape(new NumberShape()), new DictShape(new StringShape()), true];
+        yield 'records fieldwise' => [new RecordShape(['a' => new NumberShape()]), new RecordShape(['a' => new LiteralShape(5)]), true];
+        yield 'records with foreign required fields' => [new RecordShape(['a' => new NumberShape()]), new RecordShape(['b' => new NumberShape()]), false];
+        yield 'record against a dict its required fields inhabit' => [new RecordShape(['a' => new NumberShape()]), new DictShape(new NumberShape()), true];
+        yield 'record against a dict of a foreign value type' => [new RecordShape(['a' => new StringShape()]), new DictShape(new NumberShape()), false];
+        yield 'opaques of one identity, parameters jointly admissible' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new StringShape()]), true];
+        yield 'opaques of different identities' => [new OpaqueShape('money'), new OpaqueShape('date'), false];
+        yield 'opaques of one identity, disjoint parameters' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new LiteralShape('USD')]), false];
+
+        // Where they diverge: a shared value is not a shared type.
+        yield 'list and dict: [] is one value with two types' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), false];
+        yield 'list and the empty record: same corner' => [new ListShape(new NumberShape()), new RecordShape([]), false];
+        yield 'unknown admits nothing' => [new UnknownShape(), new NumberShape(), false];
+        yield 'unknown against unknown admits nothing either' => [new UnknownShape(), new UnknownShape(), false];
+        yield 'the divergence recurses: list elements are dispatch-compared' => [new ListShape(new ListShape(new NumberShape()), min: 1), new ListShape(new DictShape(new NumberShape()), min: 1), false];
+        yield 'the divergence recurses into record fields' => [new RecordShape(['f' => new UnknownShape()]), new RecordShape(['f' => new NumberShape()]), false];
+    }
+
+    #[Test]
+    public function joint_admissibility_diverges_from_overlap_exactly_at_the_shared_value_corners(): void
+    {
+        // The same pairs, asked the value question, answer yes — pinning
+        // that the two relations genuinely differ (RFC item 36).
+        $list = new ListShape(new NumberShape());
+        $dict = new DictShape(new NumberShape());
+        $this->assertTrue(TypeRelations::shapesOverlap($list, $dict)->isOk());
+        $this->assertTrue(TypeRelations::shapesOverlap($list, new RecordShape([]))->isOk());
+        $this->assertTrue(TypeRelations::shapesOverlap(new UnknownShape(), new NumberShape())->isOk());
+
+        $nested = TypeRelations::shapesOverlap(
+            new ListShape(new ListShape(new NumberShape()), min: 1),
+            new ListShape(new DictShape(new NumberShape()), min: 1),
+        );
+        $this->assertTrue($nested->isOk());
+        $this->assertTrue(TypeRelations::shapesOverlap(
+            new RecordShape(['f' => new UnknownShape()]),
+            new RecordShape(['f' => new NumberShape()]),
+        )->isOk());
+    }
+
+    #[Test]
+    public function joint_admissibility_failures_speak_dispatch_language(): void
+    {
+        $corner = TypeRelations::shapesJointlyAdmissible(new ListShape(new NumberShape()), new DictShape(new NumberShape()));
+        $this->assertStringContainsString('admit no common operand type', $corner->unwrapErr()->message);
+        $this->assertStringContainsString('dispatch sees types, never values', $corner->unwrapErr()->message);
+
+        $unknown = TypeRelations::shapesJointlyAdmissible(new UnknownShape(), new NumberShape());
+        $this->assertStringContainsString('Unknown is inert', $unknown->unwrapErr()->message);
+
+        $scalar = TypeRelations::shapesJointlyAdmissible(new NumberShape(), new StringShape());
+        $this->assertStringContainsString('admit no common operand type', $scalar->unwrapErr()->message);
+
+        // Causes travel: the element-level divergence is named in the chain.
+        $nested = TypeRelations::shapesJointlyAdmissible(
+            new ListShape(new ListShape(new NumberShape()), min: 1),
+            new ListShape(new DictShape(new NumberShape()), min: 1),
+        );
+        $this->assertStringContainsString('admit no common operand type', $nested->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function the_type_level_joint_admissibility_face_projects_through_shapes(): void
+    {
+        $this->assertTrue(TypeRelations::jointlyAdmissible(new NumberType(), new NumberType())->isOk());
+        $this->assertTrue(TypeRelations::jointlyAdmissible(new NumberType(), new StringType())->isErr());
+    }
 }

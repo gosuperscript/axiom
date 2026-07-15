@@ -48,15 +48,6 @@ final readonly class OptionType implements Type
             ->map(fn(Option $option) => $option->isNone() ? Some(null) : $option);
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        if ($a === null || $b === null) {
-            return $a === $b;
-        }
-
-        return $this->inner->compare($a, $b);
-    }
-
     public function format(mixed $value): string
     {
         return $value === null ? '' : $this->inner->format($value);

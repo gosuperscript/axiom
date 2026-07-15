@@ -71,14 +71,6 @@ final class UnionTypeTest extends TestCase
         new UnionType();
     }
 
-    #[Test]
-    public function it_compares_strictly(): void
-    {
-        $enum = new UnionType(new LiteralType('shop'), new LiteralType('office'));
-
-        $this->assertTrue($enum->compare('shop', 'shop'));
-        $this->assertFalse($enum->compare('shop', 'office'));
-    }
 
     #[Test]
     public function it_formats_through_the_inhabited_member(): void

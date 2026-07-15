@@ -66,11 +66,6 @@ final readonly class LiteralType implements Type
         return $value == $this->value;
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $this->base->compare($a, $b);
-    }
-
     public function format(mixed $value): string
     {
         return $this->base->format($value);
