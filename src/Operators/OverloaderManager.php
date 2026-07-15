@@ -10,22 +10,11 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
 
-use function Superscript\Monads\Result\Err;
-
 /**
  * The composed binary dialect: one list of rules, resolved once per
- * operator node at compile time.
- *
- * Resolution across the list:
- * - exactly one rule resolves → that resolution, bound into the program;
- * - two or more resolve → a compile error naming the competing rules —
- *   with dispatch on types, multiple owners for the same operand types is
- *   a miscomposed dialect, never a precedence question (list order decides
- *   nothing);
- * - none resolve → the lone engaged refusal directly, or an aggregate of
- *   the refusals that said something about the operand types (`unhandled`
- *   refusals — rules the operator simply isn't for — stay out of the
- *   diagnostics).
+ * operator node at compile time, reconciled by the shared composition
+ * rule ({@see OverloadResolution}) — one owner per operand types,
+ * ambiguity refused, unhandled refusals kept out of the diagnostics.
  */
 class OverloaderManager implements OperatorOverloader
 {
@@ -39,50 +28,19 @@ class OverloaderManager implements OperatorOverloader
     /** @return Result<ResolvedOperation, TypeMismatch> */
     public function resolve(string $operator, Type $left, Type $right): Result
     {
-        $resolutions = [];
-        $owners = [];
-        $engaged = [];
+        $operands = sprintf('%s and %s', TypeDescriber::describe($left), TypeDescriber::describe($right));
 
-        foreach ($this->overloaders as $overloader) {
-            $result = $overloader->resolve($operator, $left, $right);
-
-            if ($result->isOk()) {
-                $resolutions[] = $result;
-                $owners[] = $overloader::class;
-
-                continue;
-            }
-
-            $mismatch = $result->unwrapErr();
-
-            if (!$mismatch->unhandled) {
-                $engaged[] = $mismatch;
-            }
-        }
-
-        if (count($resolutions) > 1) {
-            return Err(new TypeMismatch(sprintf(
-                'Operator [%s] over %s and %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand types.',
+        return OverloadResolution::across(
+            $this->overloaders,
+            fn(OperatorOverloader $overloader) => $overloader->resolve($operator, $left, $right),
+            ambiguity: fn(array $owners) => sprintf(
+                'Operator [%s] over %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand types.',
                 $operator,
-                TypeDescriber::describe($left),
-                TypeDescriber::describe($right),
+                $operands,
                 implode('], [', $owners),
-            )));
-        }
-
-        if ($resolutions !== []) {
-            return $resolutions[0];
-        }
-
-        if ($engaged === []) {
-            return Err(new TypeMismatch(sprintf('Operator [%s] is not supported.', $operator), unhandled: true));
-        }
-
-        return count($engaged) === 1
-            ? Err($engaged[0])
-            : Err(new TypeMismatch(
-                sprintf('No overload of [%s] accepts %s and %s.', $operator, TypeDescriber::describe($left), TypeDescriber::describe($right)),
-                $engaged,
-            ));
+            ),
+            unsupported: sprintf('Operator [%s] is not supported.', $operator),
+            unaccepted: sprintf('No overload of [%s] accepts %s.', $operator, $operands),
+        );
     }
 }

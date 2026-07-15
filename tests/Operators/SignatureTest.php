@@ -43,6 +43,7 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(PrefixSignature::class)]
 #[CoversClass(ResolvedOperation::class)]
 #[UsesClass(OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]

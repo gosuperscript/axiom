@@ -33,6 +33,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]

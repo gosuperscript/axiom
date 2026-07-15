@@ -87,6 +87,13 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function the_symbol_key_is_the_flat_dotted_name(): void
+    {
+        $this->assertSame('pi', SymbolSource::key('pi', null));
+        $this->assertSame('math.pi', SymbolSource::key('pi', 'math'));
+    }
+
+    #[Test]
     public function type_definition_describes_as_type(): void
     {
         $source = new Coerce(new NumberType(), new SymbolSource('price'));

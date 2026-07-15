@@ -366,8 +366,8 @@ interface ResolutionInspector
 | Node | Annotations |
 |------|-------------|
 | Static value | `label`: `"static(int)"`, `"static(string)"`, etc. |
-| `Coerce` | `label`: type class name (e.g. `"NumberType"`); `coercion`: type change (e.g. `"string -> int"`) |
-| `Ascription` | `label`: `"is NumberType"` |
+| `Coerce` | `label`: the declared type (e.g. `"Number"`); `coercion`: type change (e.g. `"string -> int"`) |
+| `Ascription` | `label`: the claim (e.g. `"is Number"`) |
 | Infix operator | `label`: operator (e.g. `"+"`, `"&&"`); `left`, `right`, `result` |
 | Unary operator | `label`: operator (e.g. `"!"`, `"-"`); `result` |
 | Symbol | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"` for definitions; `result` |

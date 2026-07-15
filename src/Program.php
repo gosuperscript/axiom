@@ -41,6 +41,16 @@ final readonly class Program
     public Type $returns;
 
     /**
+     * Required-ness per declaration, fixed at compile time. It is a
+     * property of the projection, not the concrete class:
+     * Union(Option<Number>, String) has shape (Number | String)? and a
+     * missing binding is legal absence.
+     *
+     * @var array<string, bool>
+     */
+    private array $optional;
+
+    /**
      * @param array<string, Type> $declarations
      */
     public function __construct(
@@ -50,6 +60,7 @@ final readonly class Program
         private ?ResolutionInspector $inspector = null,
     ) {
         $this->returns = $node->returns;
+        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
     }
 
     /**
@@ -96,10 +107,7 @@ final readonly class Program
 
         foreach ($this->declarations as $key => $type) {
             if (!array_key_exists($key, $raw)) {
-                // Required-ness is a property of the projection, not the
-                // concrete class: Union(Option<Number>, String) has shape
-                // (Number | String)? and a missing binding is legal absence.
-                if (!($type->shape() instanceof OptionShape)) {
+                if (!$this->optional[$key]) {
                     $violations[] = sprintf('required input [%s] is missing', $key);
                 }
 

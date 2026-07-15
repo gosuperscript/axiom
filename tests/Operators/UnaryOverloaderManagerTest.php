@@ -26,6 +26,7 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(UnaryOverloaderManager::class)]
+#[CoversClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
@@ -150,7 +151,7 @@ final class UnaryOverloaderManagerTest extends TestCase
 
     private static function resolving(string $operator, Type $returns): UnaryOverloader
     {
-        return new class($operator, $returns) implements UnaryOverloader {
+        return new class ($operator, $returns) implements UnaryOverloader {
             public function __construct(private readonly string $operator, private readonly Type $returns) {}
 
             public function resolve(string $operator, Type $operand): Result
@@ -164,7 +165,7 @@ final class UnaryOverloaderManagerTest extends TestCase
 
     private static function refusing(string $operator, string $message): UnaryOverloader
     {
-        return new class($operator, $message) implements UnaryOverloader {
+        return new class ($operator, $message) implements UnaryOverloader {
             public function __construct(private readonly string $operator, private readonly string $message) {}
 
             public function resolve(string $operator, Type $operand): Result

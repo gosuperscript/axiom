@@ -81,6 +81,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]

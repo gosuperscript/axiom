@@ -8,15 +8,13 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
-use Psl\Vec;
-
 use function Superscript\Monads\Result\Err;
 
 /**
  * The mirror of [has]: `needle(s) in haystack` — the right side must be a
  * present list, the left a needle (or list of needles) with absence
- * tolerated, element overlap required. Membership is value equality
- * ({@see ValueEquality}), never PHP's string-comparing array_intersect.
+ * tolerated, element overlap required. Judgment and evaluation are both
+ * {@see SetOperands}, shared with [has], so the mirrors cannot drift.
  */
 final readonly class InOverloader implements OperatorOverloader
 {
@@ -28,18 +26,11 @@ final readonly class InOverloader implements OperatorOverloader
         }
 
         return SetOperands::membership($right, $left, $operator, listSide: 'right')
-            ->map(fn(Type $returns) => new ResolvedOperation($returns, function (mixed $left, array $right): bool {
+            ->map(fn(Type $returns) => new ResolvedOperation(
+                $returns,
                 // The native array type is the resolution's proof: the right
                 // operand type is a present list.
-                $haystack = Vec\filter_nulls($right);
-
-                $needles = Vec\filter_nulls(is_array($left) ? $left : [$left]);
-
-                if ($needles === []) {
-                    return false;
-                }
-
-                return array_all($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
-            }));
+                static fn(mixed $left, array $right): bool => SetOperands::allContained(haystack: $right, needles: $left),
+            ));
     }
 }

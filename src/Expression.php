@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
@@ -92,9 +93,7 @@ final readonly class Expression
                 continue;
             }
 
-            $parameters[] = $symbol->namespace !== null
-                ? $symbol->namespace . '.' . $symbol->name
-                : $symbol->name;
+            $parameters[] = SymbolSource::key($symbol->name, $symbol->namespace);
         }
 
         return $parameters;

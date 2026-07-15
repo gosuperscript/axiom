@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Sources\SymbolSource;
 
 #[CoversClass(Bindings::class)]
+#[UsesClass(SymbolSource::class)]
 final class BindingsTest extends TestCase
 {
     #[Test]

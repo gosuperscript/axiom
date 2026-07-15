@@ -7,6 +7,7 @@ namespace Superscript\Axiom\Types;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Runtime;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
@@ -55,10 +56,10 @@ final class TypeEnvironment
      */
     public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler): Result
     {
-        $key = $namespace !== null ? "{$namespace}.{$name}" : $name;
+        $key = SymbolSource::key($name, $namespace);
 
         if (isset($this->declarations[$key])) {
-            return Ok(new CompiledNode($this->declarations[$key], function (Runtime $runtime) use ($name, $namespace, $key) {
+            return Ok(new CompiledNode($this->declarations[$key], static function (Runtime $runtime) use ($name, $namespace, $key) {
                 // The resolution channel has one representation of null:
                 // None. A bound null is still a bound key — the boundary
                 // admitted it — but its value is honestly absent.
@@ -97,7 +98,7 @@ final class TypeEnvironment
 
         return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(
             $node->returns,
-            function (Runtime $runtime) use ($node, $key) {
+            static function (Runtime $runtime) use ($node, $key) {
                 $result = $runtime->slot($key, fn() => ($node->evaluate)($runtime));
 
                 $runtime->inspector?->annotate('label', $key);

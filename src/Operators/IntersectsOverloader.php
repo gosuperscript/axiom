@@ -12,16 +12,15 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
 
-use Psl\Vec;
-
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
  * Set intersection: either side may be a list or a scalar, absence is
  * tolerated (the evaluation wraps and filters), and the element types must
- * overlap. Intersection is value equality ({@see ValueEquality}), never
- * PHP's string-comparing array_intersect.
+ * overlap. Judgment and evaluation are both {@see SetOperands} — the same
+ * value equality as membership, never PHP's string-comparing
+ * array_intersect.
  */
 final readonly class IntersectsOverloader implements OperatorOverloader
 {
@@ -45,12 +44,10 @@ final readonly class IntersectsOverloader implements OperatorOverloader
             )));
         }
 
-        $operation = new ResolvedOperation(new BooleanType(), function (mixed $left, mixed $right): bool {
-            $needles = Vec\filter_nulls(is_array($left) ? $left : [$left]);
-            $haystack = Vec\filter_nulls(is_array($right) ? $right : [$right]);
-
-            return array_any($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
-        });
+        $operation = new ResolvedOperation(
+            new BooleanType(),
+            static fn(mixed $left, mixed $right): bool => SetOperands::anyShared($left, $right),
+        );
 
         if ($elementLeft instanceof NeverShape || $elementRight instanceof NeverShape) {
             return Ok($operation);

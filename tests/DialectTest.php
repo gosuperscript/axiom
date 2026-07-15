@@ -24,6 +24,7 @@ use Superscript\Axiom\Types\Type;
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
@@ -247,7 +248,7 @@ final class DialectTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows collide');
 
-        Dialect::core()->with(new class($nonRow) extends Extension {
+        Dialect::core()->with(new class ($nonRow) extends Extension {
             public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOverloader $nonRow) {}
 
             public function unaryOperators(): array

@@ -19,15 +19,62 @@ use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
+use Psl\Vec;
 
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * Shared operand judgments for the set operators (has, in, intersects).
+ * Shared operand judgments — and the matching evaluations — for the set
+ * operators (has, in, intersects).
  */
 final class SetOperands
 {
+    /**
+     * The membership evaluation `has` and `in` bind: every needle must be
+     * contained in the haystack. Containment is value equality
+     * ({@see ValueEquality}) — never PHP's array_intersect, whose string
+     * comparison juggles types (true in [1] must be false). No present
+     * needles (an absent or empty needle side) is membership in nothing:
+     * false.
+     */
+    public static function allContained(mixed $haystack, mixed $needles): bool
+    {
+        $present = self::present($needles);
+
+        if ($present === []) {
+            return false;
+        }
+
+        $haystack = self::present($haystack);
+
+        return array_all($present, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
+    }
+
+    /**
+     * The intersection evaluation: do the two sides share any value? Same
+     * value equality as membership; two sides with no present values share
+     * nothing.
+     */
+    public static function anyShared(mixed $left, mixed $right): bool
+    {
+        $haystack = self::present($right);
+
+        return array_any(self::present($left), fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
+    }
+
+    /**
+     * A side's present elements: a scalar wraps to a one-element list, and
+     * absent elements drop out — the judgments tolerate absence, so the
+     * evaluations read through it.
+     *
+     * @return list<mixed>
+     */
+    private static function present(mixed $side): array
+    {
+        return Vec\filter_nulls(is_array($side) ? $side : [$side]);
+    }
+
     /**
      * The membership judgment: one side must be a present list, the other a
      * needle (or list of needles) with absence tolerated; element types must

@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Operators\OverloadResolution;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
@@ -23,6 +24,7 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(OverloaderManager::class)]
+#[CoversClass(OverloadResolution::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
@@ -36,7 +38,7 @@ final class OverloaderManagerTest extends TestCase
      */
     private static function rule(string $operator, string $operandClass, Type $returns, mixed $result): OperatorOverloader
     {
-        return new class($operator, $operandClass, $returns, $result) implements OperatorOverloader {
+        return new class ($operator, $operandClass, $returns, $result) implements OperatorOverloader {
             public function __construct(
                 private readonly string $operator,
                 private readonly string $operandClass,

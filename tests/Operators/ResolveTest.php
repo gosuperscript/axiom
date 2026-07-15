@@ -43,6 +43,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[CoversClass(SetOperands::class)]
 #[CoversClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]

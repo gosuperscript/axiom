@@ -32,6 +32,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]

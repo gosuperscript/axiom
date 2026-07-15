@@ -68,6 +68,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(LiteralPattern::class)]
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
@@ -322,7 +323,7 @@ final class TypedExpressionTest extends TestCase
             }
         };
 
-        $extension = new class($absenceAsZero) extends Extension {
+        $extension = new class ($absenceAsZero) extends Extension {
             public function __construct(private readonly OperatorOverloader $rule) {}
 
             public function operators(): array
@@ -363,7 +364,7 @@ final class TypedExpressionTest extends TestCase
             }
         };
 
-        $extension = new class($absValue) extends Extension {
+        $extension = new class ($absValue) extends Extension {
             public function __construct(private readonly UnaryOverloader $rule) {}
 
             public function unaryOperators(): array

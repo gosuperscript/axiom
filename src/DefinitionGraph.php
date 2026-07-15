@@ -65,7 +65,7 @@ final class DefinitionGraph
         $source = $definitions->get($key)->unwrap();
 
         foreach (UnboundSymbols::in($source) as $reference) {
-            $referenced = self::key($reference);
+            $referenced = SymbolSource::key($reference->name, $reference->namespace);
 
             // References that are not definitions are parameters — leaves of
             // the graph, satisfied by bindings, never edges.
@@ -75,12 +75,5 @@ final class DefinitionGraph
         }
 
         $explored[$key] = true;
-    }
-
-    private static function key(SymbolSource $symbol): string
-    {
-        return $symbol->namespace !== null
-            ? $symbol->namespace . '.' . $symbol->name
-            : $symbol->name;
     }
 }

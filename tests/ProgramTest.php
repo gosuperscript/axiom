@@ -71,6 +71,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(Coerce::class)]
 #[UsesClass(Ascription::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
 #[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
@@ -120,7 +121,7 @@ final class ProgramTest extends TestCase
      */
     private static function lyingSource(Type $claims, mixed $actual): TypedSource
     {
-        return new class($claims, $actual) implements TypedSource {
+        return new class ($claims, $actual) implements TypedSource {
             public function __construct(private readonly Type $claims, private readonly mixed $actual) {}
 
             public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
@@ -421,7 +422,7 @@ final class ProgramTest extends TestCase
         $this->assertSame('string -> int', $inspector->annotations['coercion']);
         $this->assertContains(['label', 'base'], $inspector->timeline);
         $this->assertContains(['memo', 'miss'], $inspector->timeline);
-        $this->assertContains(['label', 'NumberType'], $inspector->timeline);
+        $this->assertContains(['label', 'Number'], $inspector->timeline);
         $this->assertContains(['label', 'static(int)'], $inspector->timeline);
     }
 
@@ -494,7 +495,7 @@ final class ProgramTest extends TestCase
 
         $this->assertSame(42, $program()->unwrap()->unwrap());
         $this->assertArrayNotHasKey('coercion', $inspector->annotations);
-        $this->assertSame('NumberType', $inspector->annotations['label']);
+        $this->assertSame('Number', $inspector->annotations['label']);
     }
 
     #[Test]
@@ -508,7 +509,7 @@ final class ProgramTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertSame(42, $program()->unwrap()->unwrap());
-        $this->assertSame('is NumberType', $inspector->annotations['label']);
+        $this->assertSame('is Number', $inspector->annotations['label']);
     }
 
     #[Test]

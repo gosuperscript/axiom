@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Option\None;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Option\Some;
@@ -30,7 +31,7 @@ final readonly class Bindings
 
     public function has(string $name, ?string $namespace = null): bool
     {
-        return array_key_exists($this->key($name, $namespace), $this->values);
+        return array_key_exists(SymbolSource::key($name, $namespace), $this->values);
     }
 
     /**
@@ -38,17 +39,12 @@ final readonly class Bindings
      */
     public function get(string $name, ?string $namespace = null): Option
     {
-        $key = $this->key($name, $namespace);
+        $key = SymbolSource::key($name, $namespace);
 
         if (array_key_exists($key, $this->values)) {
             return new Some($this->values[$key]);
         }
 
         return new None();
-    }
-
-    private function key(string $name, ?string $namespace): string
-    {
-        return $namespace !== null ? $namespace . '.' . $name : $name;
     }
 }

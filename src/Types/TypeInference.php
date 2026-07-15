@@ -118,7 +118,7 @@ final readonly class TypeInference
      */
     private function constant(mixed $value, ?Type $type = null): CompiledNode
     {
-        return new CompiledNode($type ?? new UnknownType(), function (Runtime $runtime) use ($value) {
+        return new CompiledNode($type ?? new UnknownType(), static function (Runtime $runtime) use ($value) {
             $runtime->inspector?->annotate('label', 'static(' . get_debug_type($value) . ')');
 
             return Ok(is_null($value) ? None() : Some($value));
@@ -224,33 +224,18 @@ final readonly class TypeInference
             $inner = Ok($this->constant($source->source->value));
         }
 
-        return $inner->map(
-            fn(CompiledNode $inner) => new CompiledNode($source->type, function (Runtime $runtime) use ($inner, $source) {
-                $result = ($inner->evaluate)($runtime)
-                    ->andThen(fn(Option $option) => $option
-                        ->andThen(fn(mixed $value) => $source->type->coerce($value)
-                            ->inspect(fn(Option $coerced) => $coerced->inspect(function (mixed $coercedValue) use ($value, $runtime) {
-                                if ($coercedValue !== $value) {
-                                    $runtime->inspector?->annotate('coercion', get_debug_type($value) . ' -> ' . get_debug_type($coercedValue));
-                                }
-                            }))
-                            ->transpose())
-                        ->transpose())
-                    ->andThen(fn(Option $option) => $this->present(
-                        $option,
-                        $source->type,
-                        'The coerced value reads as missing, but %s is required; coerce to %s instead if absence is legal here.',
-                    ))
-                    // One representation of null in the resolution channel:
-                    // Option-typed coercion emits Some(null), the boundary
-                    // protocol; downstream it travels as None.
-                    ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
-
-                $runtime->inspector?->annotate('label', class_basename($source->type::class));
-
-                return $result;
-            }),
-        );
+        return $inner->map(fn(CompiledNode $inner) => self::admission(
+            $inner,
+            $source->type,
+            convert: static fn(mixed $value, Runtime $runtime) => $source->type->coerce($value)
+                ->inspect(fn(Option $coerced) => $coerced->inspect(function (mixed $coercedValue) use ($value, $runtime) {
+                    if ($coercedValue !== $value) {
+                        $runtime->inspector?->annotate('coercion', get_debug_type($value) . ' -> ' . get_debug_type($coercedValue));
+                    }
+                })),
+            missing: 'The coerced value reads as missing, but %s is required; coerce to %s instead if absence is legal here.',
+            label: TypeDescriber::describe($source->type),
+        ));
     }
 
     /**
@@ -277,47 +262,52 @@ final readonly class TypeInference
                     ),
                     [$cause],
                 ))
-                ->map(fn() => new CompiledNode($source->type, function (Runtime $runtime) use ($inner, $source) {
-                    $result = ($inner->evaluate)($runtime)
-                        ->andThen(fn(Option $option) => $option
-                            ->andThen(fn(mixed $value) => $source->type->assert($value)->transpose())
-                            ->transpose())
-                        ->andThen(fn(Option $option) => $this->present(
-                            $option,
-                            $source->type,
-                            'The ascribed value reads as missing, but the claim %s is required; claim %s instead if absence is legal here.',
-                        ))
-                        // Same normalization as Coerce: an optional claim's
-                        // Some(null) travels on as None.
-                        ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
-
-                    $runtime->inspector?->annotate('label', 'is ' . class_basename($source->type::class));
-
-                    return $result;
-                })),
+                ->map(fn() => self::admission(
+                    $inner,
+                    $source->type,
+                    convert: static fn(mixed $value) => $source->type->assert($value),
+                    missing: 'The ascribed value reads as missing, but the claim %s is required; claim %s instead if absence is legal here.',
+                    label: 'is ' . TypeDescriber::describe($source->type),
+                )),
         );
     }
 
     /**
-     * The absence guard shared by the two admission bridges: when the
-     * declared type is not Option-shaped and the value reads as missing,
-     * evaluation errs by name — silently passing None through would deliver
-     * null into an expression certified to receive the declared type.
+     * The runtime half the two admission bridges share: evaluate the inner
+     * node, convert any present value through the bridge's face (coerce()
+     * or assert()), guard absence, and normalize the admitted value.
      *
-     * @param Option<mixed> $option
-     * @return Result<Option<mixed>, Throwable>
+     * The absence guard: when the declared type is not Option-shaped and
+     * the value reads as missing, evaluation errs by name — silently
+     * passing None through would deliver null into an expression certified
+     * to receive the declared type. Optionality and the diagnostic are
+     * fixed by the declared type, so both are computed here, once, at
+     * compile time.
+     *
+     * @param Closure(mixed, Runtime): Result<Option<mixed>, Throwable> $convert
      */
-    private function present(Option $option, Type $type, string $message): Result
+    private static function admission(CompiledNode $inner, Type $type, Closure $convert, string $missing, string $label): CompiledNode
     {
-        if ($option->isNone() && !($type->shape() instanceof OptionShape)) {
-            return Err(new RuntimeException(sprintf(
-                $message,
-                TypeDescriber::describe($type),
-                TypeDescriber::describe(new OptionType($type)),
-            )));
-        }
+        $optional = $type->shape() instanceof OptionShape;
+        $missing = sprintf($missing, TypeDescriber::describe($type), TypeDescriber::describe(new OptionType($type)));
 
-        return Ok($option);
+        return new CompiledNode($type, static function (Runtime $runtime) use ($inner, $convert, $optional, $missing, $label) {
+            $result = ($inner->evaluate)($runtime)
+                ->andThen(fn(Option $option) => $option
+                    ->andThen(fn(mixed $value) => $convert($value, $runtime)->transpose())
+                    ->transpose())
+                ->andThen(static fn(Option $option) => $option->isNone() && !$optional
+                    ? Err(new RuntimeException($missing))
+                    : Ok($option))
+                // One representation of null in the resolution channel: an
+                // Option-typed admission emits Some(null), the boundary
+                // protocol; downstream it travels as None.
+                ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
+
+            $runtime->inspector?->annotate('label', $label);
+
+            return $result;
+        });
     }
 
     /**
@@ -340,7 +330,7 @@ final readonly class TypeInference
                 ->map(function (ResolvedOperation $operation) use ($operand, $source, $shape) {
                     $returns = $shape instanceof OptionShape ? new OptionType($operation->returns) : $operation->returns;
 
-                    return new CompiledNode($returns, function (Runtime $runtime) use ($operand, $operation, $source) {
+                    return new CompiledNode($returns, static function (Runtime $runtime) use ($operand, $operation, $source) {
                         $result = ($operand->evaluate)($runtime)
                             ->andThen(fn(Option $option) => $option
                                 ->map(fn(mixed $value) => $operation->evaluate($value))
@@ -365,7 +355,7 @@ final readonly class TypeInference
                 fn(CompiledNode $right) => $this->operators->resolve($source->operator, $left->returns, $right->returns)
                     ->map(fn(ResolvedOperation $operation) => new CompiledNode(
                         $operation->returns,
-                        function (Runtime $runtime) use ($left, $right, $operation, $source) {
+                        static function (Runtime $runtime) use ($left, $right, $operation, $source) {
                             $result = ($left->evaluate)($runtime)
                                 ->andThen(fn(Option $l) => ($right->evaluate)($runtime)->map(fn(Option $r) => [$l, $r]))
                                 ->andThen(/** @param array{Option<mixed>, Option<mixed>} $operands */ function (array $operands) use ($operation, $runtime) {
@@ -448,7 +438,7 @@ final readonly class TypeInference
 
         // Exhaustiveness implies at least one arm: a wildcard is an arm, and
         // zero literals cover no shape.
-        return Ok(new CompiledNode($this->join($armTypes), function (Runtime $runtime) use ($subjectNode, $arms) {
+        return Ok(new CompiledNode($this->join($armTypes), static function (Runtime $runtime) use ($subjectNode, $arms) {
             $result = ($subjectNode->evaluate)($runtime)->andThen(function (Option $subjectOption) use ($runtime, $arms) {
                 $subjectValue = $subjectOption->unwrapOr(null);
 
@@ -491,16 +481,16 @@ final readonly class TypeInference
     private function compilePattern(MatchPattern $pattern, TypeEnvironment $environment): Result
     {
         if ($pattern instanceof WildcardPattern) {
-            return Ok(fn(mixed $subject, Runtime $runtime) => Ok(true));
+            return Ok(static fn(mixed $subject, Runtime $runtime) => Ok(true));
         }
 
         if ($pattern instanceof LiteralPattern) {
-            return Ok(fn(mixed $subject, Runtime $runtime) => Ok(ValueEquality::equals($pattern->value, $subject)));
+            return Ok(static fn(mixed $subject, Runtime $runtime) => Ok(ValueEquality::equals($pattern->value, $subject)));
         }
 
         if ($pattern instanceof ExpressionPattern) {
             return $this->compile($pattern->source, $environment)->map(
-                fn(CompiledNode $node) => fn(mixed $subject, Runtime $runtime) => ($node->evaluate)($runtime)
+                fn(CompiledNode $node) => static fn(mixed $subject, Runtime $runtime) => ($node->evaluate)($runtime)
                     ->map(fn(Option $option) => $option->unwrapOr(null) === $subject),
             );
         }
@@ -557,10 +547,10 @@ final readonly class TypeInference
     {
         return $this->compile($source->object, $environment)->andThen(
             fn(CompiledNode $object) => $this->accessField($object->returns->shape(), $source->property)
-                ->map(fn(Type $field) => new CompiledNode($field, function (Runtime $runtime) use ($object, $source) {
+                ->map(fn(Type $field) => new CompiledNode($field, static function (Runtime $runtime) use ($object, $source) {
                     $result = ($object->evaluate)($runtime)
                         ->andThen(fn(Option $option) => $option
-                            ->mapOr(Ok(None()), fn(mixed $value) => $this->accessValue($value, $source->property)))
+                            ->mapOr(Ok(None()), fn(mixed $value) => self::accessValue($value, $source->property)))
                         ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
 
                     $runtime->inspector?->annotate('label', ".{$source->property}");
@@ -577,7 +567,7 @@ final readonly class TypeInference
      *
      * @return Result<Option<mixed>, Throwable>
      */
-    private function accessValue(mixed $value, string $property): Result
+    private static function accessValue(mixed $value, string $property): Result
     {
         if (is_array($value) && array_key_exists($property, $value)) {
             return Ok(Option::from($value[$property]));

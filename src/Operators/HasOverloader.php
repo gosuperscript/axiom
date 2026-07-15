@@ -8,19 +8,14 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
-use Psl\Vec;
-
 use function Superscript\Monads\Result\Err;
 
 /**
  * Membership, list side left: `haystack has needle(s)`. A type function —
  * the left side must be a present list, the right a needle (or list of
  * needles) with absence tolerated, and the element types must overlap
- * (membership that can never hold is dead code). See {@see SetOperands}.
- *
- * Membership is value equality ({@see ValueEquality}) — never PHP's
- * array_intersect, whose string comparison juggles types (true in [1]
- * must be false).
+ * (membership that can never hold is dead code). Judgment and evaluation
+ * are both {@see SetOperands}, shared with [in], its mirror.
  */
 final readonly class HasOverloader implements OperatorOverloader
 {
@@ -32,18 +27,11 @@ final readonly class HasOverloader implements OperatorOverloader
         }
 
         return SetOperands::membership($left, $right, $operator, listSide: 'left')
-            ->map(fn(Type $returns) => new ResolvedOperation($returns, function (array $left, mixed $right): bool {
+            ->map(fn(Type $returns) => new ResolvedOperation(
+                $returns,
                 // The native array type is the resolution's proof: the left
                 // operand type is a present list.
-                $haystack = Vec\filter_nulls($left);
-
-                $needles = Vec\filter_nulls(is_array($right) ? $right : [$right]);
-
-                if ($needles === []) {
-                    return false;
-                }
-
-                return array_all($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
-            }));
+                static fn(array $left, mixed $right): bool => SetOperands::allContained(haystack: $left, needles: $right),
+            ));
     }
 }

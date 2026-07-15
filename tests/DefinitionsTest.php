@@ -12,9 +12,11 @@ use PHPUnit\Framework\TestCase;
 use Psl\Type\Exception\AssertException;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
 
 #[CoversClass(Definitions::class)]
 #[UsesClass(StaticSource::class)]
+#[UsesClass(SymbolSource::class)]
 final class DefinitionsTest extends TestCase
 {
     #[Test]
