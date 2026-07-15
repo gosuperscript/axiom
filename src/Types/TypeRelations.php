@@ -20,27 +20,29 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The relation registry: assignability, equivalence, overlap, and operand
- * admissibility, by structural recursion over the sealed shape vocabulary.
+ * How types relate to each other: assignability, equivalence, overlap,
+ * and operand admissibility, computed by structural recursion over the
+ * shapes the types project.
  *
- * Laws (pinned by tests):
- * - Assignability is ⊆ over value sets.
- * - Unknown is inert: accepted only by itself under assignability, refused
- *   at operand slots (bridge with Coerce or Ascription); it always overlaps
- *   (nothing can be ruled out — the ascription bridge working).
- * - Refinement widens one way: a base accepts its literals and unions of
- *   them, never the reverse.
- * - Option<T> denotes {null} ∪ T, so T <: Option<T>, Option<Option<T>> ≡
- *   Option<T>, and Option<Never> (the null literal) <: every Option<T>.
- * - overlaps is symmetric and not derivable from assignability.
- * - admits is pessimistic: a union must be wholly assignable; there is no
- *   Unknown hole.
- * - jointlyAdmissible answers dispatch ambiguity, and only that: does some
- *   inhabited type get admitted by both slots? It shares overlap's
- *   recursion but diverges exactly where a shared value is not a shared
- *   type: List/Dict and List/Record overlap (the value []) yet are jointly
- *   inadmissible (dispatch sees operand types, never values), and Unknown
- *   overlaps everything yet admits nothing.
+ * The rules these relations obey (each pinned by a test):
+ * - Assignability means every value of the source type is a value of the
+ *   target type.
+ * - Unknown is assignable only to Unknown, is refused at every operand
+ *   slot (convert with Coerce or claim with Ascription first), and
+ *   overlaps everything — an unknown value can never be ruled out.
+ * - A base type accepts its literals ('shop' fits a String slot) and
+ *   unions of them; a literal never accepts its base.
+ * - Option<T> holds null or a T. So T fits an Option<T> slot,
+ *   Option<Option<T>> collapses to Option<T>, and the null literal
+ *   (Option<Never>) fits every option slot.
+ * - overlaps asks whether any single value could inhabit both types. It
+ *   is symmetric, and weaker than assignability in both directions.
+ * - admits refuses a union unless every member fits the slot: a
+ *   Number|String operand does not reach a Number slot.
+ * - jointlyAdmissible asks whether any single operand type could be
+ *   admitted by both slots. It differs from overlaps exactly where one
+ *   value belongs to two types: [] inhabits both List and Dict, but no
+ *   operand type is admitted by both a List slot and a Dict slot.
  */
 final class TypeRelations
 {
@@ -76,12 +78,13 @@ final class TypeRelations
     }
 
     /**
-     * Could one operand type be admitted by both slots? The row-ambiguity
-     * relation (RFC item 36): dispatch resolves operand types through
-     * admits(), so two rows conflict iff some inhabited type is admitted by
-     * both slots. Value overlap is neither necessary nor sufficient — the
-     * empty array inhabits both List and Dict, but no compilable operand
-     * type reaches both slots.
+     * Could one operand type be admitted by both slots? This is how the
+     * Dialect detects ambiguous rows: two rules for the same operator
+     * collide exactly when some operand type would resolve both — a
+     * 5-typed operand reaches both a Number slot and a Literal(5) slot.
+     * Sharing a value is not enough: [] inhabits both List and Dict, but
+     * no operand type is admitted by both slots, so a List rule beside a
+     * Dict rule can never be in competition.
      *
      * @return Result<bool, TypeMismatch>
      */
@@ -91,11 +94,10 @@ final class TypeRelations
     }
 
     /**
-     * May values of $operand reach a rule's $slot? Assignability, named for
-     * its intent. Unknown is inert — refused with the fix in the message,
-     * never silently admitted: the checker plants no invisible casts, so
-     * the author writes the bridge (Coerce to convert, Ascription to claim)
-     * where everyone can see it.
+     * May values of $operand reach a rule's $slot? Assignability, named
+     * for its use at operand positions. An Unknown operand is always
+     * refused, and the error names the two ways forward: convert the value
+     * with a Coerce node, or claim its type with an Ascription.
      *
      * @return Result<bool, TypeMismatch>
      */

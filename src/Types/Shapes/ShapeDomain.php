@@ -5,20 +5,24 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types\Shapes;
 
 /**
- * The universal-quantification traversal over the sealed algebra, shipped
- * once for every rule that must gate its static verdict on its runtime
- * claim — the totality obligation: Ok(T) certifies EVERY value of the
- * operand types, so a rule whose runtime face is narrower than its verdict
- * refuses the type instead of certifying a crash.
+ * Answers "can this rule handle EVERY value of this shape?" — the check an
+ * operator rule runs before resolving an operand type it did not declare
+ * slot-by-slot. A rule that resolves a type promises its closure works for
+ * all of that type's values, so a rule that only handles some of them must
+ * refuse the type instead.
  *
- * The traversal owns the composite constructors — a union is claimed only
- * when every member is (one supported branch certifies nothing), an option
- * adds only null, containers recurse element-wise, Unknown fails (its
- * values are unknowable, so no total claim over them is possible — inert
- * Unknown has no gradual hole here), Never passes vacuously — and delegates
- * every remaining head (scalars, literals, opaques) to the rule's leaf
- * predicate. Option is transparent here, so a rule whose evaluation rejects
- * null must not route option-bearing operands through this traversal.
+ * The traversal owns the composite shapes and asks the rule's $leaf
+ * predicate about the rest:
+ * - a union passes only if every member passes (handling one branch says
+ *   nothing about the others);
+ * - an option passes if its inner shape passes — null itself always
+ *   passes, so a rule whose closure rejects null must not route
+ *   option-bearing operands through this traversal;
+ * - lists, dicts, and records recurse into their elements and fields;
+ * - Unknown always fails: its values are unknowable, so no promise can
+ *   cover them;
+ * - Never passes vacuously: it has no values to handle;
+ * - scalars, literals, and opaques go to $leaf.
  */
 final class ShapeDomain
 {

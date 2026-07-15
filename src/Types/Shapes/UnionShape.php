@@ -10,7 +10,8 @@ namespace Superscript\Axiom\Types\Shapes;
  * - nested unions flatten;
  * - Option members hoist (Union(Option<A>, B) becomes Option(Union(A, B)) —
  *   canonical unions never contain Option members);
- * - an Unknown member absorbs the union (nothing can be certified about it);
+ * - an Unknown member absorbs the union (a union with an unknown branch
+ *   tells you nothing more than Unknown does);
  * - Never members are eliminated (the union identity);
  * - members are deduplicated; order is insignificant.
  *

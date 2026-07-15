@@ -22,11 +22,11 @@ use Superscript\Axiom\Types\Shapes\UnknownShape;
 use function Psl\Vec\map;
 
 /**
- * Shape → Type, mechanically: every sealed constructor has a canonical core
- * type. This is what lets shape-driven judgments (member access) hand back
- * a Type for further inference. Sound because shapes are truth claims — a
- * census-verified projection describes real runtime structure, so the
- * canonical type is a faithful stand-in.
+ * Turns a Shape back into a Type: every shape constructor has a canonical
+ * core type. Member access uses this to hand a field's shape back to
+ * inference as a Type. Safe because projections are tested (the shape
+ * census) to describe the real runtime structure of their values, so the
+ * canonical type is a faithful stand-in for the original.
  */
 final class TypeReifier
 {
