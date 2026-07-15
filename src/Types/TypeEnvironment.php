@@ -4,32 +4,39 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\Runtime;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The typing environment mirrors symbol resolution: at runtime a symbol is
- * satisfied by a per-call binding or by resolving the Source it names in
- * Definitions. Statically, a declaration gives the type of a binding, and a
- * defined symbol's type is inferred from the same Definitions the evaluator
- * will use — one registry, both semantics.
+ * The symbol face of the compiler: a symbol is a declared input or a
+ * defined derived expression, and either way it compiles to a
+ * {@see CompiledNode}.
  *
- * Declarations terminate recursion — for the *typing* question only:
- * declarations and definitions are disjoint namespaces (enforced by
- * Expression at construction), so a declared symbol is a leaf. Results are
- * memoized. Termination is not this class's question: well-foundedness of
- * the definition graph is a separate graph pass (see DefinitionGraph),
- * because declarations answer typing, never termination.
+ * A declared symbol is a leaf — its type is the declaration and its
+ * evaluation reads the admitted binding (declarations and definitions are
+ * disjoint namespaces, enforced by Expression at construction, so nothing
+ * else can answer for it). A defined symbol compiles its Source in the
+ * same Definitions the program embeds — once; at runtime the compiled
+ * definition evaluates lazily and memoizes per invocation ({@see
+ * Runtime::slot()}).
  *
- * Unbound is an error; a scope that tolerates unknown symbols declares them
- * as UnknownType explicitly.
+ * Termination is not this class's question: well-foundedness of the
+ * definition graph is a separate graph pass (see DefinitionGraph) run
+ * before compilation; the in-progress guard here only keeps a direct,
+ * unguarded use of the compiler from recursing unboundedly.
+ *
+ * Unbound is an error; a scope that tolerates unknown symbols declares
+ * them as UnknownType explicitly.
  */
 final class TypeEnvironment
 {
-    /** @var array<string, Result<Type, TypeMismatch>> */
+    /** @var array<string, Result<CompiledNode, TypeMismatch>> */
     private array $memo = [];
 
     /** @var list<string> */
@@ -44,14 +51,24 @@ final class TypeEnvironment
     ) {}
 
     /**
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    public function typeOfSymbol(string $name, ?string $namespace, TypeInference $inference): Result
+    public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler): Result
     {
         $key = $namespace !== null ? "{$namespace}.{$name}" : $name;
 
         if (isset($this->declarations[$key])) {
-            return Ok($this->declarations[$key]);
+            return Ok(new CompiledNode($this->declarations[$key], function (Runtime $runtime) use ($name, $namespace, $key) {
+                // The resolution channel has one representation of null:
+                // None. A bound null is still a bound key — the boundary
+                // admitted it — but its value is honestly absent.
+                $value = $runtime->bindings->get($name, $namespace)->andThen(fn(mixed $v) => Option::from($v));
+
+                $runtime->inspector?->annotate('label', $key);
+                $value->inspect(fn(mixed $v) => $runtime->inspector?->annotate('result', $v));
+
+                return Ok($value);
+            }));
         }
 
         if (isset($this->memo[$key])) {
@@ -75,10 +92,19 @@ final class TypeEnvironment
         }
 
         $this->inProgress[] = $key;
-        $result = $inference->infer($source->unwrap(), $this);
+        $result = $compiler->compile($source->unwrap(), $this);
         array_pop($this->inProgress);
 
-        return $this->memo[$key] = $result;
-    }
+        return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(
+            $node->returns,
+            function (Runtime $runtime) use ($node, $key) {
+                $result = $runtime->slot($key, fn() => ($node->evaluate)($runtime));
 
+                $runtime->inspector?->annotate('label', $key);
+                $result->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
+
+                return $result;
+            },
+        ));
+    }
 }

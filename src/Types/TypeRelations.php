@@ -25,15 +25,16 @@ use function Superscript\Monads\Result\Ok;
  *
  * Laws (pinned by tests):
  * - Assignability is ⊆ over value sets.
- * - Unknown is consistent, not transitive: accepted only by itself under
- *   assignability; it always overlaps; it is always admitted at operand slots.
+ * - Unknown is inert: accepted only by itself under assignability, refused
+ *   at operand slots (bridge with Coerce or Ascription); it always overlaps
+ *   (nothing can be ruled out — the ascription bridge working).
  * - Refinement widens one way: a base accepts its literals and unions of
  *   them, never the reverse.
  * - Option<T> denotes {null} ∪ T, so T <: Option<T>, Option<Option<T>> ≡
  *   Option<T>, and Option<Never> (the null literal) <: every Option<T>.
  * - overlaps is symmetric and not derivable from assignability.
- * - admits is pessimistic: a union must be wholly assignable; Unknown is the
- *   only sanctioned "cannot rule it out" hole.
+ * - admits is pessimistic: a union must be wholly assignable; there is no
+ *   Unknown hole.
  */
 final class TypeRelations
 {
@@ -69,15 +70,20 @@ final class TypeRelations
     }
 
     /**
-     * May values of $operand reach a rule's $slot? Assignable to the slot,
-     * or the operand is top-level Unknown. Nothing else.
+     * May values of $operand reach a rule's $slot? Assignability, named for
+     * its intent. Unknown is inert — refused with the fix in the message,
+     * never silently admitted: the checker plants no invisible casts, so
+     * the author writes the bridge (Coerce to convert, Ascription to claim)
+     * where everyone can see it.
      *
      * @return Result<bool, TypeMismatch>
      */
     public static function admits(Type $operand, Type $slot): Result
     {
         if ($operand->shape() instanceof UnknownShape) {
-            return Ok(true);
+            return Err(new TypeMismatch(
+                'An Unknown operand is inert: claim its type with an Ascription, or convert it with a Coerce, before operating on it.',
+            ));
         }
 
         return self::isTypeAssignableTo($operand, $slot);

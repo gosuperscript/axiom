@@ -9,27 +9,22 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
 /**
- * A unary operator rule owning both semantics, mirroring OperatorOverloader.
+ * A unary operator rule, mirroring {@see OperatorOverloader}: one verdict,
+ * both semantics, asked once at compile time.
  *
- * Absence never reaches a unary rule: UnaryResolver short-circuits an absent
- * operand before any rule runs, so rules only see present values and
- * optionality propagates structurally in the inference layer.
+ * Absence never reaches a unary rule: the compiler resolves the rule
+ * against the present operand type and wraps the compiled node with the
+ * absence short-circuit, so optionality propagates structurally and the
+ * resolved evaluation only ever sees present values.
  */
 interface UnaryOverloader
 {
-    public function supportsOverloading(mixed $operand, string $operator): bool;
-
-    /** @return Result<mixed, \Throwable> */
-    public function evaluate(mixed $operand, string $operator): Result;
-
-    public function handles(string $operator): bool;
-
     /**
-     * The certification contract of OperatorOverloader::typeOf(), one
-     * operand: Ok(T) means every value of the operand type is handled and
-     * the result inhabits T.
+     * The certification contract of OperatorOverloader::resolve(), one
+     * operand: Ok means the evaluation is total over the operand type and
+     * its result inhabits the returned type.
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<ResolvedOperation, TypeMismatch>
      */
-    public function typeOf(string $operator, Type $operand): Result;
+    public function resolve(string $operator, Type $operand): Result;
 }

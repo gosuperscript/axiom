@@ -39,10 +39,6 @@ final class SetOperands
     {
         $listShape = $list->shape();
 
-        if ($listShape instanceof UnknownShape) {
-            return Ok(new BooleanType());
-        }
-
         if (!$listShape instanceof ListShape) {
             return Err(new TypeMismatch(sprintf(
                 'The %s side of [%s] must be a present list; got %s.',
@@ -77,11 +73,11 @@ final class SetOperands
 
     /**
      * The element judgment for a side that may be a scalar, a list of
-     * scalars, or absent (Option stripped — the runtime filters nulls).
+     * scalars, or absent (Option stripped — the evaluation filters nulls).
      * Returns null when the side is not element-shaped: dicts and records
-     * (the runtime claims only scalars, null, and lists) and opaques
-     * (objects — never claimed; membership over a domain type belongs to
-     * the rule that owns it).
+     * (the rules claim only scalars, null, and lists), opaques (objects —
+     * never claimed; membership over a domain type belongs to the rule
+     * that owns it), and Unknown (inert — bridge it first).
      */
     public static function elements(Type $operand): ?Shape
     {
@@ -119,7 +115,7 @@ final class SetOperands
             return UnionShape::of(...$members);
         }
 
-        if ($shape instanceof DictShape || $shape instanceof RecordShape || $shape instanceof OpaqueShape) {
+        if ($shape instanceof DictShape || $shape instanceof RecordShape || $shape instanceof OpaqueShape || $shape instanceof UnknownShape) {
             return null;
         }
 

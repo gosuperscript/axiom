@@ -29,7 +29,7 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(StaticSource::class)]
 #[CoversClass(SymbolSource::class)]
 #[CoversClass(Coerce::class)]
-#[UsesClass(\Superscript\Axiom\Sources\Ascription::class)]
+#[CoversClass(\Superscript\Axiom\Sources\Ascription::class)]
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(UnaryExpression::class)]
 #[CoversClass(MemberAccessSource::class)]
@@ -120,6 +120,13 @@ class DescribableTest extends TestCase
         $source = new Coerce(new NumberType(), new UndescribableSource());
 
         $this->assertSame('UndescribableSource (as number)', $source->describe());
+    }
+
+    #[Test]
+    public function an_ascription_describes_as_a_claim(): void
+    {
+        $source = new \Superscript\Axiom\Sources\Ascription(new NumberType(), new SymbolSource('blob'));
+        $this->assertSame('blob (is number)', $source->describe());
     }
 
     #[Test]

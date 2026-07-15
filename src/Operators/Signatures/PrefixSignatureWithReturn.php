@@ -18,11 +18,10 @@ final readonly class PrefixSignatureWithReturn
     ) {}
 
     /**
-     * The closure receives a value the operand type asserted. A plain
-     * return value is wrapped in Ok; a returned Result passes through; a
-     * throw propagates (see {@see PrefixSignature::evaluate()}).
-     *
-     * @param callable(mixed): mixed $evaluation
+     * The closure receives a value of the declared operand type — the
+     * compiler proved it, so it may take it natively. A plain return value
+     * is wrapped in Ok; a returned Result passes through; a throw
+     * propagates ({@see \Superscript\Axiom\Operators\ResolvedOperation}).
      */
     public function evaluate(callable $evaluation): PrefixSignature
     {

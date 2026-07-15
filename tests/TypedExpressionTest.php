@@ -8,9 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Boundary;
-use Superscript\Axiom\Context;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
@@ -18,12 +16,9 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOverloader;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\InfixResolver;
-use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\SymbolResolver;
-use Superscript\Axiom\Resolvers\UnaryResolver;
+use Superscript\Axiom\Program;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -37,58 +32,64 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
+/**
+ * The typed surface end to end: declarations as the public signature, the
+ * boundary as the one runtime type check, extensions as full dialect
+ * citizens — all through compile() and the Program it returns.
+ */
 #[CoversClass(Expression::class)]
+#[CoversClass(Program::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
 #[CoversClass(Boundary::class)]
 #[CoversClass(BoundaryViolation::class)]
-#[UsesClass(Bindings::class)]
-#[UsesClass(Context::class)]
+#[UsesClass(\Superscript\Axiom\Bindings::class)]
+#[UsesClass(\Superscript\Axiom\CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Runtime::class)]
+#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
-#[UsesClass(DelegatingResolver::class)]
-#[UsesClass(StaticResolver::class)]
-#[UsesClass(SymbolResolver::class)]
-#[UsesClass(InfixResolver::class)]
-#[UsesClass(UnaryResolver::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(UnaryExpression::class)]
 #[UsesClass(MemberAccessSource::class)]
-#[UsesClass(\Superscript\Axiom\Resolvers\MemberAccessResolver::class)]
+#[UsesClass(MatchExpression::class)]
+#[UsesClass(MatchArm::class)]
+#[UsesClass(LiteralPattern::class)]
+#[UsesClass(WildcardPattern::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\DefaultOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\BinaryOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\LogicalOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NullOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[UsesClass(ResolvedOperation::class)]
 #[UsesClass(Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeOrder::class)]
+#[UsesClass(TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
@@ -97,6 +98,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(StringType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
+#[UsesClass(\Superscript\Axiom\Types\UnionType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
@@ -106,36 +108,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\ExpressionMatcher::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\LiteralMatcher::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Patterns\WildcardMatcher::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Resolvers\MatchResolver::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\LiteralPattern::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\MatchArm::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\MatchExpression::class)]
 final class TypedExpressionTest extends TestCase
 {
-    private function resolver(): DelegatingResolver
-    {
-        $resolver = new DelegatingResolver([
-            StaticSource::class => StaticResolver::class,
-            SymbolSource::class => SymbolResolver::class,
-            InfixExpression::class => InfixResolver::class,
-            UnaryExpression::class => UnaryResolver::class,
-            MemberAccessSource::class => \Superscript\Axiom\Resolvers\MemberAccessResolver::class,
-            MatchExpression::class => \Superscript\Axiom\Resolvers\MatchResolver::class,
-        ]);
-
-        $resolver->instance(\Superscript\Axiom\Resolvers\MatchResolver::class, new \Superscript\Axiom\Resolvers\MatchResolver($resolver, [
-            new \Superscript\Axiom\Patterns\WildcardMatcher(),
-            new \Superscript\Axiom\Patterns\LiteralMatcher(),
-            new \Superscript\Axiom\Patterns\ExpressionMatcher($resolver),
-        ]));
-
-        return $resolver;
-    }
-
     private function gate(): Expression
     {
         // quote.turnover > 500000
@@ -145,7 +119,6 @@ final class TypedExpressionTest extends TestCase
                 operator: '>',
                 right: new StaticSource(500000),
             ),
-            resolver: $this->resolver(),
             declarations: ['quote.turnover' => new NumberType()],
         );
     }
@@ -163,23 +136,22 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function the_boundary_coerces_declared_inputs_before_evaluation(): void
     {
-        // A stringly CSV cell — Phase 0's honest arithmetic would refuse it
-        // mid-expression; the boundary converts it before evaluation begins.
-        $result = ($this->gate())(['quote.turnover' => '600000']);
+        // A stringly CSV cell — the honest arithmetic rows would never see
+        // it; the boundary converts it before evaluation begins.
+        $program = $this->gate()->compile()->unwrap();
 
-        $this->assertTrue($result->unwrap()->unwrap());
+        $this->assertTrue($program(['quote.turnover' => '600000'])->unwrap()->unwrap());
     }
 
     #[Test]
     public function boundary_violations_are_aggregated_and_named(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('a'),
-            resolver: $this->resolver(),
             declarations: ['a' => new NumberType(), 'b' => new NumberType()],
-        );
+        ))->compile()->unwrap();
 
-        $result = $expression(['a' => 'garbage']);
+        $result = $program(['a' => 'garbage']);
 
         $violation = $result->unwrapErr();
         $this->assertInstanceOf(BoundaryViolation::class, $violation);
@@ -191,12 +163,11 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function assert_mode_refuses_what_coerce_would_convert(): void
     {
-        $strict = new Expression(
+        $strict = (new Expression(
             source: new SymbolSource('turnover'),
-            resolver: $this->resolver(),
             declarations: ['turnover' => new NumberType()],
             boundary: Boundary::Assert,
-        );
+        ))->compile()->unwrap();
 
         $this->assertStringContainsString('binding [turnover]:', $strict(['turnover' => '600000'])->unwrapErr()->getMessage());
         $this->assertSame(600000, $strict(['turnover' => 600000])->unwrap()->unwrap());
@@ -205,48 +176,28 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function an_option_declared_input_may_be_missing_or_null(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('note'),
-            resolver: $this->resolver(),
             declarations: ['note' => new OptionType(new StringType())],
-        );
+        ))->compile()->unwrap();
 
-        $this->assertTrue($expression([])->unwrap()->isNone());
-        $this->assertTrue($expression(['note' => null])->unwrap()->isNone());
-        $this->assertSame('hi', $expression(['note' => 'hi'])->unwrap()->unwrap());
+        $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertTrue($program(['note' => null])->unwrap()->isNone());
+        $this->assertSame('hi', $program(['note' => 'hi'])->unwrap()->unwrap());
     }
 
     #[Test]
     public function a_required_input_that_reads_as_missing_is_a_violation(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('name'),
-            resolver: $this->resolver(),
             declarations: ['name' => new StringType()],
-        );
+        ))->compile()->unwrap();
 
         // '' coerces to absence — required-but-missing at the boundary.
-        $result = $expression(['name' => '']);
+        $result = $program(['name' => '']);
 
         $this->assertStringContainsString('reads as missing, but String is required', $result->unwrapErr()->getMessage());
-    }
-
-    #[Test]
-    public function a_symbol_cannot_be_both_declared_and_defined(): void
-    {
-        // Disjoint namespaces: a symbol is a parameter or a derived value,
-        // never both — the collision is a construction error, before any
-        // call. An override is modeled in-language instead: an Option-typed
-        // parameter the definition consults.
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('[rate] is both declared and defined');
-
-        new Expression(
-            source: new SymbolSource('rate'),
-            resolver: $this->resolver(),
-            definitions: new Definitions(['rate' => new StaticSource(1.2)]),
-            declarations: ['rate' => new NumberType()],
-        );
     }
 
     #[Test]
@@ -259,13 +210,14 @@ final class TypedExpressionTest extends TestCase
         // definition (the second-opinion finding, closed structurally).
         $expression = new Expression(
             source: new SymbolSource('turnover', 'customer'),
-            resolver: $this->resolver(),
             definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
             declarations: ['customer' => new RecordType(['name' => new StringType()])],
         );
 
-        $this->assertSame(1, $expression(['customer' => ['name' => 'Ada']])->unwrap()->unwrap());
-        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $expression->infer()->unwrap());
+        $program = $expression->compile()->unwrap();
+
+        $this->assertSame(1, $program(['customer' => ['name' => 'Ada']])->unwrap()->unwrap());
+        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $program->returns);
     }
 
     #[Test]
@@ -276,26 +228,25 @@ final class TypedExpressionTest extends TestCase
             'note' => new OptionType(new StringType()),
         ]);
 
-        $expression = new Expression(
+        $program = (new Expression(
             source: new InfixExpression(
                 left: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
                 operator: '*',
                 right: new StaticSource(2),
             ),
-            resolver: $this->resolver(),
             declarations: ['customer' => $record],
-        );
+        ))->compile()->unwrap();
 
         // The whole record coerces at the boundary ('2' → 2, missing
         // optional note canonicalizes) and member access — the one
         // structural path — reads the coerced record's field.
-        $this->assertSame(4, $expression(['customer' => ['turnover' => '2']])->unwrap()->unwrap());
+        $this->assertSame(4, $program(['customer' => ['turnover' => '2']])->unwrap()->unwrap());
 
         // Statically, the member access types as the record's field.
-        $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
 
         // Field errors are named under the input.
-        $bad = $expression(['customer' => ['turnover' => 'lots']]);
+        $bad = $program(['customer' => ['turnover' => 'lots']]);
         $this->assertStringContainsString('binding [customer]:', $bad->unwrapErr()->getMessage());
     }
 
@@ -306,9 +257,8 @@ final class TypedExpressionTest extends TestCase
         // the override is an explicit, typed, optional parameter and the
         // derived value consults it — both paths certified, nothing
         // implicit. rate = match rateOverride { null => 1.2, _ => override }
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('rate'),
-            resolver: $this->resolver(),
             definitions: new Definitions([
                 'rate' => new MatchExpression(
                     subject: new SymbolSource('rateOverride'),
@@ -319,75 +269,56 @@ final class TypedExpressionTest extends TestCase
                 ),
             ]),
             declarations: ['rateOverride' => new OptionType(new NumberType())],
-        );
+        ))->compile()->unwrap();
 
-        $this->assertSame(1.2, $expression()->unwrap()->unwrap());
-        $this->assertSame(2.5, $expression(['rateOverride' => 2.5])->unwrap()->unwrap());
+        $this->assertSame(1.2, $program()->unwrap()->unwrap());
+        $this->assertSame(2.5, $program(['rateOverride' => 2.5])->unwrap()->unwrap());
     }
 
     #[Test]
     public function cyclic_definitions_are_a_compile_diagnostic(): void
     {
         // Termination is a graph property of the Definitions alone — no
-        // declaration can repair it, because the runtime follows definition
-        // edges whenever a binding is absent.
+        // declaration can repair it. And because invocation lives only on
+        // the compiled Program, a cyclic program is not merely diagnosed:
+        // it is unrunnable.
         $expression = new Expression(
             source: new SymbolSource('a'),
-            resolver: $this->resolver(),
             definitions: new Definitions([
                 'a' => new SymbolSource('b'),
                 'b' => new SymbolSource('a'),
             ]),
         );
 
-        $result = $expression->infer();
+        $result = $expression->compile();
 
+        $this->assertTrue($result->isErr());
         $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
     }
 
     #[Test]
-    public function cyclic_definitions_err_at_runtime_instead_of_recursing(): void
+    public function an_absence_policy_extension_is_a_type_function_that_refuses_present_pairs(): void
     {
-        // The backstop for hosts that never run check(): re-entrant symbol
-        // resolution is a named error, not unbounded recursion.
-        $expression = new Expression(
-            source: new SymbolSource('a'),
-            resolver: $this->resolver(),
-            definitions: new Definitions([
-                'a' => new SymbolSource('b'),
-                'b' => new SymbolSource('a'),
-            ]),
-        );
-
-        $result = $expression();
-
-        $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Cyclic symbol definition [a]', $result->unwrapErr()->getMessage());
-    }
-
-    #[Test]
-    public function extensions_contribute_rules_and_specializations_win_ties(): void
-    {
+        // Absence-as-zero, spelled honestly under ambiguity refusal: the
+        // rule resolves ONLY operand types where a side can be absent, so
+        // core's (Number, Number) row keeps sole ownership of present
+        // pairs and no operand types ever have two owners.
         $absenceAsZero = new class implements OperatorOverloader {
-            public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+            public function resolve(string $operator, Type $left, Type $right): Result
             {
-                return $operator === '+' && ($left === null xor $right === null);
-            }
+                if ($operator !== '+') {
+                    return Err(new TypeMismatch('Absence-as-zero only resolves [+].', unhandled: true));
+                }
 
-            public function evaluate(mixed $left, mixed $right, string $operator): Result
-            {
-                return Ok(($left ?? 0) + ($right ?? 0));
-            }
+                if (!($left->shape() instanceof OptionShape) && !($right->shape() instanceof OptionShape)) {
+                    return Err(new TypeMismatch('Present pairs belong to the core row.'));
+                }
 
-            public function handles(string $operator): bool
-            {
-                return $operator === '+';
-            }
-
-            public function typeOf(string $operator, Type $left, Type $right): Result
-            {
-                return Ok(new NumberType());
+                return Ok(new ResolvedOperation(
+                    new NumberType(),
+                    fn(?float $l, ?float $r) => ($l ?? 0) + ($r ?? 0),
+                ));
             }
         };
 
@@ -400,87 +331,35 @@ final class TypedExpressionTest extends TestCase
             }
         };
 
-        $expression = new Expression(
+        $program = (new Expression(
             source: new InfixExpression(
                 left: new SymbolSource('maybe'),
                 operator: '+',
                 right: new StaticSource(2),
             ),
-            resolver: $this->resolver(),
             dialect: Dialect::core()->with($extension),
             declarations: ['maybe' => new OptionType(new NumberType())],
-        );
+        ))->compile()->unwrap();
 
-        // Runtime and checker consume the same dialect: absence-as-zero
-        // evaluates AND certifies, through one composed list.
-        $this->assertSame(2, $expression([])->unwrap()->unwrap());
-        $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
+        // The compiled program embeds the extension's resolution: absence
+        // evaluates as zero AND certifies, through one composed dialect.
+        $this->assertSame(2.0, $program([])->unwrap()->unwrap());
+        $this->assertSame(5.0, $program(['maybe' => 3])->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]
-    public function duplicate_literal_registrations_are_loud(): void
-    {
-        $money = fn() => new class extends Extension {
-            public function literals(): array
-            {
-                return [\DateTimeImmutable::class => fn(object $value) => new NumberType()];
-            }
-        };
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('registered by two extensions');
-
-        Dialect::core()->with($money(), $money());
-    }
-
-    #[Test]
-    public function the_core_dialect_carries_every_core_rule(): void
-    {
-        $dialect = Dialect::core();
-
-        // The null rule (first in the stack) and the unary rules survive
-        // composition — removal of any is observable here.
-        $this->assertNull($dialect->operators()->evaluate(null, null, '+')->unwrap());
-        $this->assertFalse($dialect->unaryOperators()->evaluate(true, '!')->unwrap());
-        $this->assertSame(-5, $dialect->unaryOperators()->evaluate(5, '-')->unwrap());
-    }
-
-    #[Test]
-    public function extension_composition_preserves_the_whole_core_stack(): void
-    {
-        $empty = new class extends Extension {};
-        $dialect = Dialect::core()->with($empty);
-
-        $this->assertNull($dialect->operators()->evaluate(null, null, '+')->unwrap());
-        $this->assertSame(3, $dialect->operators()->evaluate(1, 2, '+')->unwrap());
-        $this->assertTrue($dialect->operators()->evaluate('a', ['a'], 'in')->unwrap());
-        $this->assertTrue($dialect->operators()->evaluate(['a'], 'a', 'has')->unwrap());
-        $this->assertFalse($dialect->unaryOperators()->evaluate(true, '!')->unwrap());
-        $this->assertSame(-5, $dialect->unaryOperators()->evaluate(5, '-')->unwrap());
-    }
-
-    #[Test]
-    public function extension_unary_rules_reach_the_resolver_through_the_dialect(): void
+    public function extension_unary_rules_reach_the_compiler_through_the_dialect(): void
     {
         $absValue = new class implements UnaryOverloader {
-            public function supportsOverloading(mixed $operand, string $operator): bool
+            public function resolve(string $operator, Type $operand): Result
             {
-                return $operator === 'abs' && (is_int($operand) || is_float($operand));
-            }
+                if ($operator !== 'abs') {
+                    return Err(new TypeMismatch('Only [abs].', unhandled: true));
+                }
 
-            public function evaluate(mixed $operand, string $operator): Result
-            {
-                return Ok(abs($operand));
-            }
-
-            public function handles(string $operator): bool
-            {
-                return $operator === 'abs';
-            }
-
-            public function typeOf(string $operator, Type $operand): Result
-            {
-                return Ok(new NumberType());
+                return \Superscript\Axiom\Types\TypeRelations::admits($operand, new NumberType())
+                    ->map(fn() => new ResolvedOperation(new NumberType(), fn(int|float $n) => abs($n)));
             }
         };
 
@@ -493,16 +372,13 @@ final class TypedExpressionTest extends TestCase
             }
         };
 
-        $expression = new Expression(
+        $program = (new Expression(
             source: new UnaryExpression('abs', new StaticSource(-7)),
-            resolver: $this->resolver(),
             dialect: Dialect::core()->with($extension),
-        );
+        ))->compile()->unwrap();
 
-        // Runtime and checker both see the extension's unary rule — one
-        // dialect wired into the resolver graph and the inference alike.
-        $this->assertSame(7, $expression()->unwrap()->unwrap());
-        $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
+        $this->assertSame(7, $program()->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]
@@ -520,44 +396,31 @@ final class TypedExpressionTest extends TestCase
             }
         };
 
-        $expression = new Expression(
+        $program = (new Expression(
             source: new InfixExpression(
                 left: new SymbolSource('greeting'),
                 operator: '++',
                 right: new StaticSource('!'),
             ),
-            resolver: $this->resolver(),
             dialect: Dialect::core()->with($extension),
             declarations: ['greeting' => new StringType()],
-        );
+        ))->compile()->unwrap();
 
-        // One declared row, both faces: the evaluator dispatches it and the
-        // checker certifies it, through the same composed dialect.
-        $this->assertSame('hi!', $expression(['greeting' => 'hi'])->unwrap()->unwrap());
-        $this->assertInstanceOf(StringType::class, $expression->infer()->unwrap());
-    }
-
-    #[Test]
-    public function a_plain_resolver_works_without_dialect_wiring(): void
-    {
-        $expression = new Expression(
-            source: new StaticSource(42),
-            resolver: new StaticResolver(),
-        );
-
-        $this->assertSame(42, $expression()->unwrap()->unwrap());
+        // One declared row, one verdict: the compiler certifies it and the
+        // program runs its closure.
+        $this->assertSame('hi!', $program(['greeting' => 'hi'])->unwrap()->unwrap());
+        $this->assertInstanceOf(StringType::class, $program->returns);
     }
 
     #[Test]
     public function boundary_violations_carry_the_banner(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('a'),
-            resolver: $this->resolver(),
             declarations: ['a' => new NumberType()],
-        );
+        ))->compile()->unwrap();
 
-        $message = $expression([])->unwrapErr()->getMessage();
+        $message = $program([])->unwrapErr()->getMessage();
 
         $this->assertStringStartsWith("Bindings rejected at the boundary:\n- ", $message);
     }
@@ -565,16 +428,15 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function violations_after_a_skipped_optional_input_are_still_reported(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('b'),
-            resolver: $this->resolver(),
             declarations: [
                 'a' => new OptionType(new StringType()),   // missing, fine — must not end the sweep
                 'b' => new NumberType(),
             ],
-        );
+        ))->compile()->unwrap();
 
-        $result = $expression(['b' => 'garbage']);
+        $result = $program(['b' => 'garbage']);
 
         $this->assertStringContainsString('binding [b]:', $result->unwrapErr()->getMessage());
     }
@@ -582,16 +444,15 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function violations_after_a_reads_as_missing_input_are_still_reported(): void
     {
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('a'),
-            resolver: $this->resolver(),
             declarations: [
                 'a' => new StringType(),   // '' reads as missing → violation, sweep continues
                 'b' => new NumberType(),   // absent → violation
             ],
-        );
+        ))->compile()->unwrap();
 
-        $violation = $expression(['a' => ''])->unwrapErr();
+        $violation = $program(['a' => ''])->unwrapErr();
 
         $this->assertInstanceOf(BoundaryViolation::class, $violation);
         $this->assertCount(2, $violation->violations);
@@ -602,53 +463,11 @@ final class TypedExpressionTest extends TestCase
     {
         // Definitions flatten one namespace level, so a declared key may
         // carry dots in its name part: ns + 'deep.key'.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('deep.key', 'ns'),
-            resolver: $this->resolver(),
             declarations: ['ns.deep.key' => new NumberType()],
-        );
+        ))->compile()->unwrap();
 
-        $this->assertSame(5, $expression(['ns.deep.key' => '5'])->unwrap()->unwrap());
-    }
-
-    #[Test]
-    public function a_manually_bound_overloader_is_inert_because_the_dialect_rides_the_context(): void
-    {
-        // The legacy configuration path: an overloader bound directly on the
-        // resolver container. It used to win at runtime while the checker
-        // read the dialect — the exact miscomposition the RFC forbids. Now
-        // the rules travel with each call, so the binding is dead weight.
-        $hijacker = new class implements OperatorOverloader {
-            public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
-            {
-                return true;
-            }
-
-            public function evaluate(mixed $left, mixed $right, string $operator): Result
-            {
-                return Ok('hijacked');
-            }
-
-            public function handles(string $operator): bool
-            {
-                return true;
-            }
-
-            public function typeOf(string $operator, Type $left, Type $right): Result
-            {
-                return Ok(new StringType());
-            }
-        };
-
-        $resolver = $this->resolver();
-        $resolver->instance(OperatorOverloader::class, $hijacker);
-
-        $expression = new Expression(
-            source: new InfixExpression(new StaticSource(1), '+', new StaticSource(2)),
-            resolver: $resolver,
-        );
-
-        $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
-        $this->assertSame(3, $expression()->unwrap()->unwrap());
+        $this->assertSame(5, $program(['ns.deep.key' => '5'])->unwrap()->unwrap());
     }
 }

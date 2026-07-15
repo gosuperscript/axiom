@@ -11,55 +11,35 @@ use Superscript\Monads\Result\Result;
 use Psl\Vec;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
-class InOverloader implements OperatorOverloader
+/**
+ * The mirror of [has]: `needle(s) in haystack` — the right side must be a
+ * present list, the left a needle (or list of needles) with absence
+ * tolerated, element overlap required. Membership is value equality
+ * ({@see ValueEquality}), never PHP's string-comparing array_intersect.
+ */
+final readonly class InOverloader implements OperatorOverloader
 {
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+    /** @return Result<ResolvedOperation, TypeMismatch> */
+    public function resolve(string $operator, Type $left, Type $right): Result
     {
-        return $operator === 'in'
-            && is_array($right) && array_is_list($right)
-            && ($left === null || is_scalar($left) || (is_array($left) && array_is_list($left)));
-    }
-
-    /**
-     * Membership is value equality ({@see ValueEquality}), never PHP's
-     * string-comparing array_intersect.
-     *
-     * @param list<mixed> $right
-     * @param 'in' $operator
-     * @return Result<bool, never>
-     */
-    public function evaluate(mixed $left, mixed $right, string $operator): Result
-    {
-        $left = Vec\filter_nulls(is_array($left) ? $left : [$left]);
-        $right = Vec\filter_nulls($right);
-
-        if ($left === []) {
-            return Ok(false);
+        if ($operator !== 'in') {
+            return Err(new TypeMismatch(sprintf('Membership does not resolve [%s].', $operator), unhandled: true));
         }
 
-        return Ok(array_all($left, fn(mixed $needle) => ValueEquality::contains($right, $needle)));
-    }
+        return SetOperands::membership($right, $left, $operator, listSide: 'right')
+            ->map(fn(Type $returns) => new ResolvedOperation($returns, function (mixed $left, array $right): bool {
+                // The native array type is the resolution's proof: the right
+                // operand type is a present list.
+                $haystack = Vec\filter_nulls($right);
 
-    public function handles(string $operator): bool
-    {
-        return $operator === 'in';
-    }
+                $needles = Vec\filter_nulls(is_array($left) ? $left : [$left]);
 
-    /**
-     * The mirror of [has]: the right side must be a present list, the left
-     * a needle (or list of needles), absence tolerated, element overlap
-     * required.
-     *
-     * @return Result<Type, TypeMismatch>
-     */
-    public function typeOf(string $operator, Type $left, Type $right): Result
-    {
-        if (!$this->handles($operator)) {
-            return Err(new TypeMismatch(sprintf('Membership does not handle [%s].', $operator)));
-        }
+                if ($needles === []) {
+                    return false;
+                }
 
-        return SetOperands::membership($right, $left, $operator, listSide: 'right');
+                return array_all($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
+            }));
     }
 }

@@ -5,32 +5,42 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
-use Superscript\Axiom\Operators\BinaryOverloader;
-use Superscript\Axiom\Operators\ComparisonOverloader;
+use Superscript\Axiom\Operators\EqualityOverloader;
 use Superscript\Axiom\Operators\HasOverloader;
 use Superscript\Axiom\Operators\InOverloader;
 use Superscript\Axiom\Operators\IntersectsOverloader;
-use Superscript\Axiom\Operators\LogicalOverloader;
-use Superscript\Axiom\Operators\NegateOverloader;
-use Superscript\Axiom\Operators\NotOverloader;
-use Superscript\Axiom\Operators\NullOverloader;
+use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Operators\Signatures\InfixSignature;
+use Superscript\Axiom\Operators\Signatures\PrefixSignature;
 use Superscript\Axiom\Operators\UnaryOverloader;
 use Superscript\Axiom\Operators\UnaryOverloaderManager;
+use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralTypeRegistry;
+use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeDescriber;
+use Superscript\Axiom\Types\TypeRelations;
+
+use function Superscript\Monads\Result\attempt;
 
 /**
  * The operator rules live in exactly one place. A Dialect composes the
- * binary rules, the unary rules, and the literal registry; the evaluator
- * and the checker consume the same instance, so checking with different
- * rules than you run with stops being representable in the API a normal
- * host touches.
+ * binary rules, the unary rules, and the literal registry, and is consumed
+ * at compile time only: the compiler resolves every operator node against
+ * it and binds the resolutions into the Program, so there is nothing at
+ * runtime to miscompose.
  *
- * Packages contribute through {@see Extension}: extension rules prepend
- * core's (specialization wins ties — rare and deliberate under the honesty
- * contract); duplicate literal registrations are loud errors.
+ * Most core rules are dispatch-table rows (the signature builder's
+ * output); equality and the set operators are type functions. Ambiguity is
+ * refused at the earliest moment it exists: two rows for the same operator
+ * with overlapping operand types are a construction error here, and any
+ * remaining multi-resolution is a compile error in the manager. List order
+ * decides nothing.
+ *
+ * Packages contribute through {@see Extension}; duplicate literal
+ * registrations are loud errors.
  */
 final readonly class Dialect
 {
@@ -43,23 +53,51 @@ final readonly class Dialect
         private array $binaryRules,
         private array $unaryRules,
         private array $literalMappings,
-    ) {}
+    ) {
+        self::assertUnambiguousRows($this->binaryRules, $this->unaryRules);
+    }
 
     public static function core(): self
     {
+        $number = new NumberType();
+        $boolean = new BooleanType();
+
         return new self(
             binaryRules: [
-                new NullOverloader(),
-                new BinaryOverloader(),
-                new ComparisonOverloader(),
+                Operator::infix('+')->signature($number, $number)->returns($number)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left + $right),
+                Operator::infix('-')->signature($number, $number)->returns($number)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left - $right),
+                Operator::infix('*')->signature($number, $number)->returns($number)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left * $right),
+                Operator::infix('/')->signature($number, $number)->returns($number)
+                    ->evaluate(fn(int|float $left, int|float $right) => attempt(fn() => $left / $right)),
+                Operator::infix('<')->signature($number, $number)->returns($boolean)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left < $right),
+                Operator::infix('<=')->signature($number, $number)->returns($boolean)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left <= $right),
+                Operator::infix('>')->signature($number, $number)->returns($boolean)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left > $right),
+                Operator::infix('>=')->signature($number, $number)->returns($boolean)
+                    ->evaluate(fn(int|float $left, int|float $right) => $left >= $right),
+                Operator::infix('&&')->signature($boolean, $boolean)->returns($boolean)
+                    ->evaluate(fn(bool $left, bool $right) => $left && $right),
+                Operator::infix('||')->signature($boolean, $boolean)->returns($boolean)
+                    ->evaluate(fn(bool $left, bool $right) => $left || $right),
+                Operator::infix('xor')->signature($boolean, $boolean)->returns($boolean)
+                    ->evaluate(fn(bool $left, bool $right) => $left xor $right),
+                new EqualityOverloader(),
                 new HasOverloader(),
                 new InOverloader(),
-                new LogicalOverloader(),
                 new IntersectsOverloader(),
             ],
             unaryRules: [
-                new NotOverloader(),
-                new NegateOverloader(),
+                Operator::prefix('!')->signature($boolean)->returns($boolean)
+                    ->evaluate(fn(bool $operand) => !$operand),
+                Operator::prefix('not')->signature($boolean)->returns($boolean)
+                    ->evaluate(fn(bool $operand) => !$operand),
+                Operator::prefix('-')->signature($number)->returns($number)
+                    ->evaluate(fn(int|float $operand) => -$operand),
             ],
             literalMappings: [],
         );
@@ -103,5 +141,56 @@ final readonly class Dialect
     public function literals(): LiteralTypeRegistry
     {
         return new LiteralTypeRegistry($this->literalMappings);
+    }
+
+    /**
+     * Rows are statically comparable, so a dialect refuses two rows for the
+     * same operator whose operand types overlap — some value pair would be
+     * claimed by both, and which evaluation runs must never depend on
+     * anything but the types.
+     *
+     * @param list<OperatorOverloader> $binaryRules
+     * @param list<UnaryOverloader> $unaryRules
+     */
+    private static function assertUnambiguousRows(array $binaryRules, array $unaryRules): void
+    {
+        $infixRows = array_values(array_filter($binaryRules, fn(OperatorOverloader $rule) => $rule instanceof InfixSignature));
+
+        foreach ($infixRows as $index => $row) {
+            foreach (array_slice($infixRows, $index + 1) as $other) {
+                if (
+                    $row->operator === $other->operator
+                    && TypeRelations::overlaps($row->left, $other->left)->isOk()
+                    && TypeRelations::overlaps($row->right, $other->right)->isOk()
+                ) {
+                    throw new InvalidArgumentException(sprintf(
+                        'The dialect is ambiguous: two [%s] rows overlap — (%s, %s) and (%s, %s) share operand values, and which evaluation runs must never depend on list order.',
+                        $row->operator,
+                        TypeDescriber::describe($row->left),
+                        TypeDescriber::describe($row->right),
+                        TypeDescriber::describe($other->left),
+                        TypeDescriber::describe($other->right),
+                    ));
+                }
+            }
+        }
+
+        $prefixRows = array_values(array_filter($unaryRules, fn(UnaryOverloader $rule) => $rule instanceof PrefixSignature));
+
+        foreach ($prefixRows as $index => $row) {
+            foreach (array_slice($prefixRows, $index + 1) as $other) {
+                if (
+                    $row->operator === $other->operator
+                    && TypeRelations::overlaps($row->operand, $other->operand)->isOk()
+                ) {
+                    throw new InvalidArgumentException(sprintf(
+                        'The dialect is ambiguous: two unary [%s] rows overlap — %s and %s share operand values, and which evaluation runs must never depend on list order.',
+                        $row->operator,
+                        TypeDescriber::describe($row->operand),
+                        TypeDescriber::describe($other->operand),
+                    ));
+                }
+            }
+        }
     }
 }

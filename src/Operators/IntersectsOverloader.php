@@ -17,45 +17,19 @@ use Psl\Vec;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
-class IntersectsOverloader implements OperatorOverloader
+/**
+ * Set intersection: either side may be a list or a scalar, absence is
+ * tolerated (the evaluation wraps and filters), and the element types must
+ * overlap. Intersection is value equality ({@see ValueEquality}), never
+ * PHP's string-comparing array_intersect.
+ */
+final readonly class IntersectsOverloader implements OperatorOverloader
 {
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+    /** @return Result<ResolvedOperation, TypeMismatch> */
+    public function resolve(string $operator, Type $left, Type $right): Result
     {
-        return $operator === 'intersects'
-            && ($left === null || is_scalar($left) || (is_array($left) && array_is_list($left)))
-            && ($right === null || is_scalar($right) || (is_array($right) && array_is_list($right)));
-    }
-
-    /**
-     * Intersection is value equality ({@see ValueEquality}), never PHP's
-     * string-comparing array_intersect.
-     *
-     * @param 'intersects' $operator
-     * @return Result<bool, never>
-     */
-    public function evaluate(mixed $left, mixed $right, string $operator): Result
-    {
-        $left = Vec\filter_nulls(is_array($left) ? $left : [$left]);
-        $right = Vec\filter_nulls(is_array($right) ? $right : [$right]);
-
-        return Ok(array_any($left, fn(mixed $needle) => ValueEquality::contains($right, $needle)));
-    }
-
-    public function handles(string $operator): bool
-    {
-        return $operator === 'intersects';
-    }
-
-    /**
-     * Either side may be a list or a scalar; absence is tolerated (the
-     * runtime wraps and filters). The element types must overlap.
-     *
-     * @return Result<Type, TypeMismatch>
-     */
-    public function typeOf(string $operator, Type $left, Type $right): Result
-    {
-        if (!$this->handles($operator)) {
-            return Err(new TypeMismatch(sprintf('Intersection does not handle [%s].', $operator)));
+        if ($operator !== 'intersects') {
+            return Err(new TypeMismatch(sprintf('Intersection does not resolve [%s].', $operator), unhandled: true));
         }
 
         $elementLeft = SetOperands::elements($left);
@@ -71,12 +45,19 @@ class IntersectsOverloader implements OperatorOverloader
             )));
         }
 
+        $operation = new ResolvedOperation(new BooleanType(), function (mixed $left, mixed $right): bool {
+            $needles = Vec\filter_nulls(is_array($left) ? $left : [$left]);
+            $haystack = Vec\filter_nulls(is_array($right) ? $right : [$right]);
+
+            return array_any($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
+        });
+
         if ($elementLeft instanceof NeverShape || $elementRight instanceof NeverShape) {
-            return Ok(new BooleanType());
+            return Ok($operation);
         }
 
         return TypeRelations::shapesOverlap($elementLeft, $elementRight)
-            ->map(fn() => new BooleanType())
+            ->map(fn() => $operation)
             ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
                 sprintf('[%s] between %s and %s can never hold.', $operator, TypeDescriber::describe($left), TypeDescriber::describe($right)),
                 [$cause],

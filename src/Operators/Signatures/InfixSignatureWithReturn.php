@@ -20,11 +20,11 @@ final readonly class InfixSignatureWithReturn
     ) {}
 
     /**
-     * The closure receives values both operand types asserted. A plain
-     * return value is wrapped in Ok; a returned Result passes through; a
-     * throw propagates (see {@see InfixSignature::evaluate()}).
-     *
-     * @param callable(mixed, mixed): mixed $evaluation
+     * The closure receives values of the declared operand types — the
+     * compiler proved them, so it may take them natively (`fn (Carbon $l,
+     * Period $r) => …`). A plain return value is wrapped in Ok; a returned
+     * Result passes through (value-dependent partiality); a throw
+     * propagates ({@see \Superscript\Axiom\Operators\ResolvedOperation}).
      */
     public function evaluate(callable $evaluation): InfixSignature
     {

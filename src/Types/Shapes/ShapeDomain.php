@@ -13,11 +13,12 @@ namespace Superscript\Axiom\Types\Shapes;
  *
  * The traversal owns the composite constructors — a union is claimed only
  * when every member is (one supported branch certifies nothing), an option
- * adds only null, containers recurse element-wise, Unknown passes (the
- * sanctioned gradual hole), Never passes vacuously — and delegates every
- * remaining head (scalars, literals, opaques) to the rule's leaf predicate.
- * Option is transparent here, so a rule whose runtime rejects null must not
- * route option-bearing operands through this traversal.
+ * adds only null, containers recurse element-wise, Unknown fails (its
+ * values are unknowable, so no total claim over them is possible — inert
+ * Unknown has no gradual hole here), Never passes vacuously — and delegates
+ * every remaining head (scalars, literals, opaques) to the rule's leaf
+ * predicate. Option is transparent here, so a rule whose evaluation rejects
+ * null must not route option-bearing operands through this traversal.
  */
 final class ShapeDomain
 {
@@ -26,7 +27,11 @@ final class ShapeDomain
      */
     public static function all(Shape $shape, callable $leaf): bool
     {
-        if ($shape instanceof UnknownShape || $shape instanceof NeverShape) {
+        if ($shape instanceof UnknownShape) {
+            return false;
+        }
+
+        if ($shape instanceof NeverShape) {
             return true;
         }
 

@@ -9,14 +9,14 @@ use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
 
 /**
  * The front door for declaring operator rules: a signature is a row in a
- * dispatch table, and one declaration yields both semantics — the runtime
- * claim (strict membership on the declared operand types) and the static
- * verdict (admissibility against the same types) — so the honesty contract
- * holds by construction instead of by discipline.
+ * dispatch table — one declaration of operand ownership, compiled to a
+ * one-verdict rule (admissibility against the declared types; success
+ * carries the declared return type and evaluation).
  *
- * Rules that need more than a row — overlap-based verdicts, dead findings,
- * return types computed from operand types — implement
- * {@see OperatorOverloader}/{@see UnaryOverloader} directly.
+ * Rules that need more than a row — verdicts computed from the operand
+ * types, dead findings, absence-tolerant claims — implement
+ * {@see OperatorOverloader}/{@see UnaryOverloader} directly: one method,
+ * one obligation (the evaluation is total over the types it resolves for).
  */
 final readonly class Operator
 {

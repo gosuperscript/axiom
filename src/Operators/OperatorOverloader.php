@@ -9,47 +9,32 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
 /**
- * A binary operator rule owning both semantics: evaluate() is the runtime
- * face, typeOf() the static face. Co-location is the drift guarantee — a
- * semantics change and its typing rule are one diff.
- *
- * Honesty contract: supportsOverloading() must claim only values this rule
- * owns. Operator-only dispatch shadows every rule listed after it and hides
- * semantics from the static layer.
+ * A binary operator rule: one verdict carrying both semantics. resolve()
+ * is asked once, with types, at compile time — a compiled program never
+ * dispatches on values, so there is no second face to keep in agreement.
  */
 interface OperatorOverloader
 {
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool;
-
-    /** @return Result<mixed, \Throwable> */
-    public function evaluate(mixed $left, mixed $right, string $operator): Result;
-
     /**
-     * Which operators this rule types — the static face of the operator
-     * dimension of supportsOverloading().
+     * Does this rule own $operator over these operand types — and if so,
+     * what does it return and how does it evaluate?
+     *
+     * Contract (certification): Ok(ResolvedOperation) means this rule
+     * certifies these operand types — the evaluation is total over every
+     * value pair of them (value-dependent partiality remains: division by
+     * zero is a runtime error, certified or not) and its result inhabits
+     * the returned type. Err(TypeMismatch) refuses: mark the mismatch
+     * `unhandled` when the operator itself is not this rule's (so composed
+     * diagnostics can skip it), and `dead` when the operation is statically
+     * meaningless though well-formed (a comparison that can never hold).
+     *
+     * Absence is THIS rule's concern: a rule whose evaluation cannot take
+     * null refuses Option operands (which falls out of admits()); a rule
+     * that tolerates absence resolves them and its closure handles null.
+     * There is no Unknown hole: an Unknown operand is refused — the author
+     * bridges with Coerce or Ascription.
+     *
+     * @return Result<ResolvedOperation, TypeMismatch>
      */
-    public function handles(string $operator): bool;
-
-    /**
-     * The return type for operands of these types.
-     *
-     * Contract (certification): Ok(T) means this rule certifies these
-     * operand types — every value pair it claims and successfully evaluates
-     * produces a T (value-dependent partiality remains: division by zero is
-     * a runtime error, certified or not), and the values it does not claim
-     * are another rule's to cover (within a composed dialect, total coverage
-     * is what the agreement harness checks). Err(TypeMismatch) means this
-     * rule does not certify these operand types: values of them would fall
-     * outside its runtime claims, or the operation is statically meaningless
-     * though runtime-tolerated (a dead mismatch — see TypeMismatch::$dead).
-     *
-     * Absence is THIS rule's concern: a rule whose runtime rejects null
-     * refuses Option operands (which falls out of admits()); a rule that
-     * substitutes zero admits them; a rule whose result can be absent says
-     * so in its return type. The only sanctioned unsoundness is Unknown:
-     * gradual admission deliberately certifies what it cannot check.
-     *
-     * @return Result<Type, TypeMismatch>
-     */
-    public function typeOf(string $operator, Type $left, Type $right): Result;
+    public function resolve(string $operator, Type $left, Type $right): Result;
 }

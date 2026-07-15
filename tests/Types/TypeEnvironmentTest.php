@@ -8,7 +8,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\Bindings;
+use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -20,40 +22,47 @@ use Superscript\Axiom\Types\TypeInference;
 #[CoversClass(TypeEnvironment::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
+#[UsesClass(Bindings::class)]
+#[UsesClass(Runtime::class)]
+#[UsesClass(\Superscript\Axiom\CompiledNode::class)]
+#[UsesClass(Dialect::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
-#[UsesClass(DefaultOverloader::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\BinaryOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\LogicalOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NullOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
-#[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 final class TypeEnvironmentTest extends TestCase
 {
-    private static function inference(): TypeInference
+    private static function compiler(): TypeInference
     {
-        return new TypeInference(new DefaultOverloader());
+        $dialect = Dialect::core();
+
+        return new TypeInference($dialect->operators(), $dialect->unaryOperators(), $dialect->literals());
     }
 
     #[Test]
@@ -61,9 +70,27 @@ final class TypeEnvironmentTest extends TestCase
     {
         $environment = new TypeEnvironment(declarations: ['turnover' => new NumberType()]);
 
-        $result = $environment->typeOfSymbol('turnover', null, self::inference());
+        $result = $environment->nodeOfSymbol('turnover', null, self::compiler());
 
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+        $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
+    }
+
+    #[Test]
+    public function a_declared_symbol_evaluates_by_reading_its_binding(): void
+    {
+        $environment = new TypeEnvironment(declarations: ['turnover' => new NumberType()]);
+        $node = $environment->nodeOfSymbol('turnover', null, self::compiler())->unwrap();
+
+        $bound = ($node->evaluate)(new Runtime(new Bindings(['turnover' => 600000])));
+        $this->assertSame(600000, $bound->unwrap()->unwrap());
+
+        // A bound null is still a bound key, but its value is honestly
+        // absent: one representation of null in the resolution channel.
+        $null = ($node->evaluate)(new Runtime(new Bindings(['turnover' => null])));
+        $this->assertTrue($null->unwrap()->isNone());
+
+        $missing = ($node->evaluate)(new Runtime(new Bindings()));
+        $this->assertTrue($missing->unwrap()->isNone());
     }
 
     #[Test]
@@ -71,13 +98,13 @@ final class TypeEnvironmentTest extends TestCase
     {
         $environment = new TypeEnvironment(declarations: ['customer.turnover' => new NumberType()]);
 
-        $result = $environment->typeOfSymbol('turnover', 'customer', self::inference());
+        $result = $environment->nodeOfSymbol('turnover', 'customer', self::compiler());
 
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+        $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
     }
 
     #[Test]
-    public function a_derived_symbol_is_inferred_through_the_symbol_graph(): void
+    public function a_derived_symbol_compiles_through_the_symbol_graph(): void
     {
         $environment = new TypeEnvironment(
             definitions: new Definitions([
@@ -90,22 +117,55 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->typeOfSymbol('derived', null, self::inference());
+        $result = $environment->nodeOfSymbol('derived', null, self::compiler());
 
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+        $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
+        $this->assertSame(6, ($result->unwrap()->evaluate)(new Runtime())->unwrap()->unwrap());
     }
 
     #[Test]
-    public function inferred_symbol_types_are_memoized(): void
+    public function compiled_symbols_are_memoized(): void
     {
         $environment = new TypeEnvironment(
             definitions: new Definitions(['base' => new StaticSource(2)]),
         );
 
-        $first = $environment->typeOfSymbol('base', null, self::inference());
-        $second = $environment->typeOfSymbol('base', null, self::inference());
+        $first = $environment->nodeOfSymbol('base', null, self::compiler());
+        $second = $environment->nodeOfSymbol('base', null, self::compiler());
 
         $this->assertSame($first, $second);
+    }
+
+    #[Test]
+    public function a_definition_evaluates_lazily_and_at_most_once_per_invocation(): void
+    {
+        $counting = new class implements \Superscript\Axiom\TypedSource {
+            public int $evaluations = 0;
+
+            public function compile(TypeEnvironment $environment, TypeInference $compiler): \Superscript\Monads\Result\Result
+            {
+                return \Superscript\Monads\Result\Ok(new \Superscript\Axiom\CompiledNode(
+                    new NumberType(),
+                    function (Runtime $runtime) {
+                        $this->evaluations++;
+
+                        return \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(2));
+                    },
+                ));
+            }
+        };
+
+        $environment = new TypeEnvironment(
+            definitions: new Definitions([
+                'base' => $counting,
+                'derived' => new InfixExpression(new SymbolSource('base'), '+', new SymbolSource('base')),
+            ]),
+        );
+
+        $node = $environment->nodeOfSymbol('derived', null, self::compiler())->unwrap();
+
+        $this->assertSame(4, ($node->evaluate)(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(1, $counting->evaluations, 'both references read one memoized slot');
     }
 
     #[Test]
@@ -118,14 +178,14 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->typeOfSymbol('a', null, self::inference());
+        $result = $environment->nodeOfSymbol('a', null, self::compiler());
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
     }
 
     #[Test]
-    public function completed_inferences_leave_no_trace_in_the_cycle_chain(): void
+    public function completed_compilations_leave_no_trace_in_the_cycle_chain(): void
     {
         $environment = new TypeEnvironment(
             definitions: new Definitions([
@@ -134,9 +194,9 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $this->assertTrue($environment->typeOfSymbol('x', null, self::inference())->isOk());
+        $this->assertTrue($environment->nodeOfSymbol('x', null, self::compiler())->isOk());
 
-        $cycle = $environment->typeOfSymbol('a', null, self::inference());
+        $cycle = $environment->nodeOfSymbol('a', null, self::compiler());
 
         $this->assertSame('Cyclic symbol definition: a → a.', $cycle->unwrapErr()->message);
     }
@@ -151,22 +211,9 @@ final class TypeEnvironmentTest extends TestCase
             'customer' => new \Superscript\Axiom\Types\RecordType(['turnover' => new NumberType()]),
         ]);
 
-        $result = $environment->typeOfSymbol('turnover', 'customer', self::inference());
+        $result = $environment->nodeOfSymbol('turnover', 'customer', self::compiler());
 
         $this->assertStringContainsString('Unbound symbol [customer.turnover]', $result->unwrapErr()->describe());
-    }
-
-    #[Test]
-    public function a_declaration_answers_the_typing_question_as_a_leaf(): void
-    {
-        // Disjoint namespaces (enforced by Expression at construction) make
-        // a declared symbol a true leaf: no definition can sit under it, so
-        // the declaration is the whole answer to the typing question.
-        $environment = new TypeEnvironment(
-            declarations: ['rate' => new NumberType()],
-        );
-
-        $this->assertInstanceOf(NumberType::class, $environment->typeOfSymbol('rate', null, self::inference())->unwrap());
     }
 
     #[Test]
@@ -174,7 +221,7 @@ final class TypeEnvironmentTest extends TestCase
     {
         $environment = new TypeEnvironment();
 
-        $result = $environment->typeOfSymbol('ghost', 'customer', self::inference());
+        $result = $environment->nodeOfSymbol('ghost', 'customer', self::compiler());
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Unbound symbol [customer.ghost]', $result->unwrapErr()->message);

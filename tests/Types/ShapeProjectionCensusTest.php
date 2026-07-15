@@ -65,6 +65,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(UnionShape::class)]
 #[UsesClass(UnknownShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 final class ShapeProjectionCensusTest extends TestCase
 {
     /**
@@ -132,6 +134,63 @@ final class ShapeProjectionCensusTest extends TestCase
         yield 'record with optional field' => [
             new RecordType(['note' => new OptionType(new StringType())]),
             ['note' => null],
+        ];
+    }
+
+    /**
+     * The admission-honesty law, promoted from bug-class to census law by
+     * the sixth round: for every type, whatever coerce() emits must pass
+     * the same type's assert(). Compile-then-trust rests entirely on this —
+     * a value that crosses a boundary IS its declared type from then on,
+     * and nothing downstream ever re-checks it. The DictType::coerce([1,2])
+     * finding is the exact hole this pins shut, generatively.
+     */
+    #[Test]
+    #[DataProvider('census')]
+    public function coerce_output_always_passes_assert(Type $type, string $shape): void
+    {
+        foreach (self::rawInputs() as $label => $input) {
+            $coerced = $type->coerce($input);
+
+            if ($coerced->isErr() || $coerced->unwrap()->isNone()) {
+                continue; // refusals and absence readings emit no value
+            }
+
+            $value = $coerced->unwrap()->unwrap();
+
+            $this->assertTrue(
+                $type->assert($value)->isOk(),
+                sprintf(
+                    'Admission honesty: coerce(%s) emitted a value the type\'s own assert refuses — the boundary would admit garbage past a certified program',
+                    $label,
+                ),
+            );
+        }
+
+        $this->addToAssertionCount(1);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function rawInputs(): array
+    {
+        return [
+            'null' => null,
+            'true' => true,
+            'false' => false,
+            'int' => 5,
+            'float' => 2.5,
+            'numeric string' => '5',
+            'empty string' => '',
+            'the string null' => 'null',
+            'plain string' => 'shop',
+            'empty array' => [],
+            'list' => [1, 2],
+            'string list' => ['a', 'b'],
+            'dict' => ['a' => 1],
+            'record-ish' => ['name' => 'Ada', 'age' => 36, 'note' => 'hi', 'extra' => true],
+            'object' => new \stdClass(),
         ];
     }
 }

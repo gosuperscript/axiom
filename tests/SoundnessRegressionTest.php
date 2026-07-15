@@ -12,18 +12,7 @@ use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
-use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Operators\Operator;
-use Superscript\Axiom\Patterns\ExpressionMatcher;
-use Superscript\Axiom\Patterns\LiteralMatcher;
-use Superscript\Axiom\Patterns\WildcardMatcher;
-use Superscript\Axiom\Resolvers\CoerceResolver;
-use Superscript\Axiom\Resolvers\DelegatingResolver;
-use Superscript\Axiom\Resolvers\InfixResolver;
-use Superscript\Axiom\Resolvers\MatchResolver;
-use Superscript\Axiom\Resolvers\StaticResolver;
-use Superscript\Axiom\Resolvers\SymbolResolver;
-use Superscript\Axiom\Resolvers\UnaryResolver;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -49,11 +38,13 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * End-to-end pinning of the second-opinion review findings (RFC 0001,
- * fourth and fifth resolved-questions rounds): every scenario asserts the
- * static verdict AND the runtime outcome, because the PR's central
- * guarantee — what the checker certifies is what the evaluator does —
- * lives exactly at that agreement. Cycle detection and declared∧defined
+ * End-to-end pinning of the review findings (RFC 0001, fourth through
+ * sixth resolved-questions rounds): every scenario asserts the static
+ * verdict AND the runtime outcome, because the PR's central guarantee —
+ * what the checker certifies is what the program does — lives exactly at
+ * that agreement. Under compile-then-trust the two faces meet in one
+ * place: a refused program has no runtime outcome at all, which is the
+ * strongest agreement there is. Cycle detection and declared∧defined
  * collisions are pinned in TypedExpressionTest; the boundary-stripping
  * behavior in ExpressionTest; list-bounds validation in ListTypeTest and
  * ShapeTest. Open records are gone from the vocabulary entirely, so their
@@ -62,26 +53,6 @@ use function Superscript\Monads\Result\Ok;
 #[CoversNothing]
 final class SoundnessRegressionTest extends TestCase
 {
-    private function resolver(): DelegatingResolver
-    {
-        $resolver = new DelegatingResolver([
-            StaticSource::class => StaticResolver::class,
-            SymbolSource::class => SymbolResolver::class,
-            InfixExpression::class => InfixResolver::class,
-            UnaryExpression::class => UnaryResolver::class,
-            MatchExpression::class => MatchResolver::class,
-            Coerce::class => CoerceResolver::class,
-        ]);
-
-        $resolver->instance(MatchResolver::class, new MatchResolver($resolver, [
-            new WildcardMatcher(),
-            new LiteralMatcher(),
-            new ExpressionMatcher($resolver),
-        ]));
-
-        return $resolver;
-    }
-
     /**
      * A host-owned opaque domain type, the documented pattern: real
      * membership check, OpaqueShape projection.
@@ -129,11 +100,12 @@ final class SoundnessRegressionTest extends TestCase
                 subject: new StaticSource(5),
                 arms: [new MatchArm(new LiteralPattern(5.0), new StaticSource('ok'))],
             ),
-            resolver: $this->resolver(),
         );
 
-        $this->assertTrue($expression->infer()->isOk(), 'statically exhaustive');
-        $this->assertSame('ok', $expression()->unwrap()->unwrap(), 'and the runtime agrees');
+        $program = $expression->compile();
+
+        $this->assertTrue($program->isOk(), 'statically exhaustive');
+        $this->assertSame('ok', $program->unwrap()->call()->unwrap()->unwrap(), 'and the program agrees');
     }
 
     #[Test]
@@ -142,23 +114,23 @@ final class SoundnessRegressionTest extends TestCase
         // Finding 2: ['customer' => ['turnover' => 42]] used to shadow the
         // customer.turnover definition through descent, past the top-level
         // shadowing check. Undeclared keys are stripped now.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('turnover', 'customer'),
-            resolver: $this->resolver(),
             definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
-        );
+        ))->compile()->unwrap();
 
-        $this->assertSame('derived', $expression()->unwrap()->unwrap());
-        $this->assertSame('derived', $expression(['customer' => ['turnover' => 42]])->unwrap()->unwrap());
+        $this->assertSame('derived', $program()->unwrap()->unwrap());
+        $this->assertSame('derived', $program(['customer' => ['turnover' => 42]])->unwrap()->unwrap());
     }
 
     #[Test]
-    public function expressions_sharing_a_resolver_each_run_their_own_dialect(): void
+    public function each_program_embeds_its_own_dialect_resolutions(): void
     {
-        // Finding 3: the runtime stack lived on the resolver, so of two
-        // expressions sharing one resolver, whoever wired it first decided
-        // what BOTH ran — while each checked its own dialect. The dialect
-        // rides the Context now.
+        // Finding 3, twice removed: the runtime stack first lived on a
+        // shared resolver (whoever wired it first decided what BOTH
+        // expressions ran), then rode the per-call Context. Compilation
+        // ends the question: each program embeds what its own dialect
+        // resolved, and there is no dispatch left to miscompose.
         $concatenation = new class extends Extension {
             public function operators(): array
             {
@@ -171,27 +143,23 @@ final class SoundnessRegressionTest extends TestCase
             }
         };
 
-        $resolver = $this->resolver();
-
-        $numeric = new Expression(
+        $numeric = (new Expression(
             source: new InfixExpression(new StaticSource(1), '+', new StaticSource(2)),
-            resolver: $resolver,
-        );
+        ))->compile()->unwrap();
 
-        $textual = new Expression(
+        $textual = (new Expression(
             source: new InfixExpression(new StaticSource('a'), '+', new StaticSource('b')),
-            resolver: $resolver,
             dialect: Dialect::core()->with($concatenation),
-        );
+        ))->compile()->unwrap();
 
-        $this->assertInstanceOf(NumberType::class, $numeric->infer()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $numeric->returns);
         $this->assertSame(3, $numeric()->unwrap()->unwrap());
 
-        $this->assertInstanceOf(StringType::class, $textual->infer()->unwrap());
+        $this->assertInstanceOf(StringType::class, $textual->returns);
         $this->assertSame('ab', $textual()->unwrap()->unwrap());
 
-        // Order independence: the first expression still runs core rules
-        // after the second was constructed and evaluated.
+        // Order independence: the first program still runs core rules
+        // after the second was compiled and evaluated.
         $this->assertSame(3, $numeric()->unwrap()->unwrap());
     }
 
@@ -201,72 +169,57 @@ final class SoundnessRegressionTest extends TestCase
         // Finding 4: overlaps(List, Dict) said "no shared values" — a dead
         // verdict falsified by [] == [] → true. The empty array inhabits
         // both types, so the comparison is live.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new InfixExpression(new SymbolSource('xs'), '==', new SymbolSource('ys')),
-            resolver: $this->resolver(),
             declarations: [
                 'xs' => new ListType(new NumberType()),
                 'ys' => new DictType(new NumberType()),
             ],
-        );
+        ))->compile();
+
+        $this->assertTrue($program->isOk(), 'a live comparison, not a dead one');
 
         // The default coercing boundary admits [] as an empty dict (the
         // faces agree on the value domain), so no Assert workaround here.
-        $this->assertFalse($expression->infer()->isErr(), 'a live comparison, not a dead one');
-        $this->assertTrue($expression(['xs' => [], 'ys' => []])->unwrap()->unwrap());
-        $this->assertFalse($expression(['xs' => [1], 'ys' => ['a' => 1]])->unwrap()->unwrap());
+        $this->assertTrue($program->unwrap()->call(['xs' => [], 'ys' => []])->unwrap()->unwrap());
+        $this->assertFalse($program->unwrap()->call(['xs' => [1], 'ys' => ['a' => 1]])->unwrap()->unwrap());
     }
 
     #[Test]
-    public function opaque_equality_is_refused_statically_exactly_as_the_runtime_refuses_it(): void
+    public function opaque_equality_is_refused_at_compile_time_so_no_program_exists_to_crash(): void
     {
         // Finding 5a: two Opaque<money> operands type-checked as Boolean
-        // (overlap held) while the runtime rejects objects — a certified
-        // crash. The totality guard refuses what the runtime never claims.
+        // (overlap held) while the runtime rejected objects — a certified
+        // crash. The totality guard refuses what value equality never
+        // claims — and with invocation living only on Program, the refusal
+        // leaves nothing to run.
         $money = $this->moneyType();
 
-        $expression = new Expression(
+        $verdict = (new Expression(
             source: new InfixExpression(new SymbolSource('a'), '==', new SymbolSource('b')),
-            resolver: $this->resolver(),
             declarations: ['a' => $money, 'b' => $money],
-            boundary: Boundary::Assert,
-        );
+        ))->compile();
 
-        $verdict = $expression->infer();
-
-        $this->assertTrue($verdict->isErr(), 'refused statically');
-        $this->assertFalse($verdict->unwrapErr()->dead, 'unsupported, not dead: the runtime errs rather than evaluating constantly');
+        $this->assertTrue($verdict->isErr(), 'refused at compile time');
+        $this->assertFalse($verdict->unwrapErr()->dead, 'unsupported, not dead: no rule owns object equality here');
         $this->assertStringContainsString('object equality belongs to the rule that owns the type', $verdict->unwrapErr()->describe());
-
-        $outcome = $expression(['a' => new \stdClass(), 'b' => new \stdClass()]);
-
-        $this->assertTrue($outcome->isErr(), 'and the runtime refuses identically');
-        $this->assertStringContainsString('No overloader found', $outcome->unwrapErr()->getMessage());
     }
 
     #[Test]
-    public function a_union_needle_with_an_unclaimed_branch_is_refused_statically(): void
+    public function a_union_needle_with_an_unclaimed_branch_is_refused_at_compile_time(): void
     {
         // Finding 5b: needle: Number | Dict<Number> in List<Number> was
         // certified on the strength of the Number branch alone; a
         // dict-valued needle crashed. Union judgment is universal now —
-        // the author narrows with match.
-        $expression = new Expression(
+        // the author narrows with match — and the refused program cannot
+        // be constructed, let alone run.
+        $verdict = (new Expression(
             source: new InfixExpression(new SymbolSource('needle'), 'in', new StaticSource([1, 2, 3])),
-            resolver: $this->resolver(),
             declarations: ['needle' => new UnionType(new NumberType(), new DictType(new NumberType()))],
-            boundary: Boundary::Assert,
-        );
+        ))->compile();
 
-        $verdict = $expression->infer();
-
-        $this->assertTrue($verdict->isErr(), 'refused statically');
+        $this->assertTrue($verdict->isErr(), 'refused at compile time');
         $this->assertStringContainsString('The needle of [in] must be a scalar or a list', $verdict->unwrapErr()->describe());
-
-        $outcome = $expression(['needle' => ['a' => 1]]);
-
-        $this->assertTrue($outcome->isErr(), 'the unclaimed branch errs at runtime, exactly as the checker warned');
-        $this->assertStringContainsString('No overloader found', $outcome->unwrapErr()->getMessage());
     }
 
     #[Test]
@@ -275,15 +228,12 @@ final class SoundnessRegressionTest extends TestCase
         // Finding 7a: Union(Option<Number>, String) has canonical shape
         // (Number | String)? but admit() tested instanceof OptionType and
         // demanded the input. Required-ness follows the projection now.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('x'),
-            resolver: $this->resolver(),
             declarations: ['x' => new UnionType(new OptionType(new NumberType()), new StringType())],
-        );
+        ))->compile()->unwrap();
 
-        $this->assertTrue($expression->infer()->isOk());
-
-        $outcome = $expression([]);
+        $outcome = $program([]);
 
         $this->assertTrue($outcome->isOk(), 'a missing optional input is legal absence, not a boundary error');
         $this->assertTrue($outcome->unwrap()->isNone());
@@ -293,19 +243,16 @@ final class SoundnessRegressionTest extends TestCase
     public function unary_optionality_propagates_through_an_option_shaped_union(): void
     {
         // Finding 7b: Union(Option<Number>, Number) canonicalizes to
-        // Number?, but inferUnary tested instanceof OptionType and refused.
-        // Optionality now follows the projection: -x is Number?.
-        $expression = new Expression(
+        // Number?, but the unary rule tested instanceof OptionType and
+        // refused. Optionality follows the projection: -x is Number?.
+        $program = (new Expression(
             source: new UnaryExpression(operator: '-', operand: new SymbolSource('x')),
-            resolver: $this->resolver(),
             declarations: ['x' => new UnionType(new OptionType(new NumberType()), new NumberType())],
-        );
+        ))->compile()->unwrap();
 
-        $inferred = $expression->infer()->unwrap();
-
-        $this->assertTrue(TypeRelations::areEquivalent($inferred, new OptionType(new NumberType()))->isOk());
-        $this->assertSame(-5, $expression(['x' => 5])->unwrap()->unwrap());
-        $this->assertTrue($expression([])->unwrap()->isNone(), 'absence propagates instead of erroring');
+        $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new NumberType()))->isOk());
+        $this->assertSame(-5, $program(['x' => 5])->unwrap()->unwrap());
+        $this->assertTrue($program([])->unwrap()->isNone(), 'absence propagates instead of erroring');
     }
 
     #[Test]
@@ -313,16 +260,15 @@ final class SoundnessRegressionTest extends TestCase
     {
         // Finding 8: null infers as Option<Never>, and covers(Never) fell
         // through to false — a vacuously exhaustive match was rejected.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new MatchExpression(
                 subject: new StaticSource(null),
                 arms: [new MatchArm(new LiteralPattern(null), new StaticSource('ok'))],
             ),
-            resolver: $this->resolver(),
-        );
+        ))->compile();
 
-        $this->assertTrue($expression->infer()->isOk(), 'Never is vacuously covered');
-        $this->assertSame('ok', $expression()->unwrap()->unwrap());
+        $this->assertTrue($program->isOk(), 'Never is vacuously covered');
+        $this->assertSame('ok', $program->unwrap()->call()->unwrap()->unwrap());
     }
 
     #[Test]
@@ -330,22 +276,21 @@ final class SoundnessRegressionTest extends TestCase
     {
         // Fifth round, finding 1: Coerce(Number, '') + 1 certified Number
         // statically while the runtime passed None through, crashing later
-        // with "No overloader found for [null] + [1]". Inference still
+        // with "No overloader found for [null] + [1]". Compilation still
         // takes the declared type verbatim (the boundary is statically
-        // opaque by design); the runtime face now errs at the node, by
-        // name, instead of leaking absence into a certified expression.
+        // opaque by design); the evaluation errs at the node, by name,
+        // instead of leaking absence into a certified expression.
         $expression = new Expression(
             source: new InfixExpression(
                 left: new Coerce(new NumberType(), new StaticSource('')),
                 operator: '+',
                 right: new StaticSource(1),
             ),
-            resolver: $this->resolver(),
         );
 
         $this->assertTrue($expression->check(new NumberType())->isOk(), 'still certified Number');
 
-        $outcome = $expression();
+        $outcome = $expression->compile()->unwrap()->call();
 
         $this->assertTrue($outcome->isErr());
         $this->assertStringContainsString('reads as missing, but Number is required', $outcome->unwrapErr()->getMessage());
@@ -359,15 +304,13 @@ final class SoundnessRegressionTest extends TestCase
         // could answer a symbol lookup the checker refuses, shadowing a
         // definition (999 beat 1). Symbols are exact keys now: the
         // definition is the only reading, statically and at runtime.
-        $expression = new Expression(
+        $program = (new Expression(
             source: new SymbolSource('turnover', 'customer'),
-            resolver: $this->resolver(),
             definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
             declarations: ['customer' => new DictType(new NumberType())],
-        );
+        ))->compile()->unwrap();
 
-        $this->assertTrue($expression->infer()->isOk(), 'the definition types the symbol');
-        $this->assertSame(1, $expression(['customer' => ['turnover' => 999]])->unwrap()->unwrap());
+        $this->assertSame(1, $program(['customer' => ['turnover' => 999]])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -377,17 +320,18 @@ final class SoundnessRegressionTest extends TestCase
         // (PHP re-normalizes stringified numeric keys), so the default
         // boundary admitted a value the certified Dict's own assert
         // refuses. Both faces now agree: lists are rejected, and [] is an
-        // empty dict rather than an absence reading.
-        $expression = new Expression(
+        // empty dict rather than an absence reading. Under compile-then-
+        // trust this agreement is the entire trust chain — see the
+        // admission-honesty law in the shape census.
+        $program = (new Expression(
             source: new SymbolSource('d'),
-            resolver: $this->resolver(),
             declarations: ['d' => new DictType(new NumberType())],
-        );
+        ))->compile()->unwrap();
 
-        $rejected = $expression(['d' => [1, 2]]);
+        $rejected = $program(['d' => [1, 2]]);
         $this->assertStringContainsString('binding [d]:', $rejected->unwrapErr()->getMessage());
 
-        $this->assertSame([], $expression(['d' => []])->unwrap()->unwrap(), '[] is a value of the type, not absence');
+        $this->assertSame([], $program(['d' => []])->unwrap()->unwrap(), '[] is a value of the type, not absence');
     }
 
     #[Test]
@@ -396,17 +340,28 @@ final class SoundnessRegressionTest extends TestCase
         // Fifth round, finding 5: overlaps(List, Record{}) said dead while
         // [] == [] evaluates true — the same one-value-two-types theorem
         // as list/dict. The empty record's canonical member is exactly [].
-        $expression = new Expression(
+        $program = (new Expression(
             source: new InfixExpression(new SymbolSource('xs'), '==', new SymbolSource('r')),
-            resolver: $this->resolver(),
             declarations: [
                 'xs' => new ListType(new NumberType()),
                 'r' => new \Superscript\Axiom\Types\RecordType([]),
             ],
-        );
+        ))->compile();
 
-        $this->assertFalse($expression->infer()->isErr(), 'a live comparison, not a dead one');
-        $this->assertTrue($expression(['xs' => [], 'r' => []])->unwrap()->unwrap());
-        $this->assertFalse($expression(['xs' => [1], 'r' => []])->unwrap()->unwrap());
+        $this->assertTrue($program->isOk(), 'a live comparison, not a dead one');
+        $this->assertTrue($program->unwrap()->call(['xs' => [], 'r' => []])->unwrap()->unwrap());
+        $this->assertFalse($program->unwrap()->call(['xs' => [1], 'r' => []])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_unchecked_program_is_unrepresentable(): void
+    {
+        // Sixth round, the keystone: invocation lives only on Program, and
+        // the only way to a Program is a compile() that succeeded. The
+        // value-directed dispatch that used to double-check every operator
+        // at runtime existed because evaluation could not assume a check —
+        // now it can, structurally.
+        $this->assertFalse(method_exists(Expression::class, 'call'));
+        $this->assertFalse(method_exists(Expression::class, '__invoke'));
     }
 }

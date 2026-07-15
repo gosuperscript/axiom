@@ -4,200 +4,164 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
-use stdClass;
-use Superscript\Axiom\Operators\BinaryOverloader;
-use Superscript\Axiom\Operators\ComparisonOverloader;
-use Superscript\Axiom\Operators\DefaultOverloader;
-use Superscript\Axiom\Operators\NullOverloader;
 use Superscript\Axiom\Operators\OperatorOverloader;
 use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\UnknownType;
 use Superscript\Monads\Result\Result;
-use Webmozart\Assert\InvalidArgumentException;
 
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(OverloaderManager::class)]
-#[UsesClass(DefaultOverloader::class)]
-#[UsesClass(BinaryOverloader::class)]
-#[UsesClass(ComparisonOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\LogicalOverloader::class)]
-#[UsesClass(NullOverloader::class)]
-#[UsesClass(NumberType::class)]
+#[UsesClass(ResolvedOperation::class)]
 #[UsesClass(BooleanType::class)]
+#[UsesClass(NumberType::class)]
 #[UsesClass(StringType::class)]
-#[UsesClass(UnknownType::class)]
 #[UsesClass(TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
-class OverloaderManagerTest extends TestCase
+final class OverloaderManagerTest extends TestCase
 {
     /**
-     * A stub rule certifying one operator with a fixed return type.
+     * A rule that resolves one operator over one operand type class.
      */
-    private static function rule(string $operator, Type $returns): OperatorOverloader
+    private static function rule(string $operator, string $operandClass, Type $returns, mixed $result): OperatorOverloader
     {
-        return new class($operator, $returns) implements OperatorOverloader {
-            public function __construct(private readonly string $operator, private readonly Type $returns) {}
+        return new class($operator, $operandClass, $returns, $result) implements OperatorOverloader {
+            public function __construct(
+                private readonly string $operator,
+                private readonly string $operandClass,
+                private readonly Type $returns,
+                private readonly mixed $result,
+            ) {}
 
-            public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+            public function resolve(string $operator, Type $left, Type $right): Result
             {
-                return $operator === $this->operator;
-            }
+                if ($operator !== $this->operator) {
+                    return Err(new TypeMismatch(sprintf('This rule does not resolve [%s].', $operator), unhandled: true));
+                }
 
-            public function evaluate(mixed $left, mixed $right, string $operator): Result
-            {
-                return Ok(null);
-            }
+                if (!$left instanceof $this->operandClass || !$right instanceof $this->operandClass) {
+                    return Err(new TypeMismatch(sprintf('[%s] wants two %s.', $this->operator, $this->operandClass)));
+                }
 
-            public function handles(string $operator): bool
-            {
-                return $operator === $this->operator;
-            }
-
-            public function typeOf(string $operator, Type $left, Type $right): Result
-            {
-                return Ok($this->returns);
+                return Ok(new ResolvedOperation($this->returns, fn(mixed $l, mixed $r) => $this->result));
             }
         };
     }
+
     #[Test]
     public function it_asserts_all_overloaders_are_instance_of_interface(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        new OverloaderManager([new stdClass()]);
+
+        /** @phpstan-ignore argument.type */
+        new OverloaderManager(['not a rule']);
     }
 
     #[Test]
-    public function it_evaluates_an_expression_if_an_overloader_is_found(): void
+    public function a_lone_resolution_is_the_verdict(): void
     {
         $manager = new OverloaderManager([
-            new DefaultOverloader(),
+            self::rule('+', NumberType::class, new NumberType(), 3),
+            self::rule('+', StringType::class, new StringType(), 'ab'),
         ]);
 
-        $this->assertTrue($manager->supportsOverloading(1, 1, '+'));
+        $resolution = $manager->resolve('+', new NumberType(), new NumberType())->unwrap();
 
-        $result = $manager->evaluate(1, 1, '+');
-        $this->assertTrue($result->isOk());
-        $this->assertEquals(2, $result->unwrap());
+        $this->assertInstanceOf(NumberType::class, $resolution->returns);
+        $this->assertSame(3, $resolution->evaluate(1, 2)->unwrap());
     }
 
     #[Test]
-    public function it_returns_an_error_if_no_supported_overloader_is_found(): void
-    {
-        $manager = new OverloaderManager([]);
-        $this->assertFalse($manager->supportsOverloading(1, 1, '+'));
-
-        $result = $manager->evaluate(1, 1, '+');
-        $this->assertTrue($result->isErr());
-        $this->assertInstanceOf(RuntimeException::class, $result->unwrapErr());
-        $this->assertEquals('No overloader found for [1] + [1]', $result->unwrapErr()->getMessage());
-    }
-
-    #[Test]
-    public function it_handles_an_operator_when_any_member_does(): void
-    {
-        $manager = new OverloaderManager([new BinaryOverloader()]);
-
-        $this->assertTrue($manager->handles('+'));
-        $this->assertFalse($manager->handles('has'));
-    }
-
-    #[Test]
-    public function an_unhandled_operator_is_a_mismatch(): void
-    {
-        $manager = new OverloaderManager([new BinaryOverloader()]);
-
-        $result = $manager->typeOf('has', new NumberType(), new NumberType());
-
-        $this->assertTrue($result->isErr());
-        $this->assertSame('Operator [has] is not supported.', $result->unwrapErr()->message);
-    }
-
-    #[Test]
-    public function agreeing_verdicts_resolve_to_the_agreed_type(): void
+    public function two_resolutions_are_an_ambiguity_error_naming_the_owners(): void
     {
         $manager = new OverloaderManager([
-            self::rule('+', new NumberType()),
-            self::rule('+', new NumberType()),
+            self::rule('+', NumberType::class, new NumberType(), 1),
+            self::rule('+', NumberType::class, new BooleanType(), 2),
         ]);
 
-        $result = $manager->typeOf('+', new NumberType(), new NumberType());
+        $verdict = $manager->resolve('+', new NumberType(), new NumberType());
 
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+        $this->assertTrue($verdict->isErr());
+        $this->assertStringContainsString('Operator [+] over Number and Number is ambiguous:', $verdict->unwrapErr()->message);
+        $this->assertStringContainsString('exactly one owner', $verdict->unwrapErr()->message);
     }
 
     #[Test]
-    public function disagreeing_verdicts_resolve_to_unknown(): void
+    public function an_operator_no_rule_engages_is_unsupported(): void
     {
         $manager = new OverloaderManager([
-            self::rule('-', new NumberType()),
-            self::rule('-', new StringType()),
+            self::rule('+', NumberType::class, new NumberType(), 3),
         ]);
 
-        $result = $manager->typeOf('-', new NumberType(), new NumberType());
+        $verdict = $manager->resolve('has', new NumberType(), new NumberType());
 
-        $this->assertInstanceOf(UnknownType::class, $result->unwrap());
+        $this->assertSame('Operator [has] is not supported.', $verdict->unwrapErr()->message);
+        // Marked unhandled, so a nesting manager keeps it out of its own
+        // aggregated diagnostics.
+        $this->assertTrue($verdict->unwrapErr()->unhandled);
     }
 
     #[Test]
-    public function a_lone_refusal_passes_through_directly(): void
-    {
-        $manager = new OverloaderManager([new BinaryOverloader()]);
-
-        $result = $manager->typeOf('+', new StringType(), new NumberType());
-
-        $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('[+] requires two present numbers', $result->unwrapErr()->message);
-    }
-
-    #[Test]
-    public function multiple_refusals_aggregate_with_causes(): void
-    {
-        $manager = new OverloaderManager([new NullOverloader(), new BinaryOverloader()]);
-
-        $result = $manager->typeOf('+', new StringType(), new NumberType());
-
-        $this->assertTrue($result->isErr());
-        $this->assertSame('No overload of [+] accepts String and Number.', $result->unwrapErr()->message);
-        $this->assertCount(2, $result->unwrapErr()->causes);
-    }
-
-    #[Test]
-    public function a_single_certifying_rule_wins_over_refusing_neighbours(): void
-    {
-        $manager = new OverloaderManager([new NullOverloader(), new BinaryOverloader()]);
-
-        $result = $manager->typeOf('+', new NumberType(), new NumberType());
-
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
-    }
-
-    #[Test]
-    public function non_handlers_are_skipped_without_ending_resolution(): void
+    public function a_lone_engaged_refusal_passes_through_directly(): void
     {
         $manager = new OverloaderManager([
-            new BinaryOverloader(),
-            new \Superscript\Axiom\Operators\LogicalOverloader(),
+            self::rule('+', NumberType::class, new NumberType(), 3),
         ]);
 
-        $result = $manager->typeOf('&&', new BooleanType(), new BooleanType());
+        $verdict = $manager->resolve('+', new StringType(), new StringType());
 
-        $this->assertInstanceOf(BooleanType::class, $result->unwrap());
+        $this->assertSame('[+] wants two ' . NumberType::class . '.', $verdict->unwrapErr()->message);
+    }
+
+    #[Test]
+    public function multiple_engaged_refusals_aggregate_with_causes(): void
+    {
+        $manager = new OverloaderManager([
+            self::rule('+', NumberType::class, new NumberType(), 3),
+            self::rule('+', StringType::class, new StringType(), 'ab'),
+        ]);
+
+        $verdict = $manager->resolve('+', new BooleanType(), new BooleanType());
+
+        $this->assertSame('No overload of [+] accepts Boolean and Boolean.', $verdict->unwrapErr()->message);
+        $this->assertCount(2, $verdict->unwrapErr()->causes);
+        $this->assertFalse($verdict->unwrapErr()->unhandled);
+    }
+
+    #[Test]
+    public function unhandled_refusals_stay_out_of_the_aggregate(): void
+    {
+        $manager = new OverloaderManager([
+            self::rule('-', NumberType::class, new NumberType(), 1),
+            self::rule('+', NumberType::class, new NumberType(), 3),
+            self::rule('+', StringType::class, new StringType(), 'ab'),
+        ]);
+
+        $verdict = $manager->resolve('+', new BooleanType(), new BooleanType());
+
+        // The [-] rule's foreign-operator refusal contributes no cause.
+        $this->assertCount(2, $verdict->unwrapErr()->causes);
+    }
+
+    #[Test]
+    public function a_single_resolving_rule_wins_over_refusing_neighbours(): void
+    {
+        $manager = new OverloaderManager([
+            self::rule('+', StringType::class, new StringType(), 'ab'),
+            self::rule('+', NumberType::class, new NumberType(), 3),
+        ]);
+
+        $this->assertInstanceOf(NumberType::class, $manager->resolve('+', new NumberType(), new NumberType())->unwrap()->returns);
     }
 }

@@ -11,57 +11,39 @@ use Superscript\Monads\Result\Result;
 use Psl\Vec;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
+/**
+ * Membership, list side left: `haystack has needle(s)`. A type function —
+ * the left side must be a present list, the right a needle (or list of
+ * needles) with absence tolerated, and the element types must overlap
+ * (membership that can never hold is dead code). See {@see SetOperands}.
+ *
+ * Membership is value equality ({@see ValueEquality}) — never PHP's
+ * array_intersect, whose string comparison juggles types (true in [1]
+ * must be false).
+ */
 final readonly class HasOverloader implements OperatorOverloader
 {
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool
+    /** @return Result<ResolvedOperation, TypeMismatch> */
+    public function resolve(string $operator, Type $left, Type $right): Result
     {
-        return $operator === 'has'
-            && is_array($left) && array_is_list($left)
-            && ($right === null || is_scalar($right) || (is_array($right) && array_is_list($right)));
-    }
-
-    /**
-     * Membership is value equality ({@see ValueEquality}) — never PHP's
-     * array_intersect, whose string comparison juggles types (true in [1]
-     * must be false).
-     *
-     * @param list<mixed> $left
-     * @return Result<bool, never>
-     */
-    public function evaluate(mixed $left, mixed $right, string $operator): Result
-    {
-        $left = Vec\filter_nulls($left);
-
-        $right = Vec\filter_nulls(is_array($right) ? $right : [$right]);
-
-        if ($right === []) {
-            return Ok(false);
+        if ($operator !== 'has') {
+            return Err(new TypeMismatch(sprintf('Membership does not resolve [%s].', $operator), unhandled: true));
         }
 
-        return Ok(array_all($right, fn(mixed $needle) => ValueEquality::contains($left, $needle)));
-    }
+        return SetOperands::membership($left, $right, $operator, listSide: 'left')
+            ->map(fn(Type $returns) => new ResolvedOperation($returns, function (array $left, mixed $right): bool {
+                // The native array type is the resolution's proof: the left
+                // operand type is a present list.
+                $haystack = Vec\filter_nulls($left);
 
-    public function handles(string $operator): bool
-    {
-        return $operator === 'has';
-    }
+                $needles = Vec\filter_nulls(is_array($right) ? $right : [$right]);
 
-    /**
-     * The left side must be a present list; the right side is a needle (or
-     * a list of needles), absence tolerated. Element types must overlap —
-     * membership that can never hold is dead code. A Never element (the
-     * empty list literal) is vacuously legal: constant false, never an error.
-     *
-     * @return Result<Type, TypeMismatch>
-     */
-    public function typeOf(string $operator, Type $left, Type $right): Result
-    {
-        if (!$this->handles($operator)) {
-            return Err(new TypeMismatch(sprintf('Membership does not handle [%s].', $operator)));
-        }
+                if ($needles === []) {
+                    return false;
+                }
 
-        return SetOperands::membership($left, $right, $operator, listSide: 'left');
+                return array_all($needles, fn(mixed $needle) => ValueEquality::contains($haystack, $needle));
+            }));
     }
 }

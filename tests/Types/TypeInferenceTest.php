@@ -8,7 +8,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\DefaultOverloader;
+use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
@@ -41,12 +42,14 @@ use Superscript\Axiom\Types\UnionType;
 use Superscript\Axiom\Types\UnknownType;
 use Superscript\Monads\Result\Result;
 
+use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(TypeInference::class)]
 #[UsesClass(TypeEnvironment::class)]
+#[UsesClass(CompiledNode::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
-#[UsesClass(DefaultOverloader::class)]
+#[UsesClass(Dialect::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(Coerce::class)]
@@ -73,23 +76,27 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(UnknownType::class)]
 #[UsesClass(TypeDescriber::class)]
 #[UsesClass(TypeMismatch::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeOrder::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(\Superscript\Axiom\Types\OpaqueType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\BinaryOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\ComparisonOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\LogicalOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NullOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\SetOperands::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NotOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\NegateOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\DictShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ListShape::class)]
@@ -101,13 +108,15 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
-#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null): TypeInference
     {
-        return new TypeInference(new DefaultOverloader(), literals: $literals ?? new LiteralTypeRegistry());
+        $dialect = Dialect::core();
+
+        return new TypeInference($dialect->operators(), $dialect->unaryOperators(), $literals ?? $dialect->literals());
     }
 
     private static function env(array $declarations = [], ?\Superscript\Axiom\Definitions $definitions = null): TypeEnvironment
@@ -222,7 +231,7 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function a_type_definition_is_the_authors_override(): void
+    public function a_coercion_over_a_typed_source_is_the_authors_override(): void
     {
         $definition = new Coerce(new NumberType(), new StaticSource(5));
 
@@ -232,13 +241,27 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function a_type_definition_over_an_untypeable_source_is_the_escape_hatch(): void
+    public function a_coercion_over_an_untypeable_static_value_is_the_escape_hatch(): void
     {
+        // A static value the literal registry cannot type still has a total
+        // evaluation — itself — and Coerce discards the inner type anyway.
         $definition = new Coerce(new NumberType(), new StaticSource(new \stdClass()));
 
         $result = self::inference()->infer($definition, self::env());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap());
+    }
+
+    #[Test]
+    public function a_coercion_over_an_uncompilable_expression_propagates_the_error(): void
+    {
+        // The escape hatch is for static VALUES only: an expression inside a
+        // Coerce runs, so it compiles.
+        $definition = new Coerce(new NumberType(), new InfixExpression(new SymbolSource('ghost'), '+', new StaticSource(1)));
+
+        $result = self::inference()->infer($definition, self::env());
+
+        $this->assertStringContainsString('Unbound symbol [ghost]', $result->unwrapErr()->describe());
     }
 
     #[Test]
@@ -332,7 +355,7 @@ final class TypeInferenceTest extends TestCase
         $inference = self::inference();
 
         $refused = $inference->infer(new UnaryExpression('!', new StaticSource(5)), self::env());
-        $this->assertStringContainsString('requires a present boolean', $refused->unwrapErr()->describe());
+        $this->assertStringContainsString('[!] expects Boolean; got 5.', $refused->unwrapErr()->describe());
 
         $operandError = $inference->infer(new UnaryExpression('!', new SymbolSource('ghost')), self::env());
         $this->assertStringContainsString('Unbound symbol [ghost]', $operandError->unwrapErr()->describe());
@@ -372,6 +395,33 @@ final class TypeInferenceTest extends TestCase
         $this->assertTrue($result->isErr());
         $this->assertTrue($result->unwrapErr()->dead);
         $this->assertStringContainsString('can never hold', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_inert_unknown_operand_is_a_compile_error(): void
+    {
+        $env = self::env(declarations: ['blob' => new UnknownType()]);
+
+        $result = self::inference()->infer(
+            new InfixExpression(new SymbolSource('blob'), '+', new StaticSource(1)),
+            $env,
+        );
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('An Unknown operand is inert', $result->unwrapErr()->describe());
+
+        // The bridge: an Ascription re-enters the typed world, and the same
+        // program certifies.
+        $bridged = self::inference()->infer(
+            new InfixExpression(
+                new \Superscript\Axiom\Sources\Ascription(new NumberType(), new SymbolSource('blob')),
+                '+',
+                new StaticSource(1),
+            ),
+            $env,
+        );
+
+        $this->assertInstanceOf(NumberType::class, $bridged->unwrap());
     }
 
     #[Test]
@@ -513,6 +563,39 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
+    public function expression_patterns_are_programs_and_compile_like_everything_else(): void
+    {
+        // Under value-directed evaluation an expression pattern's source ran
+        // completely unchecked. It runs, so it compiles.
+        $result = self::inference()->infer(new MatchExpression(
+            subject: new StaticSource(true),
+            arms: [
+                new MatchArm(new ExpressionPattern(new SymbolSource('ghost')), new StaticSource(1)),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ],
+        ), self::env());
+
+        $this->assertStringContainsString('The pattern of match arm 0 cannot be compiled.', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('Unbound symbol [ghost]', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_unknown_pattern_kind_is_a_compile_error(): void
+    {
+        $foreign = new class implements \Superscript\Axiom\Sources\MatchPattern {};
+
+        $result = self::inference()->infer(new MatchExpression(
+            subject: new StaticSource(true),
+            arms: [
+                new MatchArm($foreign, new StaticSource(1)),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ],
+        ), self::env());
+
+        $this->assertStringContainsString('No pattern rule exists for', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
     public function a_literal_scrutinee_is_exhausted_by_its_own_literal(): void
     {
         $env = self::env(declarations: ['five' => new LiteralType(5)]);
@@ -613,13 +696,22 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function unknown_objects_admit_member_access_gradually(): void
+    public function member_access_on_unknown_is_refused_as_inert(): void
     {
         $env = self::env(declarations: ['blob' => new UnknownType()]);
 
         $result = self::inference()->infer(new MemberAccessSource(new SymbolSource('blob'), 'anything'), $env);
 
-        $this->assertInstanceOf(UnknownType::class, $result->unwrap());
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('Unknown is inert', $result->unwrapErr()->describe());
+
+        // The bridge: ascribe a record type first, then reach in.
+        $bridged = self::inference()->infer(new MemberAccessSource(
+            new \Superscript\Axiom\Sources\Ascription(new RecordType(['anything' => new NumberType()]), new SymbolSource('blob')),
+            'anything',
+        ), $env);
+
+        $this->assertInstanceOf(NumberType::class, $bridged->unwrap());
     }
 
     #[Test]
@@ -632,7 +724,7 @@ final class TypeInferenceTest extends TestCase
         $position = new class implements Type {
             public function assert(mixed $value): Result
             {
-                return Ok(\Superscript\Monads\Option\Some($value));
+                return Ok(Some($value));
             }
 
             public function coerce(mixed $value): Result
@@ -720,28 +812,18 @@ final class TypeInferenceTest extends TestCase
     public function a_dialect_can_inject_its_own_unary_stack(): void
     {
         $numericNot = new class implements \Superscript\Axiom\Operators\UnaryOverloader {
-            public function supportsOverloading(mixed $operand, string $operator): bool
+            public function resolve(string $operator, Type $operand): Result
             {
-                return is_int($operand) && $operator === '!';
-            }
+                if ($operator !== '!') {
+                    return \Superscript\Monads\Result\Err(new TypeMismatch('Foreign.', unhandled: true));
+                }
 
-            public function evaluate(mixed $operand, string $operator): Result
-            {
-                return Ok(-$operand);
-            }
-
-            public function handles(string $operator): bool
-            {
-                return $operator === '!';
-            }
-
-            public function typeOf(string $operator, Type $operand): Result
-            {
-                return Ok(new NumberType());
+                return Ok(new \Superscript\Axiom\Operators\ResolvedOperation(new NumberType(), fn(int $n) => -$n));
             }
         };
 
-        $inference = new TypeInference(new DefaultOverloader(), $numericNot);
+        $dialect = Dialect::core();
+        $inference = new TypeInference($dialect->operators(), $numericNot, $dialect->literals());
 
         $result = $inference->infer(new UnaryExpression('!', new StaticSource(5)), self::env());
 
@@ -749,18 +831,21 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function host_sources_declare_their_own_types(): void
+    public function host_sources_declare_their_type_and_evaluation_in_one_statement(): void
     {
         $source = new class implements TypedSource {
-            public function returnType(TypeEnvironment $environment, TypeInference $inference): Result
+            public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
             {
-                return Ok(new UnknownType());
+                return Ok(new CompiledNode(
+                    new NumberType(),
+                    fn(\Superscript\Axiom\Runtime $runtime) => Ok(Some(42)),
+                ));
             }
         };
 
         $result = self::inference()->infer($source, self::env());
 
-        $this->assertInstanceOf(UnknownType::class, $result->unwrap());
+        $this->assertInstanceOf(NumberType::class, $result->unwrap());
     }
 
     #[Test]
@@ -770,7 +855,7 @@ final class TypeInferenceTest extends TestCase
 
         $result = self::inference()->infer($source, self::env());
 
-        $this->assertStringContainsString('Cannot infer a type for', $result->unwrapErr()->message);
+        $this->assertStringContainsString('Cannot compile [', $result->unwrapErr()->message);
         $this->assertStringContainsString('implement TypedSource', $result->unwrapErr()->message);
     }
 

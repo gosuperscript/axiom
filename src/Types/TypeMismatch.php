@@ -9,12 +9,14 @@ namespace Superscript\Axiom\Types;
  * chain. Relations have exactly two outcomes — Ok, or Err(TypeMismatch);
  * there is no boolean channel.
  *
- * A mismatch is $dead when the operation is runtime-tolerated but
- * statically meaningless — a comparison or membership test that can never
- * hold. Dead mismatches flag probable author bugs; ordinary mismatches
- * flag operations the runtime does not support. The agreement harness
- * exempts dead refusals from its anti-shadowing law for exactly this
- * distinction.
+ * A mismatch is $dead when the operation is well-formed but statically
+ * meaningless — a comparison or membership test that can never hold. Dead
+ * mismatches flag probable author bugs; ordinary mismatches flag
+ * operations no rule resolves.
+ *
+ * A mismatch is $unhandled when a rule refuses an operator that simply is
+ * not its own — the refusal says nothing about the operand types, so the
+ * composing manager keeps it out of aggregated diagnostics.
  */
 final readonly class TypeMismatch
 {
@@ -25,6 +27,7 @@ final readonly class TypeMismatch
         public string $message,
         public array $causes = [],
         public bool $dead = false,
+        public bool $unhandled = false,
     ) {}
 
     public function describe(): string

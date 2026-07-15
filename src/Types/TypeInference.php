@@ -4,16 +4,23 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use Closure;
+use RuntimeException;
+use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOverloader;
-use Superscript\Axiom\Operators\UnaryOverloaderManager;
+use Superscript\Axiom\Operators\ValueEquality;
+use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\Ascription;
+use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchExpression;
+use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Axiom\Sources\MemberAccessSource;
-use Superscript\Axiom\Sources\Ascription;
-use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
@@ -25,49 +32,64 @@ use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
+use Throwable;
 
+use function Superscript\Monads\Option\None;
+use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * Syntax-directed inference over the runtime AST, one rule per node,
- * consuming the evaluator's own overloader stacks — the same composed
- * dialect that will run the program, so static and runtime semantics
- * cannot drift by miscomposition.
+ * The compiler: syntax-directed inference over the runtime AST that also
+ * builds the program. One rule per node computes the node's type and emits
+ * its evaluation, as one {@see CompiledNode} — inference and evaluation
+ * are one walk, so a certified type and the code that runs cannot belong
+ * to different programs.
+ *
+ * Operators resolve through the dialect's composed stacks at compile time;
+ * the resolutions are bound into the nodes and the compiled program never
+ * dispatches on a value again.
  */
 final readonly class TypeInference
 {
-    private UnaryOverloader $unaryOperators;
-
     public function __construct(
         private OperatorOverloader $operators,
-        ?UnaryOverloader $unaryOperators = null,
+        private UnaryOverloader $unaryOperators,
         private LiteralTypeRegistry $literals = new LiteralTypeRegistry(),
-    ) {
-        $this->unaryOperators = $unaryOperators ?? UnaryOverloaderManager::default();
+    ) {}
+
+    /**
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    public function compile(Source $source, TypeEnvironment $environment): Result
+    {
+        return match (true) {
+            $source instanceof TypedSource => $source->compile($environment, $this),
+            $source instanceof StaticSource => $this->compileStatic($source),
+            $source instanceof SymbolSource => $environment->nodeOfSymbol($source->name, $source->namespace, $this),
+            $source instanceof Coerce => $this->compileCoerce($source, $environment),
+            $source instanceof Ascription => $this->compileAscription($source, $environment),
+            $source instanceof UnaryExpression => $this->compileUnary($source, $environment),
+            $source instanceof InfixExpression => $this->compileInfix($source, $environment),
+            $source instanceof MatchExpression => $this->compileMatch($source, $environment),
+            $source instanceof MemberAccessSource => $this->compileMemberAccess($source, $environment),
+            default => Err(new TypeMismatch(sprintf(
+                'Cannot compile [%s]; implement TypedSource to declare its type and evaluation in one statement.',
+                get_class($source),
+            ))),
+        };
     }
 
     /**
+     * What does this source return? The typing face of compile().
+     *
      * @return Result<Type, TypeMismatch>
      */
     public function infer(Source $source, TypeEnvironment $environment): Result
     {
-        return match (true) {
-            $source instanceof TypedSource => $source->returnType($environment, $this),
-            $source instanceof StaticSource => $this->inferValue($source->value),
-            $source instanceof SymbolSource => $environment->typeOfSymbol($source->name, $source->namespace, $this),
-            $source instanceof Coerce => Ok($source->type),
-            $source instanceof Ascription => $this->inferAscription($source, $environment),
-            $source instanceof UnaryExpression => $this->inferUnary($source, $environment),
-            $source instanceof InfixExpression => $this->inferInfix($source, $environment),
-            $source instanceof MatchExpression => $this->inferMatch($source, $environment),
-            $source instanceof MemberAccessSource => $this->inferMemberAccess($source, $environment),
-            default => Err(new TypeMismatch(sprintf(
-                'Cannot infer a type for [%s]; implement TypedSource to declare one (Unknown is an honest answer).',
-                get_class($source),
-            ))),
-        };
+        return $this->compile($source, $environment)->map(fn(CompiledNode $node) => $node->returns);
     }
 
     /**
@@ -82,6 +104,26 @@ final readonly class TypeInference
     {
         return $this->infer($source, $environment)
             ->andThen(fn(Type $actual) => TypeRelations::isTypeAssignableTo($actual, $expected)->map(fn() => $actual));
+    }
+
+    /**
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    private function compileStatic(StaticSource $source): Result
+    {
+        return $this->inferValue($source->value)->map(fn(Type $type) => $this->constant($source->value, $type));
+    }
+
+    /**
+     * A static value's evaluation: the value itself, absence for null.
+     */
+    private function constant(mixed $value, ?Type $type = null): CompiledNode
+    {
+        return new CompiledNode($type ?? new UnknownType(), function (Runtime $runtime) use ($value) {
+            $runtime->inspector?->annotate('label', 'static(' . get_debug_type($value) . ')');
+
+            return Ok(is_null($value) ? None() : Some($value));
+        });
     }
 
     /**
@@ -163,61 +205,186 @@ final readonly class TypeInference
     }
 
     /**
-     * An ascription is a checked claim: the inner type must be Unknown (the
-     * refinement case — the whole point of the node) or overlap the claimed
-     * type. A disjoint claim is simply false — assert-world, where overlap
-     * is the correct relation. Coerce, by contrast, types verbatim: the
-     * boundary is statically opaque by design.
+     * The Coerce bridge types verbatim — the boundary is statically opaque
+     * by design (coercion is admission policy, not membership) — and its
+     * evaluation converts through the declared type's coerce() face.
+     * Absence cannot cross a non-optional Coerce: the node certifies its
+     * declared type, and absence only inhabits an Option.
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    private function inferAscription(Ascription $source, TypeEnvironment $environment): Result
+    private function compileCoerce(Coerce $source, TypeEnvironment $environment): Result
     {
-        // No separate Unknown branch: overlaps(Unknown, T) always holds,
-        // which is exactly the gradual admission an ascription wants.
-        return $this->infer($source->source, $environment)->andThen(
-            fn(Type $inner) => TypeRelations::overlaps($inner, $source->type)
-                ->map(fn() => $source->type)
-                ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
-                    sprintf(
-                        'The claim that this is %s is false: the value is %s, and no value inhabits both.',
-                        TypeDescriber::describe($source->type),
-                        TypeDescriber::describe($inner),
-                    ),
-                    [$cause],
-                )),
+        $inner = $this->compile($source->source, $environment);
+
+        // The documented escape hatch: a static value the literal registry
+        // cannot type still has a total evaluation — itself — and Coerce
+        // discards the inner type anyway. Everything else that fails to
+        // compile fails here too: it runs, so it compiles.
+        if ($inner->isErr() && $source->source instanceof StaticSource) {
+            $inner = Ok($this->constant($source->source->value));
+        }
+
+        return $inner->map(
+            fn(CompiledNode $inner) => new CompiledNode($source->type, function (Runtime $runtime) use ($inner, $source) {
+                $result = ($inner->evaluate)($runtime)
+                    ->andThen(fn(Option $option) => $option
+                        ->andThen(fn(mixed $value) => $source->type->coerce($value)
+                            ->inspect(fn(Option $coerced) => $coerced->inspect(function (mixed $coercedValue) use ($value, $runtime) {
+                                if ($coercedValue !== $value) {
+                                    $runtime->inspector?->annotate('coercion', get_debug_type($value) . ' -> ' . get_debug_type($coercedValue));
+                                }
+                            }))
+                            ->transpose())
+                        ->transpose())
+                    ->andThen(fn(Option $option) => $this->present(
+                        $option,
+                        $source->type,
+                        'The coerced value reads as missing, but %s is required; coerce to %s instead if absence is legal here.',
+                    ))
+                    // One representation of null in the resolution channel:
+                    // Option-typed coercion emits Some(null), the boundary
+                    // protocol; downstream it travels as None.
+                    ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
+
+                $runtime->inspector?->annotate('label', self::basename($source->type::class));
+
+                return $result;
+            }),
         );
     }
 
     /**
-     * Optionality propagates through unary operators: the resolver
-     * short-circuits an absent operand before any rule runs, so rules type
-     * the present operand and the option wraps the result. Dispatches on
-     * the operand's projection, not its concrete class — a canonicalized
-     * union like Union(Option<Number>, Number) has shape Number? and must
-     * propagate identically.
+     * An ascription is a checked claim: the inner type must be Unknown (the
+     * refinement case — this bridge is how an Unknown value re-enters the
+     * typed world) or overlap the claimed type; a disjoint claim is simply
+     * false. Its evaluation verifies membership via assert() — a lying
+     * ascription is a tripwire, not a rot vector — and absence cannot cross
+     * a non-optional claim.
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    private function inferUnary(UnaryExpression $source, TypeEnvironment $environment): Result
+    private function compileAscription(Ascription $source, TypeEnvironment $environment): Result
     {
-        return $this->infer($source->operand, $environment)->andThen(function (Type $operand) use ($source) {
-            $shape = $operand->shape();
-            $present = $shape instanceof OptionShape ? TypeReifier::reify($shape->inner) : $operand;
+        // No separate Unknown branch: overlaps(Unknown, T) always holds,
+        // which is exactly the admission this bridge exists to provide.
+        return $this->compile($source->source, $environment)->andThen(
+            fn(CompiledNode $inner) => TypeRelations::overlaps($inner->returns, $source->type)
+                ->mapErr(fn(TypeMismatch $cause) => new TypeMismatch(
+                    sprintf(
+                        'The claim that this is %s is false: the value is %s, and no value inhabits both.',
+                        TypeDescriber::describe($source->type),
+                        TypeDescriber::describe($inner->returns),
+                    ),
+                    [$cause],
+                ))
+                ->map(fn() => new CompiledNode($source->type, function (Runtime $runtime) use ($inner, $source) {
+                    $result = ($inner->evaluate)($runtime)
+                        ->andThen(fn(Option $option) => $option
+                            ->andThen(fn(mixed $value) => $source->type->assert($value)->transpose())
+                            ->transpose())
+                        ->andThen(fn(Option $option) => $this->present(
+                            $option,
+                            $source->type,
+                            'The ascribed value reads as missing, but the claim %s is required; claim %s instead if absence is legal here.',
+                        ))
+                        // Same normalization as Coerce: an optional claim's
+                        // Some(null) travels on as None.
+                        ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
 
-            return $this->unaryOperators->typeOf($source->operator, $present)
-                ->map(fn(Type $result) => $shape instanceof OptionShape ? new OptionType($result) : $result);
+                    $runtime->inspector?->annotate('label', 'is ' . self::basename($source->type::class));
+
+                    return $result;
+                })),
+        );
+    }
+
+    /**
+     * The absence guard shared by the two admission bridges: when the
+     * declared type is not Option-shaped and the value reads as missing,
+     * evaluation errs by name — silently passing None through would deliver
+     * null into an expression certified to receive the declared type.
+     *
+     * @param Option<mixed> $option
+     * @return Result<Option<mixed>, Throwable>
+     */
+    private function present(Option $option, Type $type, string $message): Result
+    {
+        if ($option->isNone() && !($type->shape() instanceof OptionShape)) {
+            return Err(new RuntimeException(sprintf(
+                $message,
+                TypeDescriber::describe($type),
+                TypeDescriber::describe(new OptionType($type)),
+            )));
+        }
+
+        return Ok($option);
+    }
+
+    /**
+     * Optionality propagates through unary operators: the rule resolves
+     * against the present operand type, and the compiled node short-circuits
+     * an absent operand before the evaluation runs — a unary rule never
+     * sees null. Dispatches on the operand's projection, not its concrete
+     * class — a canonicalized union like Union(Option<Number>, Number) has
+     * shape Number? and must propagate identically.
+     *
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    private function compileUnary(UnaryExpression $source, TypeEnvironment $environment): Result
+    {
+        return $this->compile($source->operand, $environment)->andThen(function (CompiledNode $operand) use ($source) {
+            $shape = $operand->returns->shape();
+            $present = $shape instanceof OptionShape ? TypeReifier::reify($shape->inner) : $operand->returns;
+
+            return $this->unaryOperators->resolve($source->operator, $present)
+                ->map(function (ResolvedOperation $operation) use ($operand, $source, $shape) {
+                    $returns = $shape instanceof OptionShape ? new OptionType($operation->returns) : $operation->returns;
+
+                    return new CompiledNode($returns, function (Runtime $runtime) use ($operand, $operation, $source) {
+                        $result = ($operand->evaluate)($runtime)
+                            ->andThen(fn(Option $option) => $option
+                                ->map(fn(mixed $value) => $operation->evaluate($value))
+                                ->transpose())
+                            ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
+
+                        $runtime->inspector?->annotate('label', $source->operator);
+
+                        return $result;
+                    });
+                });
         });
     }
 
     /**
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    private function inferInfix(InfixExpression $source, TypeEnvironment $environment): Result
+    private function compileInfix(InfixExpression $source, TypeEnvironment $environment): Result
     {
-        return $this->infer($source->left, $environment)->andThen(
-            fn(Type $left) => $this->infer($source->right, $environment)->andThen(
-                fn(Type $right) => $this->operators->typeOf($source->operator, $left, $right),
+        return $this->compile($source->left, $environment)->andThen(
+            fn(CompiledNode $left) => $this->compile($source->right, $environment)->andThen(
+                fn(CompiledNode $right) => $this->operators->resolve($source->operator, $left->returns, $right->returns)
+                    ->map(fn(ResolvedOperation $operation) => new CompiledNode(
+                        $operation->returns,
+                        function (Runtime $runtime) use ($left, $right, $operation, $source) {
+                            $result = ($left->evaluate)($runtime)
+                                ->andThen(fn(Option $l) => ($right->evaluate)($runtime)->map(fn(Option $r) => [$l, $r]))
+                                ->andThen(/** @param array{Option<mixed>, Option<mixed>} $operands */ function (array $operands) use ($operation, $runtime) {
+                                    [$l, $r] = $operands;
+
+                                    $runtime->inspector?->annotate('left', $l->unwrapOr(null));
+                                    $runtime->inspector?->annotate('right', $r->unwrapOr(null));
+
+                                    return $operation->evaluate($l->unwrapOr(null), $r->unwrapOr(null))
+                                        ->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value))
+                                        ->map(fn(mixed $value) => Option::from($value));
+                                });
+
+                            $runtime->inspector?->annotate('label', $source->operator);
+
+                            return $result;
+                        },
+                    )),
             ),
         );
     }
@@ -228,18 +395,20 @@ final readonly class TypeInference
      * is a compile error — add a wildcard arm. Provable coverage: a wildcard
      * arm, or full literal coverage of a Boolean / literal-union scrutinee
      * (null counting for the Option member). Expression patterns match at
-     * runtime but never count toward coverage.
+     * runtime but never count toward coverage — and they are programs, so
+     * they compile like everything else.
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    private function inferMatch(MatchExpression $source, TypeEnvironment $environment): Result
+    private function compileMatch(MatchExpression $source, TypeEnvironment $environment): Result
     {
-        $subject = $this->infer($source->subject, $environment);
+        $subject = $this->compile($source->subject, $environment);
 
         if ($subject->isErr()) {
             return Err(new TypeMismatch('The match subject cannot be typed.', [$subject->unwrapErr()]));
         }
 
+        $armTypes = [];
         $arms = [];
         $literals = [];
         $wildcard = false;
@@ -253,25 +422,91 @@ final readonly class TypeInference
                 $literals[] = $arm->pattern->value;
             }
 
-            $result = $this->infer($arm->expression, $environment);
+            $pattern = $this->compilePattern($arm->pattern, $environment);
 
-            if ($result->isErr()) {
-                return Err(new TypeMismatch(sprintf('Match arm %d cannot be typed.', $index), [$result->unwrapErr()]));
+            if ($pattern->isErr()) {
+                return Err(new TypeMismatch(sprintf('The pattern of match arm %d cannot be compiled.', $index), [$pattern->unwrapErr()]));
             }
 
-            $arms[] = $result->unwrap();
+            $body = $this->compile($arm->expression, $environment);
+
+            if ($body->isErr()) {
+                return Err(new TypeMismatch(sprintf('Match arm %d cannot be typed.', $index), [$body->unwrapErr()]));
+            }
+
+            $armTypes[] = $body->unwrap()->returns;
+            $arms[] = [$pattern->unwrap(), $body->unwrap()];
         }
 
-        if (!$wildcard && !$this->covers($subject->unwrap()->shape(), $literals)) {
+        $subjectNode = $subject->unwrap();
+
+        if (!$wildcard && !$this->covers($subjectNode->returns->shape(), $literals)) {
             return Err(new TypeMismatch(sprintf(
                 'This match over %s may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.',
-                TypeDescriber::describe($subject->unwrap()),
+                TypeDescriber::describe($subjectNode->returns),
             )));
         }
 
         // Exhaustiveness implies at least one arm: a wildcard is an arm, and
         // zero literals cover no shape.
-        return Ok($this->join($arms));
+        return Ok(new CompiledNode($this->join($armTypes), function (Runtime $runtime) use ($subjectNode, $arms) {
+            $result = ($subjectNode->evaluate)($runtime)->andThen(function (Option $subjectOption) use ($runtime, $arms) {
+                $subjectValue = $subjectOption->unwrapOr(null);
+
+                $runtime->inspector?->annotate('subject', $subjectValue);
+
+                foreach ($arms as $index => [$matches, $body]) {
+                    $matched = $matches($subjectValue, $runtime);
+
+                    if ($matched->isErr()) {
+                        return $matched;
+                    }
+
+                    if (!$matched->unwrap()) {
+                        continue;
+                    }
+
+                    $runtime->inspector?->annotate('matched_arm', $index);
+
+                    return ($body->evaluate)($runtime)
+                        ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
+                }
+
+                return Err(new RuntimeException('No match arm matched the subject; add a wildcard arm to handle unmatched values.'));
+            });
+
+            $runtime->inspector?->annotate('label', 'match');
+
+            return $result;
+        }));
+    }
+
+    /**
+     * A pattern compiles to a predicate over the subject value. The
+     * matcher and the coverage analysis consume one equality definition
+     * (value equality) — a matcher stricter than the coverage rule would
+     * certify exhaustiveness the runtime then fails.
+     *
+     * @return Result<Closure(mixed, Runtime): Result<bool, Throwable>, TypeMismatch>
+     */
+    private function compilePattern(MatchPattern $pattern, TypeEnvironment $environment): Result
+    {
+        if ($pattern instanceof WildcardPattern) {
+            return Ok(fn(mixed $subject, Runtime $runtime) => Ok(true));
+        }
+
+        if ($pattern instanceof LiteralPattern) {
+            return Ok(fn(mixed $subject, Runtime $runtime) => Ok(ValueEquality::equals($pattern->value, $subject)));
+        }
+
+        if ($pattern instanceof ExpressionPattern) {
+            return $this->compile($pattern->source, $environment)->map(
+                fn(CompiledNode $node) => fn(mixed $subject, Runtime $runtime) => ($node->evaluate)($runtime)
+                    ->map(fn(Option $option) => $option->unwrapOr(null) === $subject),
+            );
+        }
+
+        return Err(new TypeMismatch(sprintf('No pattern rule exists for [%s].', get_class($pattern))));
     }
 
     /**
@@ -317,12 +552,43 @@ final readonly class TypeInference
      * types. Sound only because of the shape-truth law: trusting a fictional
      * projection here would certify crashes.
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<CompiledNode, TypeMismatch>
      */
-    private function inferMemberAccess(MemberAccessSource $source, TypeEnvironment $environment): Result
+    private function compileMemberAccess(MemberAccessSource $source, TypeEnvironment $environment): Result
     {
-        return $this->infer($source->object, $environment)
-            ->andThen(fn(Type $object) => $this->accessField($object->shape(), $source->property));
+        return $this->compile($source->object, $environment)->andThen(
+            fn(CompiledNode $object) => $this->accessField($object->returns->shape(), $source->property)
+                ->map(fn(Type $field) => new CompiledNode($field, function (Runtime $runtime) use ($object, $source) {
+                    $result = ($object->evaluate)($runtime)
+                        ->andThen(fn(Option $option) => $option
+                            ->mapOr(Ok(None()), fn(mixed $value) => $this->accessValue($value, $source->property)))
+                        ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
+
+                    $runtime->inspector?->annotate('label', ".{$source->property}");
+
+                    return $result;
+                })),
+        );
+    }
+
+    /**
+     * The one structural path into a value: read the field the (true)
+     * projection declared. Arrays by key, objects by property — these are
+     * structure reads, not type dispatch.
+     *
+     * @return Result<Option<mixed>, Throwable>
+     */
+    private function accessValue(mixed $value, string $property): Result
+    {
+        if (is_array($value) && array_key_exists($property, $value)) {
+            return Ok(Option::from($value[$property]));
+        }
+
+        if (is_object($value) && property_exists($value, $property)) {
+            return Ok(Option::from($value->{$property}));
+        }
+
+        return Err(new RuntimeException(sprintf("Property '%s' does not exist on %s.", $property, get_debug_type($value))));
     }
 
     /**
@@ -335,7 +601,9 @@ final readonly class TypeInference
         }
 
         if ($object instanceof Shapes\UnknownShape) {
-            return Ok(new UnknownType());
+            return Err(new TypeMismatch(
+                "Member access on Unknown is not certified: Unknown is inert — claim a record type with an Ascription, or convert with a Coerce, first.",
+            ));
         }
 
         if ($object instanceof Shapes\RecordShape) {
@@ -385,5 +653,12 @@ final readonly class TypeInference
             1 => $unique[0],
             default => new UnionType(...$unique),
         };
+    }
+
+    private static function basename(string $class): string
+    {
+        $position = strrpos($class, '\\');
+
+        return $position === false ? $class : substr($class, $position + 1);
     }
 }

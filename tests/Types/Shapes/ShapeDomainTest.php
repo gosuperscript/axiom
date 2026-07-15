@@ -47,14 +47,17 @@ final class ShapeDomainTest extends TestCase
     }
 
     #[Test]
-    public function unknown_and_never_pass_without_consulting_the_leaf(): void
+    public function unknown_and_never_are_the_traversals_own_law(): void
     {
-        // The sanctioned hole and the vacuous case are the traversal's own
-        // law, not the rule's: even a leaf that refuses everything cannot
-        // veto them.
+        // Unknown FAILS without consulting the leaf — its values are
+        // unknowable, so no total claim over them is possible (inert
+        // Unknown has no gradual hole); Never passes vacuously — even a
+        // leaf that accepts everything cannot claim Unknown, and one that
+        // refuses everything cannot veto Never.
+        $acceptEverything = fn(Shape $leaf) => true;
         $refuseEverything = fn(Shape $leaf) => false;
 
-        $this->assertTrue(ShapeDomain::all(new UnknownShape(), $refuseEverything));
+        $this->assertFalse(ShapeDomain::all(new UnknownShape(), $acceptEverything));
         $this->assertTrue(ShapeDomain::all(new NeverShape(), $refuseEverything));
         $this->assertFalse(ShapeDomain::all(new NumberShape(), $refuseEverything), 'ordinary leaves do consult the predicate');
     }
@@ -65,7 +68,8 @@ final class ShapeDomainTest extends TestCase
         yield 'a literal leaf passes' => [new LiteralShape(5), true];
         yield 'an opaque leaf is refused' => [new OpaqueShape('money'), false];
 
-        yield 'Unknown passes — the sanctioned gradual hole' => [new UnknownShape(), true];
+        yield 'Unknown fails — inert, no total claim is possible' => [new UnknownShape(), false];
+        yield 'an Unknown buried in a union fails the whole union' => [UnionShape::of(new NumberShape(), new UnknownShape()), false];
         yield 'Never passes vacuously' => [new NeverShape(), true];
 
         yield 'an option is transparent' => [new OptionShape(new NumberShape()), true];

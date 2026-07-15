@@ -642,11 +642,18 @@ final class TypeRelationsTest extends TestCase
     }
 
     #[Test]
-    public function admits_is_assignability_plus_the_unknown_hole(): void
+    public function admits_is_assignability_with_no_unknown_hole(): void
     {
         $this->assertTrue(TypeRelations::admits(new NumberType(), new NumberType())->isOk());
-        $this->assertTrue(TypeRelations::admits(new UnknownType(), new NumberType())->isOk());
         $this->assertTrue(TypeRelations::admits(new OptionType(new NumberType()), new NumberType())->isErr());
         $this->assertTrue(TypeRelations::admits(new UnionType(new NumberType(), new StringType()), new NumberType())->isErr());
+
+        // Unknown is inert: refused, with the two bridges in the message.
+        $unknown = TypeRelations::admits(new UnknownType(), new NumberType());
+
+        $this->assertTrue($unknown->isErr());
+        $this->assertStringContainsString('An Unknown operand is inert', $unknown->unwrapErr()->message);
+        $this->assertStringContainsString('Ascription', $unknown->unwrapErr()->message);
+        $this->assertStringContainsString('Coerce', $unknown->unwrapErr()->message);
     }
 }
