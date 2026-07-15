@@ -13,16 +13,16 @@ use Superscript\Monads\Result\Result;
 use function Superscript\Monads\Result\Err;
 
 /**
- * A nominal head core cannot inspect: statically it relates only under its
- * identity (parameter-wise); dynamically it is fail-closed — core cannot
- * verify membership of a host-owned identity, so assert and coerce reject
- * every value and name the host as the owner. A fail-open placeholder
- * would duplicate Unknown's job while wearing a nominal certificate, and
- * would claim every non-null value for any signature declared over it.
+ * A named type whose membership only the owning host can check. Statically
+ * it relates to other opaques of the same identity, parameter-wise;
+ * dynamically assert and coerce reject every value, with an error naming
+ * the host as the owner — this library has no way to verify membership of
+ * a host-owned type, and accepting values it cannot verify would let any
+ * value pass as any opaque type.
  *
- * @internal Reification artifact: exists only so opaque field and parameter
- * shapes can reify back to a Type. Never a host-facing declaration type —
- * hosts with real domain classes ship their own Shaped types with a real
+ * @internal Exists only so an opaque field or parameter shape can be
+ * turned back into a Type (see TypeReifier). Never declare inputs with it
+ * — a host with a real domain class ships its own Shaped type with a real
  * membership check.
  *
  * @implements Type<mixed>
