@@ -167,4 +167,33 @@ class ListTypeTest extends TestCase
         $this->assertSame(3, $bounded->max);
         $this->assertInstanceOf(\Superscript\Axiom\Types\Shapes\NumberShape::class, $bounded->element);
     }
+
+    #[Test]
+    public function a_negative_minimum_does_not_construct(): void
+    {
+        // Relations trust the bounds (overlap tests min === 0 for the
+        // shared empty member), so an impossible claim is a construction
+        // error, not a value-set of surprising emptiness.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('min -1 is negative');
+
+        new ListType(new NumberType(), min: -1);
+    }
+
+    #[Test]
+    public function contradictory_bounds_do_not_construct(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('max 2 is below min 5');
+
+        new ListType(new NumberType(), min: 5, max: 2);
+    }
+
+    #[Test]
+    public function tight_but_possible_bounds_construct(): void
+    {
+        $exact = new ListType(new NumberType(), min: 2, max: 2);
+
+        $this->assertTrue($exact->assert([1, 2])->isOk());
+    }
 }

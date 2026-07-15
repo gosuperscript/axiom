@@ -17,12 +17,14 @@ use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Patterns\ExpressionMatcher;
 use Superscript\Axiom\Patterns\LiteralMatcher;
 use Superscript\Axiom\Patterns\WildcardMatcher;
+use Superscript\Axiom\Resolvers\CoerceResolver;
 use Superscript\Axiom\Resolvers\DelegatingResolver;
 use Superscript\Axiom\Resolvers\InfixResolver;
 use Superscript\Axiom\Resolvers\MatchResolver;
 use Superscript\Axiom\Resolvers\StaticResolver;
 use Superscript\Axiom\Resolvers\SymbolResolver;
 use Superscript\Axiom\Resolvers\UnaryResolver;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -48,12 +50,14 @@ use function Superscript\Monads\Result\Ok;
 
 /**
  * End-to-end pinning of the second-opinion review findings (RFC 0001,
- * fourth resolved-questions round): every scenario asserts the static
- * verdict AND the runtime outcome, because the PR's central guarantee —
- * what the checker certifies is what the evaluator does — lives exactly at
- * that agreement. Cycle detection and declared∧defined collisions are
- * pinned in TypedExpressionTest; the boundary-stripping behavior in
- * ExpressionTest.
+ * fourth and fifth resolved-questions rounds): every scenario asserts the
+ * static verdict AND the runtime outcome, because the PR's central
+ * guarantee — what the checker certifies is what the evaluator does —
+ * lives exactly at that agreement. Cycle detection and declared∧defined
+ * collisions are pinned in TypedExpressionTest; the boundary-stripping
+ * behavior in ExpressionTest; list-bounds validation in ListTypeTest and
+ * ShapeTest. Open records are gone from the vocabulary entirely, so their
+ * finding has nothing left to pin.
  */
 #[CoversNothing]
 final class SoundnessRegressionTest extends TestCase
@@ -66,6 +70,7 @@ final class SoundnessRegressionTest extends TestCase
             InfixExpression::class => InfixResolver::class,
             UnaryExpression::class => UnaryResolver::class,
             MatchExpression::class => MatchResolver::class,
+            Coerce::class => CoerceResolver::class,
         ]);
 
         $resolver->instance(MatchResolver::class, new MatchResolver($resolver, [
@@ -318,5 +323,90 @@ final class SoundnessRegressionTest extends TestCase
 
         $this->assertTrue($expression->infer()->isOk(), 'Never is vacuously covered');
         $this->assertSame('ok', $expression()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function absence_cannot_cross_a_non_optional_coerce_node(): void
+    {
+        // Fifth round, finding 1: Coerce(Number, '') + 1 certified Number
+        // statically while the runtime passed None through, crashing later
+        // with "No overloader found for [null] + [1]". Inference still
+        // takes the declared type verbatim (the boundary is statically
+        // opaque by design); the runtime face now errs at the node, by
+        // name, instead of leaking absence into a certified expression.
+        $expression = new Expression(
+            source: new InfixExpression(
+                left: new Coerce(new NumberType(), new StaticSource('')),
+                operator: '+',
+                right: new StaticSource(1),
+            ),
+            resolver: $this->resolver(),
+        );
+
+        $this->assertTrue($expression->check(new NumberType())->isOk(), 'still certified Number');
+
+        $outcome = $expression();
+
+        $this->assertTrue($outcome->isErr());
+        $this->assertStringContainsString('reads as missing, but Number is required', $outcome->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function a_caller_binding_can_never_answer_for_a_definition(): void
+    {
+        // Fifth round, finding 4 generalized: with descent, ANY
+        // un-enumerated width — a dict's keys as much as a record extra —
+        // could answer a symbol lookup the checker refuses, shadowing a
+        // definition (999 beat 1). Symbols are exact keys now: the
+        // definition is the only reading, statically and at runtime.
+        $expression = new Expression(
+            source: new SymbolSource('turnover', 'customer'),
+            resolver: $this->resolver(),
+            definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
+            declarations: ['customer' => new DictType(new NumberType())],
+        );
+
+        $this->assertTrue($expression->infer()->isOk(), 'the definition types the symbol');
+        $this->assertSame(1, $expression(['customer' => ['turnover' => 999]])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function the_coercing_boundary_never_admits_a_value_outside_its_declared_type(): void
+    {
+        // Fifth round, finding 3: Dict::coerce([1, 2]) returned [1, 2]
+        // (PHP re-normalizes stringified numeric keys), so the default
+        // boundary admitted a value the certified Dict's own assert
+        // refuses. Both faces now agree: lists are rejected, and [] is an
+        // empty dict rather than an absence reading.
+        $expression = new Expression(
+            source: new SymbolSource('d'),
+            resolver: $this->resolver(),
+            declarations: ['d' => new DictType(new NumberType())],
+        );
+
+        $rejected = $expression(['d' => [1, 2]]);
+        $this->assertStringContainsString('binding [d]:', $rejected->unwrapErr()->getMessage());
+
+        $this->assertSame([], $expression(['d' => []])->unwrap()->unwrap(), '[] is a value of the type, not absence');
+    }
+
+    #[Test]
+    public function empty_list_and_empty_record_comparison_is_live(): void
+    {
+        // Fifth round, finding 5: overlaps(List, Record{}) said dead while
+        // [] == [] evaluates true — the same one-value-two-types theorem
+        // as list/dict. The empty record's canonical member is exactly [].
+        $expression = new Expression(
+            source: new InfixExpression(new SymbolSource('xs'), '==', new SymbolSource('r')),
+            resolver: $this->resolver(),
+            declarations: [
+                'xs' => new ListType(new NumberType()),
+                'r' => new \Superscript\Axiom\Types\RecordType([]),
+            ],
+        );
+
+        $this->assertFalse($expression->infer()->isErr(), 'a live comparison, not a dead one');
+        $this->assertTrue($expression(['xs' => [], 'r' => []])->unwrap()->unwrap());
+        $this->assertFalse($expression(['xs' => [1], 'r' => []])->unwrap()->unwrap());
     }
 }

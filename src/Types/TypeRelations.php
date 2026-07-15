@@ -301,7 +301,35 @@ final class TypeRelations
             return self::listOverlapsDict($b, $a);
         }
 
+        if ($a instanceof ListShape && $b instanceof RecordShape) {
+            return self::listOverlapsRecord($a, $b);
+        }
+
+        if ($a instanceof RecordShape && $b instanceof ListShape) {
+            return self::listOverlapsRecord($b, $a);
+        }
+
         return Err(self::noOverlap($a, $b));
+    }
+
+    /**
+     * The same one-value-two-types theorem as listOverlapsDict: the empty
+     * record's canonical member is exactly [], so it shares that value with
+     * every list that admits emptiness. A record with fields never overlaps
+     * a list — its members carry string keys (coercion canonicalizes even
+     * optional fields to present keys), and no list value has any.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    private static function listOverlapsRecord(ListShape $list, RecordShape $record): Result
+    {
+        if ($record->fields === [] && $list->min === 0) {
+            return Ok(true);
+        }
+
+        return Err(self::noOverlap($list, $record, [
+            new TypeMismatch('Only the empty array inhabits both a list and a record, so they overlap exactly when the record is empty and the list can be empty.'),
+        ]));
     }
 
     /**

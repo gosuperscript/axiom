@@ -14,7 +14,17 @@ final class ListShape extends Shape
         public readonly Shape $element,
         public readonly int $min = 0,
         public readonly ?int $max = null,
-    ) {}
+    ) {
+        // Relations trust the bounds (overlap tests min === 0 for the
+        // shared empty member), so an impossible claim must not construct.
+        if ($this->min < 0) {
+            throw new \InvalidArgumentException(sprintf('List bounds must be sensible: min %d is negative.', $this->min));
+        }
+
+        if ($this->max !== null && $this->max < $this->min) {
+            throw new \InvalidArgumentException(sprintf('List bounds must be sensible: max %d is below min %d.', $this->max, $this->min));
+        }
+    }
 
     public function equals(Shape $other): bool
     {

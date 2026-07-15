@@ -27,7 +27,18 @@ class ListType implements Type
         public Type $type,
         public ?int $min = null,
         public ?int $max = null,
-    ) {}
+    ) {
+        // Bounds are claims other judgments trust (listOverlapsDict tests
+        // min === 0), so an impossible claim is a construction error, not
+        // a value-set of surprising emptiness.
+        if ($this->min !== null && $this->min < 0) {
+            throw new InvalidArgumentException(sprintf('List bounds must be sensible: min %d is negative.', $this->min));
+        }
+
+        if ($this->max !== null && $this->max < ($this->min ?? 0)) {
+            throw new InvalidArgumentException(sprintf('List bounds must be sensible: max %d is below min %d.', $this->max, $this->min ?? 0));
+        }
+    }
 
     public function assert(mixed $value): Result
     {

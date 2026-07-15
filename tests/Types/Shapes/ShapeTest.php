@@ -279,4 +279,23 @@ final class ShapeTest extends TestCase
         $this->assertInstanceOf(OptionShape::class, $shape);
         $this->assertInstanceOf(UnknownShape::class, $shape->inner);
     }
+
+    #[Test]
+    public function a_list_shape_with_a_negative_minimum_does_not_construct(): void
+    {
+        // Relations trust the bounds, so an impossible claim must not exist.
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('min -1 is negative');
+
+        new ListShape(new NumberShape(), min: -1);
+    }
+
+    #[Test]
+    public function a_list_shape_with_contradictory_bounds_does_not_construct(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('max 1 is below min 2');
+
+        new ListShape(new NumberShape(), min: 2, max: 1);
+    }
 }

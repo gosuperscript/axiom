@@ -468,6 +468,22 @@ final class TypeRelationsTest extends TestCase
             false,
         ];
 
+        yield 'the empty record overlaps an emptiable list at []' => [
+            new ListShape(new NumberShape()),
+            new RecordShape([]),
+            true,
+        ];
+        yield 'a non-empty list never overlaps the empty record' => [
+            new ListShape(new NumberShape(), min: 1),
+            new RecordShape([]),
+            false,
+        ];
+        yield 'a record with fields never overlaps a list' => [
+            new ListShape(new NumberShape()),
+            new RecordShape(['a' => new OptionShape(new NumberShape())]),
+            false,
+        ];
+
         yield 'opaque overlaps only itself' => [new OpaqueShape('ClaimId'), new OpaqueShape('ClaimId'), true];
         yield 'distinct opaques do not overlap' => [new OpaqueShape('ClaimId'), new OpaqueShape('CatalogueKey'), false];
         yield 'parameterized opaques overlap when parameters overlap' => [
