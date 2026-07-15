@@ -68,7 +68,8 @@ final class TypeRelations
 
     /**
      * Could any value satisfy both? Symmetric; weaker than assignability
-     * either way. The applicability relation for equality and membership.
+     * either way. Overlap says only whether a shared value is possible;
+     * it does not certify that an operation supports either type.
      *
      * @return Result<bool, TypeMismatch>
      */

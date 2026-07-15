@@ -18,7 +18,8 @@ namespace Superscript\Axiom\Types\Shapes;
  * - an option passes if its inner shape passes — null itself always
  *   passes, so a rule whose closure rejects null must not route
  *   option-bearing operands through this traversal;
- * - lists, dicts, and records recurse into their elements and fields;
+ * - lists, dicts, and records recurse into their reachable elements and
+ *   fields; a list bounded to length zero passes vacuously;
  * - Unknown always fails: its values are unknowable, so no promise can
  *   cover them;
  * - Never passes vacuously: it has no values to handle;
@@ -48,6 +49,10 @@ final class ShapeDomain
         }
 
         if ($shape instanceof ListShape) {
+            if ($shape->max === 0) {
+                return true;
+            }
+
             return self::all($shape->element, $leaf);
         }
 
