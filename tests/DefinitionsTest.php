@@ -41,6 +41,17 @@ final class DefinitionsTest extends TestCase
     }
 
     #[Test]
+    public function keys_lists_every_defined_symbol_as_flat_dotted_keys(): void
+    {
+        $definitions = new Definitions([
+            'rate' => new StaticSource(1.2),
+            'customer' => ['turnover' => new StaticSource(2)],
+        ]);
+
+        $this->assertSame(['rate', 'customer.turnover'], $definitions->keys());
+    }
+
+    #[Test]
     public function it_returns_none_for_missing_names(): void
     {
         $definitions = new Definitions(['A' => new StaticSource(1)]);

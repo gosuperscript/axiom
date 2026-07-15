@@ -58,6 +58,17 @@ final readonly class Definitions
     }
 
     /**
+     * Every defined symbol, as flat dotted keys — the node set of the
+     * definition graph.
+     *
+     * @return list<string>
+     */
+    public function keys(): array
+    {
+        return array_keys($this->entries);
+    }
+
+    /**
      * @return Option<Source>
      */
     public function get(string $name, ?string $namespace = null): Option
