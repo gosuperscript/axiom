@@ -17,8 +17,9 @@ use Throwable;
  *
  * The evaluation trusts the compilation: it performs no dispatch and never
  * inspects a value's type. What remains at runtime is semantics — absence
- * short-circuits, match arms, value-dependent partiality — and the explicit
- * admission nodes (Coerce, Ascription), which check values by design.
+ * short-circuits, match arms, value-dependent errors like division by
+ * zero — and the explicit admission nodes (Coerce, Ascription), which
+ * check values because checking values is their job.
  */
 final readonly class CompiledNode
 {

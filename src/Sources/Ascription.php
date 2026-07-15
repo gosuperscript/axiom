@@ -10,9 +10,11 @@ use Superscript\Axiom\Types\Type;
 
 /**
  * The author's type claim on an existing value: "this already is a T".
- * Runtime verifies via assert() and fails loudly — a lying ascription is a
- * tripwire, not a rot vector. Statically checked: the inner type must be
- * Unknown or overlap the declaration; a disjoint claim is an error.
+ * The claim is checked twice. At compile time the inner type must be
+ * Unknown or overlap the declaration — claiming Number on something
+ * inferred String is a compile error. At runtime the value must pass
+ * assert() — a false claim is a loud error at this exact node, never a
+ * wrong value flowing on.
  *
  * Use to refine an Unknown host source or narrow a union. For converting
  * a value INTO a type, use {@see Coerce}.

@@ -255,12 +255,12 @@ final readonly class TypeInference
     }
 
     /**
-     * An ascription is a checked claim: the inner type must be Unknown (the
-     * refinement case — this bridge is how an Unknown value re-enters the
-     * typed world) or overlap the claimed type; a disjoint claim is simply
-     * false. Its evaluation verifies membership via assert() — a lying
-     * ascription is a tripwire, not a rot vector — and absence cannot cross
-     * a non-optional claim.
+     * An ascription is a checked claim: the inner type must be Unknown
+     * (this is how an Unknown value re-enters the typed world) or overlap
+     * the claimed type — a disjoint claim is simply false, and refused
+     * here. Its evaluation verifies membership via assert(), so a false
+     * claim errs loudly at this node instead of passing a wrong value
+     * downstream; absence cannot cross a non-optional claim.
      *
      * @return Result<CompiledNode, TypeMismatch>
      */
