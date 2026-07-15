@@ -94,6 +94,32 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
+    public function symbol_nodes_annotate_their_resolved_values(): void
+    {
+        $compiler = self::compiler();
+
+        // A declared symbol annotates the bound value it read...
+        $inspector = new \Superscript\Axiom\Tests\Fixtures\SpyInspector();
+        $declared = (new TypeEnvironment(declarations: ['turnover' => new NumberType()]))
+            ->nodeOfSymbol('turnover', null, $compiler)->unwrap();
+
+        ($declared->evaluate)(new Runtime(new Bindings(['turnover' => 600000]), $inspector));
+
+        $this->assertContains(['label', 'turnover'], $inspector->timeline);
+        $this->assertContains(['result', 600000], $inspector->timeline);
+
+        // ...and a defined symbol annotates the value its slot produced.
+        $inspector = new \Superscript\Axiom\Tests\Fixtures\SpyInspector();
+        $defined = (new TypeEnvironment(new Definitions(['base' => new StaticSource(7)])))
+            ->nodeOfSymbol('base', null, $compiler)->unwrap();
+
+        ($defined->evaluate)(new Runtime(inspector: $inspector));
+
+        $this->assertContains(['label', 'base'], $inspector->timeline);
+        $this->assertContains(['result', 7], $inspector->timeline);
+    }
+
+    #[Test]
     public function a_namespaced_declaration_uses_the_flattened_key(): void
     {
         $environment = new TypeEnvironment(declarations: ['customer.turnover' => new NumberType()]);

@@ -28,6 +28,15 @@ final class TypeMismatchTest extends TestCase
     }
 
     #[Test]
+    public function mismatches_are_engaged_by_default(): void
+    {
+        // unhandled must be opt-in: a rule that forgets the flag has its
+        // refusal shown in composed diagnostics — the safe default.
+        $this->assertFalse((new TypeMismatch('x'))->unhandled);
+        $this->assertTrue((new TypeMismatch('x', unhandled: true))->unhandled);
+    }
+
+    #[Test]
     public function it_describes_a_nested_cause_chain_with_indentation(): void
     {
         $mismatch = new TypeMismatch('outer', [

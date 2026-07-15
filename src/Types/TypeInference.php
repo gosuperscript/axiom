@@ -247,7 +247,7 @@ final readonly class TypeInference
                     // protocol; downstream it travels as None.
                     ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
 
-                $runtime->inspector?->annotate('label', self::basename($source->type::class));
+                $runtime->inspector?->annotate('label', class_basename($source->type::class));
 
                 return $result;
             }),
@@ -292,7 +292,7 @@ final readonly class TypeInference
                         // Some(null) travels on as None.
                         ->map(fn(Option $option) => $option->andThen(fn(mixed $value) => Option::from($value)));
 
-                    $runtime->inspector?->annotate('label', 'is ' . self::basename($source->type::class));
+                    $runtime->inspector?->annotate('label', 'is ' . class_basename($source->type::class));
 
                     return $result;
                 })),
@@ -653,12 +653,5 @@ final readonly class TypeInference
             1 => $unique[0],
             default => new UnionType(...$unique),
         };
-    }
-
-    private static function basename(string $class): string
-    {
-        $position = strrpos($class, '\\');
-
-        return $position === false ? $class : substr($class, $position + 1);
     }
 }

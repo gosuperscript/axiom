@@ -1,8 +1,8 @@
 # Extending Axiom
 
-Axiom is a small core with deliberate extension seams. A companion package or host application can contribute domain types, operators, literals, data sources, resolvers, and match patterns — each a full citizen of both the evaluator *and* the type checker — without modifying core. This guide walks each seam, in the order you typically need them.
+Axiom is a small core with deliberate extension seams. A companion package or host application can contribute domain types, operators, literals, and data sources — each a full citizen of the compiler and therefore of every program it certifies — without modifying core. This guide walks each seam, in the order you typically need them.
 
-The design principle behind every seam: **a rule's runtime and static semantics live in one class.** When you add an operator, you write how it evaluates and what it types, side by side; the checker consumes the same composed stack the evaluator runs, so the two can never drift. The background for this is [RFC 0001: Typesafe Axiom](rfc/0001-typesafe-axiom.md).
+The design principle behind every seam: **a rule's typing and its evaluation are one statement.** When you add an operator, its `resolve()` verdict carries the return type and the evaluation together; when you add a source, its `compile()` does the same. The compiler binds what your rules resolved into the `Program`, and a compiled program performs no runtime dispatch — so the static and runtime semantics cannot drift, because there are never two faces to keep in agreement. The background for this is [RFC 0001: Typesafe Axiom](rfc/0001-typesafe-axiom.md).
 
 ## Custom types
 
@@ -133,20 +133,19 @@ Operator::prefix('abs')
     ->evaluate(fn (int|float $n) => abs($n)),
 ```
 
-One statement of the fact yields both semantic faces mechanically:
+A row resolves like this: when the compiler asks about your operator over some operand types, the row checks admissibility (`admits`) against its declared types — with generated mismatch messages that read uniformly with core's: `[-] expects Date and Period; got Date and String.` — and on success returns its declared return type together with your closure. The compiler binds that closure into the program; **no dispatch happens at runtime**, and your closure only ever sees values of the operand types you declared, because the compiler proved them and the boundary admitted them.
 
-- **Runtime dispatch** is strict membership on the declared operand types (their `assert`) — claiming never converts; conversion belongs to the boundary (`Coerce` nodes, typed bindings), never to dispatch. Your type's `assert` is now your dispatch predicate, so keep it cheap and total: it must `Err` on foreign values, never throw.
-- **The static verdict** is admissibility (`admits`) against the same declared types, with generated mismatch messages that read uniformly with core's: `[-] expects Date and Period; got Date and String.`
+The closure's contract:
 
-Because both faces are projections of one declaration, they cannot drift — the agreement harness passes *by construction*, and the honesty and certification contracts of the low-level interface (§Advanced) are facts you never need to learn.
-
-The closure receives values both operand types asserted. Its contract:
-
+- It may take its parameters **natively typed** (`fn (Carbon $l, Period $r) => …`) — the values are proven.
 - A **plain return value** is the result — it is wrapped in `Ok` for you.
 - A **returned `Result` passes through** — the door for value-dependent partiality (division by zero, an overflowing add). Corollary: a closure cannot produce a literal `Result` as its evaluation *value*.
-- A **thrown exception propagates.** The claiming contract guarantees the closure only ever sees values it declared, so a throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
+- A **thrown exception propagates.** The compiler guarantees the closure only sees values of its declared types, so a throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
+- It must be **total** over its declared operand types: every value of them evaluates without escaping. This is the one obligation you carry, and the totality harness checks it generatively (§Testing).
 
-The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the resolver short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
+The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the compiled node short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
+
+**Ambiguity is refused, never ranked.** Two rows for the same operator whose operand types overlap are a `Dialect` construction error — some value pair would have two owners, and which evaluation runs must never depend on registration order. Declare disjoint rows (the money pattern below), or hand-write a type function that refuses what another rule owns.
 
 ### Parameterized families: enumerate
 
@@ -171,11 +170,11 @@ final class MoneyExtension extends Extension
 }
 ```
 
-This works because currency is part of the type's *value set*: `MoneyType('GBP')::assert` refuses a USD money. Same-currency pairs dispatch to their row; a cross-currency pair matches *no* row, so the checker reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and the runtime refuses identically. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
+This works because currency is part of the type's *value set*, so the rows are disjoint: same-currency pairs resolve to their row; a cross-currency pair matches *no* row, so the compiler reports the composed dialect's honest aggregate — `No overload of [+] accepts Money<'GBP'> and Money<'USD'>.` — and no program containing that expression can be compiled, let alone run. What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space (`List<T> ++ List<U> → List<T|U>`); that is escape-hatch territory (§Advanced).
 
 ### Packaging it: the `Extension` and the `Dialect`
 
-A package ships one `Extension` — the unit that carries everything above, consumed by both the evaluator *and* the checker so they cannot be composed differently:
+A package ships one `Extension` — the unit that carries everything above, consumed by the compiler, whose resolutions are what every program runs:
 
 ```php
 use Superscript\Axiom\Extension;
@@ -212,62 +211,56 @@ use Superscript\Axiom\Expression;
 
 $dialect = Dialect::core()->with(new TimeExtension(), new MoneyExtension());
 
-$expression = new Expression($source, $resolver, dialect: $dialect, declarations: [...]);
+$expression = new Expression($source, dialect: $dialect, declarations: [...]);
 
-$expression->check(new BooleanType());   // the checker uses the dialect...
-$expression(['effective' => $date]);     // ...and so does the evaluator. One list, both semantics.
+$expression->check(new BooleanType());              // the compiler resolves through the dialect...
+$program = $expression->compile()->unwrap();
+$program(['effective' => $date]);                   // ...and the program runs what it resolved.
 ```
 
-Composition rules worth knowing: extension rules **prepend** core's, so when two honest rules genuinely both claim a value, the specialization wins the tie; duplicate literal registrations across extensions are a **loud error**, never a precedence question. `Extension` is an abstract class with empty defaults — override only what you contribute, and future hooks (matchers, resolvers) can be added without breaking you.
+Composition rules worth knowing: overlapping rows for one operator are a **construction error** (list order decides nothing — ambiguity is refused at the earliest moment it exists); duplicate literal registrations across extensions are equally loud, never a precedence question. `Extension` is an abstract class with empty defaults — override only what you contribute, and future hooks (matchers) can be added without breaking you.
 
-Because your `-` rule certifies `(Date, Period) → Date` while core's arithmetic refuses it, the checker takes your verdict; with `Unknown` operands both may certify with different types, and the honest composed answer is `Unknown`.
+Because your `-` row resolves `(Date, Period) → Date` while core's arithmetic refuses it, the compiler takes your lone resolution. If two rules both resolved the same operand types, compilation fails naming both — there is no silent winner.
 
-There is no other wiring path: resolvers hold no operator state, and the dialect travels with each evaluation in the `Context` — the same instance the checker reads — so running with different rules than you check with is not representable. An overloader bound directly on a resolver container is inert.
+There is no other wiring path: a compiled program embeds the resolutions of the dialect it was compiled with and carries no dialect at runtime, so running with different rules than you compiled with is not representable.
 
 ### Advanced: writing a rule by hand
 
 A signature is a row; some rules are not rows. Implement `OperatorOverloader` (binary) or `UnaryOverloader` directly when you need:
 
-- **Verdicts that are relations, not slots** — core's equality certifies operand types that *overlap*, something no fixed operand type expresses.
+- **Verdicts that are relations, not slots** — core's equality resolves operand types that *overlap*, something no fixed operand type expresses.
 - **Dead findings** — refusing an operation as *statically constant* (`dead: true`) so hosts can render it as a probable author bug rather than an unsupported operation.
 - **Return types computed from operand types** over an unbounded space (`List<T> ++ List<U> → List<T|U>`).
-- **Absence-tolerant claims** — a binary rule that wants absence-as-zero arithmetic claims a `null` beside a number in `supportsOverloading` and admits `Option<Number>` operands in `typeOf`. (Binary rules see values as bound; only unary rules are shielded from absence.)
+- **Absence-tolerant rules** — a rule that wants absence-as-zero arithmetic resolves operand types where a side is `Option`-shaped (and *refuses present-present pairs*, which stay core's — that disjointness is what keeps the composition unambiguous). Its closure then handles `null`.
 
-The four obligations:
+The one obligation:
 
 ```php
 interface OperatorOverloader
 {
-    // RUNTIME: which values does this rule own?
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool;
-
-    // RUNTIME: evaluate a claimed pair.
-    public function evaluate(mixed $left, mixed $right, string $operator): Result;
-
-    // STATIC: which operators does this rule type?
-    public function handles(string $operator): bool;
-
-    // STATIC: the return type for operands of these types.
-    public function typeOf(string $operator, Type $left, Type $right): Result;
+    /**
+     * Does this rule own $operator over these operand types — and if so,
+     * what does it return and how does it evaluate?
+     *
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    public function resolve(string $operator, Type $left, Type $right): Result;
 }
 ```
 
-Two contracts the builder was upholding for you now become yours to keep:
+`Ok(new ResolvedOperation($returnType, $closure))` means: *this rule certifies these operand types — the closure is total over every value pair of them, and its result inhabits the return type* (value-dependent partiality remains: a closure may return an `Err`). `Err(TypeMismatch)` refuses, in three flavors you should distinguish:
 
-**The honesty contract on `supportsOverloading`.** Claim **only values your rule owns**. Operator-only dispatch (`return $operator === '<'`) claims every value pair, shadows every rule listed after yours in the dialect, and hides semantics from the checker. Test the operands.
-
-**The certification contract on `typeOf`.** `Ok(T)` means: *this rule certifies these operand types — every value pair it claims evaluates to a `T`* (value-dependent partiality remains: division by zero errs, certified or not). `Err(TypeMismatch)` means the rule does not certify them, for one of two reasons you should distinguish:
-
-- **Unsupported** — values of these types fall outside your runtime claims. Plain `new TypeMismatch(...)`.
-- **Dead** — the runtime tolerates the operation but it is statically meaningless (a comparison that can never hold). Construct with `dead: true`; consumers render dead findings as probable author bugs rather than unsupported operations. A dead verdict is a *claim of constancy*, and the harness verifies it (§Testing).
+- **Unhandled** — the operator simply is not yours. Construct with `unhandled: true` so the composing manager keeps your refusal out of aggregated diagnostics for operators you never claimed to own.
+- **Unsupported** — your operator, but these operand types fall outside your rule. Plain `new TypeMismatch(...)` with a message naming what you expected.
+- **Dead** — the operation is well-formed but statically meaningless (a comparison that can never hold). Construct with `dead: true`; consumers render dead findings as probable author bugs rather than unsupported operations.
 
 Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
 
-- `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability plus the `Unknown` hole; pessimistic on unions. This is the judgment for operand positions, and it is how "refuses `Option`" falls out for free: `Option<Number>` is not assignable to a present `Number` slot.
+- `TypeRelations::admits($operand, $slot)` — may values of this operand type reach a slot of this type? Assignability, pessimistic on unions, with **no `Unknown` hole**: `Unknown` is inert, and your rule should refuse it too (using `admits` gives you that for free). It is also how "refuses `Option`" falls out: `Option<Number>` is not assignable to a present `Number` slot.
 - `TypeRelations::overlaps($a, $b)` — could any value satisfy both? The judgment for equality and membership.
-- `TypeOrder::hasDefinedOrder($type)` — is ranking meaningful? (Number-only in core; your dialect can ship ordered domain types.)
+- `TypeOrder::hasDefinedOrder($type)` — is ranking meaningful? (Number-only in core; your dialect can ship ordered domain rows.)
 
-Core's rules (`src/Operators/`) are the reference implementations — `ComparisonOverloader` shows overlap-based equality with dead verdicts, `NotOverloader` the unary shape.
+Core's rules (`src/Operators/`) are the reference implementations — `EqualityOverloader` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `HasOverloader`/`InOverloader` show shared operand judgments via `SetOperands`.
 
 ## Literal registration
 
@@ -284,79 +277,44 @@ The factory receives the value, so the type can be as precise as the value deter
 
 ## Host sources
 
-If your host contributes its own `Source` kinds (a lookup-table cell, a geocoding call), implement `TypedSource` so the checker can see through them:
+If your host contributes its own `Source` kinds (a lookup-table cell, a geocoding call), implement `TypedSource` — the type claim and the evaluation, **one statement**, so your source cannot register behavior its claim does not describe (there is no separate place to put it):
 
 ```php
+use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\Runtime;
 use Superscript\Axiom\TypedSource;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use function Superscript\Monads\Result\Ok;
 
 final readonly class GeocodeSource implements TypedSource
 {
-    public function __construct(public Source $address) {}
+    public function __construct(public Source $address, private Geocoder $geocoder) {}
 
-    public function returnType(TypeEnvironment $environment, TypeInference $inference): Result
+    public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
     {
-        return Ok(new RecordType([
-            'lat' => new NumberType(),
-            'lng' => new NumberType(),
-        ]));
+        return $compiler->compile($this->address, $environment)->map(
+            fn(CompiledNode $address) => new CompiledNode(
+                new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
+                fn(Runtime $runtime) => ($address->evaluate)($runtime)
+                    ->map(fn(Option $option) => $option->map($this->geocoder->locate(...))),
+            ),
+        );
     }
 }
 ```
 
-Three honest postures, pick per source: **declare** the type when you know it (as above); **delegate** through `$inference->infer($this->inner, $environment)` when you wrap another source; **return `Ok(new UnknownType())`** when you genuinely cannot know (a raw lookup cell). What you may not do is nothing: a `Source` the inference cannot handle is an error, so "any expression edge starts here" stays a kept promise.
+Three honest postures, pick per source: **declare** the type beside the lookup that produces it (as above); **delegate** through `$compiler->compile($this->inner, $environment)` when you wrap another source; **return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`. What you may not do is nothing: a `Source` the compiler cannot handle is a compile error, so "any expression edge starts here" stays a kept promise.
 
-## Custom resolvers
+The one obligation mirrors the operator closure's: **your evaluation must deliver what your type claims.** The compiler certifies downstream operations against the claimed type, and nothing re-checks the values — a lying source meets named runtime errors at the structural reads (a missing field, an unmatched exhaustive match), not silent corruption, but the honest fix is an honest claim. Sources that cannot promise their payload declare `Unknown` and let the program's author place the `Ascription`, which *is* runtime-verified.
 
-Evaluation of a new `Source` kind needs a `Resolver`. Resolvers are **stateless**; all per-call state (bindings, definitions, the inspector, the symbol memo) lives on the `Context`:
-
-```php
-use Superscript\Axiom\Context;
-use Superscript\Axiom\Resolvers\Resolver;
-use Superscript\Axiom\Source;
-use Superscript\Monads\Result\Result;
-
-final readonly class GeocodeResolver implements Resolver
-{
-    public function __construct(private Resolver $resolver, private Geocoder $geocoder) {}
-
-    public function resolve(Source $source, Context $context): Result
-    {
-        return $this->resolver->resolve($source->address, $context)
-            ->andThen(fn($option) => /* ... call the geocoder ... */);
-    }
-}
-```
-
-Register it in the `DelegatingResolver` map (`GeocodeSource::class => GeocodeResolver::class`). Annotate through `$context->inspector?->annotate(...)` for observability; the null-safe call makes it free when no inspector is attached.
-
-## Custom match patterns
-
-`MatchResolver` delegates pattern evaluation to a registry of `PatternMatcher`s, so packages can add pattern kinds (an interval pattern, a regex pattern) without touching core:
-
-```php
-final readonly class IntervalMatcher implements PatternMatcher
-{
-    public function supports(MatchPattern $pattern): bool
-    {
-        return $pattern instanceof IntervalPattern;
-    }
-
-    public function matches(MatchPattern $pattern, mixed $subjectValue, Context $context): Result
-    {
-        return Ok($pattern->interval->contains($subjectValue));
-    }
-}
-```
-
-Statically, custom patterns behave like `ExpressionPattern`: they match at runtime but **never count toward match exhaustiveness** — the checker cannot see into them, so a match whose coverage depends on them still needs a wildcard arm.
+Annotate through `$runtime->inspector?->annotate(...)` for observability; the null-safe call makes it free when no inspector is attached.
 
 ## Testing your extension
 
-Two patterns from core are worth copying into your package's suite:
+Three patterns from core are worth copying into your package's suite:
 
 **The shape census — two laws.** First, every type your package ships projects into the expected sealed constructor (the "no unmodelled types" guarantee, kept mechanically):
 
@@ -383,17 +341,26 @@ public function record_projections_are_true(Type $type, array $specimen): void
 }
 ```
 
-**The agreement harness.** For every overloader, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values), check three laws:
+**The admission-honesty law.** For every type, whatever `coerce` emits must pass the same type's `assert`. This is the entire trust anchor of compile-then-trust — a value that crosses a boundary *is* its declared type from then on, and nothing downstream re-checks it — so run every raw input you can think of through both faces:
 
-- **Soundness (total)**: where `typeOf` certifies `Ok(T)`, **every** specimen pair of those types must be claimed by `supportsOverloading` — an unclaimed specimen is a failure, never a skip; a verdict over values your runtime doesn't claim is a certified crash — and every claimed pair that evaluates successfully produces a value that `T::assert` accepts.
-- **Anti-shadowing**: where `typeOf` refuses (and the mismatch is not `dead`), the rule must not claim every specimen pair of those types — a rule that runtime-owns values it statically refuses is hiding semantics from the checker.
-- **The dead law**: where `typeOf` refuses with `dead: true` ("statically constant"), all claimed specimen pairs must evaluate to one identical boolean. A dead verdict is a claim, and claims get verified — this law exists because its absence let PHP's loose equality ship a lie (`5 == '5'` was true while the checker said "can never hold").
+```php
+#[Test]
+#[DataProvider('census')]
+public function coerce_output_always_passes_assert(Type $type): void
+{
+    foreach ($this->rawInputs() as $input) {
+        $coerced = $type->coerce($input);
 
-Core's `tests/Operators/AgreementHarnessTest.php` is the reference implementation; point it at your rules and your specimens. Throw your specimens at *core's* rules too — that is exactly the test that catches core's comparison rule accidentally claiming your domain objects.
+        if ($coerced->isOk() && $coerced->unwrap()->isSome()) {
+            $this->assertTrue($type->assert($coerced->unwrap()->unwrap())->isOk());
+        }
+    }
+}
+```
 
-**If your rules are signature-built, the laws hold by construction** — both faces are projections of one declaration, so there is no drift to catch. Still run the harness over your specimens: the one obligation the builder *cannot* discharge for you is your domain type's `assert` being honest and total (it is your dispatch predicate now), and the harness is what catches an `assert` that lies or throws on foreign values.
+**The totality harness.** For every rule of your composed dialect, against a specimen matrix of typed values (`[$type, [$value, ...]]` pairs — include core's scalars *and* your domain values): wherever `resolve` certifies operand types, **every** specimen value pair of those types must evaluate without escaping — no `TypeError` from a closure narrower than its claim, no throw — and every successful result must inhabit the resolved return type. Value-dependent `Err`s (division by zero) are legal; escapes are defects.
 
-Skip-list to respect when copying it: soundness is skipped when an operand type is `Unknown` (gradual admission is deliberately unsound), and inhabitance is vacuous when the certified type is `Unknown`.
+Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time.
 
 ## What stays yours
 

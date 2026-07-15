@@ -37,6 +37,9 @@ use Superscript\Axiom\Types\Type;
 #[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
 #[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\SetOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(LiteralType::class)]
@@ -102,6 +105,105 @@ final class DialectTest extends TestCase
                         ->signature(new OptionType(new NumberType()), new OptionType(new NumberType()))
                         ->returns(new NumberType())
                         ->evaluate(fn(?int $a, ?int $b) => ($a ?? 0) + ($b ?? 0)),
+                ];
+            }
+        });
+    }
+
+    #[Test]
+    public function composition_preserves_the_whole_core_rule_list(): void
+    {
+        $empty = new class extends Extension {};
+        $operators = Dialect::core()->with($empty)->operators();
+
+        // Rules from every position of the core list — first, middle, and
+        // the trailing type functions — must survive composition intact.
+        $this->assertSame(3, $operators->resolve('+', new NumberType(), new NumberType())->unwrap()->evaluate(1, 2)->unwrap());
+        $this->assertTrue($operators->resolve('<', new NumberType(), new NumberType())->unwrap()->evaluate(1, 2)->unwrap());
+        $this->assertFalse($operators->resolve('xor', new BooleanType(), new BooleanType())->unwrap()->evaluate(true, true)->unwrap());
+        $this->assertTrue($operators->resolve('==', new NumberType(), new NumberType())->unwrap()->evaluate(1, 1)->unwrap());
+        $this->assertTrue($operators->resolve('intersects', new StringType(), new StringType())->unwrap()->evaluate('a', 'a')->unwrap());
+    }
+
+    #[Test]
+    public function row_ambiguity_is_detected_behind_non_row_rules(): void
+    {
+        // The filtered row list must be reindexed: a type-function rule
+        // ahead of the rows shifts their keys, and an offset taken from the
+        // original keys would skip the very next row — letting two
+        // overlapping rows slip through, undetected, adjacent or not.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The dialect is ambiguous: two [++] rows overlap');
+
+        Dialect::core()->with(new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    new \Superscript\Axiom\Operators\EqualityOverloader(),
+                    Operator::infix('++')
+                        ->signature(new StringType(), new StringType())
+                        ->returns(new StringType())
+                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                    Operator::infix('++')
+                        ->signature(new StringType(), new StringType())
+                        ->returns(new StringType())
+                        ->evaluate(fn(string $a, string $b) => $b . $a),
+                ];
+            }
+        });
+    }
+
+    #[Test]
+    public function adjacent_overlapping_prefix_rows_are_refused(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows overlap');
+
+        Dialect::core()->with(new class extends Extension {
+            public function unaryOperators(): array
+            {
+                return [
+                    Operator::prefix('abs')
+                        ->signature(new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int|float $n) => abs($n)),
+                    Operator::prefix('abs')
+                        ->signature(new LiteralType(5))
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int $n) => 5),
+                ];
+            }
+        });
+    }
+
+    #[Test]
+    public function prefix_row_ambiguity_is_detected_behind_non_row_rules(): void
+    {
+        $nonRow = new class implements \Superscript\Axiom\Operators\UnaryOverloader {
+            public function resolve(string $operator, Type $operand): \Superscript\Monads\Result\Result
+            {
+                return \Superscript\Monads\Result\Err(new \Superscript\Axiom\Types\TypeMismatch('Nothing.', unhandled: true));
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows overlap');
+
+        Dialect::core()->with(new class($nonRow) extends Extension {
+            public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOverloader $nonRow) {}
+
+            public function unaryOperators(): array
+            {
+                return [
+                    $this->nonRow,
+                    Operator::prefix('abs')
+                        ->signature(new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int|float $n) => abs($n)),
+                    Operator::prefix('abs')
+                        ->signature(new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluate(fn(int|float $n) => -abs($n)),
                 ];
             }
         });

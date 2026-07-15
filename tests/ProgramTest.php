@@ -453,6 +453,36 @@ final class ProgramTest extends TestCase
     }
 
     #[Test]
+    public function symbol_nodes_annotate_their_resolved_values(): void
+    {
+        $inspector = new SpyInspector();
+
+        // A declared symbol annotates the bound value it read...
+        $declared = (new Expression(
+            source: new SymbolSource('turnover'),
+            declarations: ['turnover' => new NumberType()],
+            inspector: $inspector,
+        ))->compile()->unwrap();
+
+        $declared(['turnover' => 600000]);
+
+        $this->assertContains(['result', 600000], $inspector->timeline);
+
+        // ...and a defined symbol annotates the value its slot produced.
+        $inspector = new SpyInspector();
+        $defined = (new Expression(
+            source: new SymbolSource('base'),
+            definitions: new Definitions(['base' => new StaticSource(7)]),
+            inspector: $inspector,
+        ))->compile()->unwrap();
+
+        $defined();
+
+        $this->assertContains(['label', 'base'], $inspector->timeline);
+        $this->assertContains(['result', 7], $inspector->timeline);
+    }
+
+    #[Test]
     public function no_coercion_annotation_when_the_value_is_unchanged(): void
     {
         $inspector = new SpyInspector();
