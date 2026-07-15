@@ -14,8 +14,6 @@ A type implements `Type`, which is both a **runtime contract** (`assert`, `coerc
 - `coerce(mixed): Result<Option<T>>` — the lenient input boundary: convert what can reasonably be read as the type. Absence readings (an empty CSV cell meaning "no value") belong here, and *only* here.
 - `format(T): string` — human rendering.
 
-Deliberately *not* part of the contract: equality. The engine has exactly one definition of "equal" (`ValueEquality`, used by `==` and the set operators), and a type cannot override it — two values of your type compare however their underlying representation compares. If your domain type needs its own equality semantics (money comparing by amount and currency), ship an `==` operator rule for it (§Custom operators); that is the only place equality behavior can live.
-
 ### The static contract: projection into the shape algebra
 
 Relations between types (assignability, overlap, …) are not defined on your class — they are defined by structural recursion over a **sealed vocabulary of shapes** (`Superscript\Axiom\Types\Shapes`). Your type *projects* into that vocabulary via `shape()`; it can never add a constructor or edit a relation. Adding a type is adding a shape — an unmodelled type is unrepresentable, not silently incompatible.
@@ -286,7 +284,7 @@ Use the relation registry rather than hand-rolling type tests — it is what kee
 - `TypeRelations::overlaps($a, $b)` — could any *value* satisfy both? The judgment for equality and membership.
 - `TypeRelations::jointlyAdmissible($a, $b)` — could any operand *type* be admitted by both slots? The row-ambiguity judgment the `Dialect` runs at construction; useful when your hand-written rule needs to reason about collisions the way the dialect does.
 
-(There is deliberately no orderability oracle: "is `<` meaningful for this type?" has exactly one authority — whether the dialect resolves `<` for it. Shipping ordering rows *is* declaring the type ordered.)
+Orderability has exactly one authority: whether the dialect resolves `<` for the type. Shipping ordering rows *is* declaring the type ordered.
 
 Core's rules (`src/Operators/`) are the reference implementations — `EqualityOverloader` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `HasOverloader`/`InOverloader` show shared operand judgments via `SetOperands`.
 
