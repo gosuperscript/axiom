@@ -11,7 +11,6 @@ use Superscript\Monads\Result\Result;
 use Webmozart\Assert\Assert;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * The composed binary dialect: one list of rules, resolved once per

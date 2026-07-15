@@ -26,7 +26,6 @@ use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\TypedSource;
-use Superscript\Axiom\Types\Shapes;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;

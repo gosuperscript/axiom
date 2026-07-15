@@ -14,7 +14,6 @@ use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * The unary twin of {@see InfixSignature}: this operator, over this
