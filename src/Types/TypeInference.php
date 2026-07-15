@@ -343,9 +343,7 @@ final readonly class TypeInference
                 return Ok(TypeReifier::reify($object->fields[$property]));
             }
 
-            return Err(new TypeMismatch($object->open
-                ? sprintf("Field '%s' is not declared by the open record %s: openness certifies assignability width, never the presence of a particular field.", $property, TypeDescriber::describeShape($object))
-                : sprintf("Field '%s' does not exist on %s.", $property, TypeDescriber::describeShape($object))));
+            return Err(new TypeMismatch(sprintf("Field '%s' does not exist on %s.", $property, TypeDescriber::describeShape($object))));
         }
 
         if ($object instanceof Shapes\DictShape) {

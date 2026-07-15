@@ -691,17 +691,16 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function undeclared_fields_are_refused_on_open_and_closed_records(): void
+    public function undeclared_fields_are_refused(): void
     {
+        // Records are exact: a field the record does not declare does not
+        // exist, and there is no open variant on which "might have it"
+        // could be argued.
         $inference = self::inference();
 
-        $closed = self::env(declarations: ['r' => new RecordType(['a' => new NumberType()])]);
-        $closedResult = $inference->infer(new MemberAccessSource(new SymbolSource('r'), 'b'), $closed);
-        $this->assertStringContainsString("Field 'b' does not exist", $closedResult->unwrapErr()->describe());
-
-        $open = self::env(declarations: ['r' => new RecordType(['a' => new NumberType()], open: true)]);
-        $openResult = $inference->infer(new MemberAccessSource(new SymbolSource('r'), 'b'), $open);
-        $this->assertStringContainsString('openness certifies assignability width', $openResult->unwrapErr()->describe());
+        $env = self::env(declarations: ['r' => new RecordType(['a' => new NumberType()])]);
+        $result = $inference->infer(new MemberAccessSource(new SymbolSource('r'), 'b'), $env);
+        $this->assertStringContainsString("Field 'b' does not exist", $result->unwrapErr()->describe());
     }
 
     #[Test]

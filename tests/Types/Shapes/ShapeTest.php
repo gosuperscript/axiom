@@ -98,11 +98,6 @@ final class ShapeTest extends TestCase
             new RecordShape(['b' => new StringShape(), 'a' => new NumberShape()]),
             true,
         ];
-        yield 'records with different openness' => [
-            new RecordShape(['a' => new NumberShape()]),
-            new RecordShape(['a' => new NumberShape()], open: true),
-            false,
-        ];
         yield 'records with different field names' => [
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['b' => new NumberShape()]),
@@ -173,8 +168,7 @@ final class ShapeTest extends TestCase
         $this->assertSame(0, $plain->min);
         $this->assertNull($plain->max);
 
-        $record = new RecordShape(['a' => new NumberShape()], open: true);
-        $this->assertTrue($record->open);
+        $record = new RecordShape(['a' => new NumberShape()]);
         $this->assertInstanceOf(NumberShape::class, $record->fields['a']);
 
         $opaque = new OpaqueShape('ClaimId');

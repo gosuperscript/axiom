@@ -125,14 +125,6 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['a' => new NumberShape()]),
         ];
-        yield 'closed record to open record with fewer fields (width subtyping)' => [
-            new RecordShape(['a' => new NumberShape(), 'b' => new StringShape()]),
-            new RecordShape(['a' => new NumberShape()], open: true),
-        ];
-        yield 'open record to open record' => [
-            new RecordShape(['a' => new NumberShape()], open: true),
-            new RecordShape(['a' => new NumberShape()], open: true),
-        ];
         yield 'missing optional field on a closed source reads as null' => [
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
@@ -250,15 +242,10 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
         ];
 
-        yield 'open record cannot satisfy a closed record' => [
-            new RecordShape(['a' => new NumberShape()], open: true),
-            new RecordShape(['a' => new NumberShape()]),
-            'an open record may carry fields a closed record forbids',
-        ];
-        yield 'closed record with a field outside the closed vocabulary' => [
+        yield 'record with an undeclared extra field' => [
             new RecordShape(['a' => new NumberShape(), 'x' => new StringShape()]),
             new RecordShape(['a' => new NumberShape()]),
-            "Field 'x' is not permitted",
+            "Field 'x' is not part of the record",
         ];
         yield 'record field type mismatch' => [
             new RecordShape(['a' => new StringShape()]),
@@ -270,22 +257,12 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
             'String is not assignable to Number',
         ];
-        yield 'open source cannot certify a required field' => [
-            new RecordShape([], open: true),
-            new RecordShape(['a' => new OptionShape(new NumberShape())], open: true),
-            "Field 'a' is not declared by the open source record",
-        ];
         yield 'required field missing' => [
             new RecordShape([]),
             new RecordShape(['a' => new NumberShape()]),
             "Required field 'a' is missing",
         ];
 
-        yield 'open record into dict' => [
-            new RecordShape(['a' => new NumberShape()], open: true),
-            new DictShape(new NumberShape()),
-            'an open record may carry fields of any type',
-        ];
         yield 'record with optional field into dict' => [
             new RecordShape(['a' => new OptionShape(new NumberShape())]),
             new DictShape(new NumberShape()),
@@ -459,11 +436,6 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
             false,
         ];
-        yield 'an open record permits the extra required field' => [
-            new RecordShape(['a' => new NumberShape(), 'b' => new StringShape()]),
-            new RecordShape(['a' => new NumberShape()], open: true),
-            true,
-        ];
         yield 'an optional extra field does not block overlap with a closed record' => [
             new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
             new RecordShape(['a' => new NumberShape()]),
@@ -581,8 +553,8 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new LiteralShape('y')]),
         )->unwrapErr()->describe();
 
-        $this->assertStringContainsString("Required field 'x' is forbidden by the closed record.", $described);
-        $this->assertStringContainsString("Required field 'y' is forbidden by the closed record.", $described);
+        $this->assertStringContainsString("Required field 'x' is forbidden by the record.", $described);
+        $this->assertStringContainsString("Required field 'y' is forbidden by the record.", $described);
         $this->assertStringContainsString("Field 'a' cannot satisfy both records.", $described);
         $this->assertStringContainsString("'x' and 'y' share no values.", $described);
     }

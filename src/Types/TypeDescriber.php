@@ -105,10 +105,6 @@ final class TypeDescriber
             $fields[] = sprintf('%s: %s', $name, self::describeShape($field));
         }
 
-        if ($shape->open) {
-            $fields[] = '...';
-        }
-
         return sprintf('{%s}', implode(', ', $fields));
     }
 }

@@ -369,17 +369,15 @@ final class TypeRelations
      */
     private static function recordAssignable(RecordShape $source, RecordShape $target): Result
     {
-        if (!$target->open && $source->open) {
-            return self::mismatch($source, $target, 'an open record may carry fields a closed record forbids');
-        }
-
+        // Records are exact — no width subtyping. A source field the target
+        // does not declare makes source values non-members; a missing
+        // optional target field is legal absence (coercion canonicalizes it
+        // to a present null).
         $causes = [];
 
-        if (!$target->open) {
-            foreach (array_keys($source->fields) as $name) {
-                if (!isset($target->fields[$name])) {
-                    $causes[] = new TypeMismatch(sprintf("Field '%s' is not permitted by the closed record.", $name));
-                }
+        foreach (array_keys($source->fields) as $name) {
+            if (!isset($target->fields[$name])) {
+                $causes[] = new TypeMismatch(sprintf("Field '%s' is not part of the record.", $name));
             }
         }
 
@@ -390,8 +388,6 @@ final class TypeRelations
                 if ($result->isErr()) {
                     $causes[] = new TypeMismatch(sprintf("Field '%s' is incompatible.", $name), [$result->unwrapErr()]);
                 }
-            } elseif ($source->open) {
-                $causes[] = new TypeMismatch(sprintf("Field '%s' is not declared by the open source record, so its presence cannot be certified.", $name));
             } elseif (!$field instanceof OptionShape) {
                 $causes[] = new TypeMismatch(sprintf("Required field '%s' is missing.", $name));
             }
@@ -405,10 +401,6 @@ final class TypeRelations
      */
     private static function recordAssignableToDict(RecordShape $source, DictShape $target): Result
     {
-        if ($source->open) {
-            return self::mismatch($source, $target, 'an open record may carry fields of any type');
-        }
-
         $causes = [];
 
         foreach ($source->fields as $name => $field) {
@@ -482,15 +474,11 @@ final class TypeRelations
      */
     private static function forbiddenRequiredFields(RecordShape $requiring, RecordShape $other): array
     {
-        if ($other->open) {
-            return [];
-        }
-
         $causes = [];
 
         foreach ($requiring->fields as $name => $field) {
             if (!$field instanceof OptionShape && !isset($other->fields[$name])) {
-                $causes[] = new TypeMismatch(sprintf("Required field '%s' is forbidden by the closed record.", $name));
+                $causes[] = new TypeMismatch(sprintf("Required field '%s' is forbidden by the record.", $name));
             }
         }
 

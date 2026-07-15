@@ -94,7 +94,6 @@ final class TypeDescriberTest extends TestCase
             new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
             '{a: Number, b: String?}',
         ];
-        yield [new RecordShape(['a' => new NumberShape()], open: true), '{a: Number, ...}'];
         yield [new RecordShape([]), '{}'];
     }
 

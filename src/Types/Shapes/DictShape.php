@@ -6,8 +6,9 @@ namespace Superscript\Axiom\Types\Shapes;
 
 /**
  * A homogeneous string-keyed map with statically unknown keys. Distinct
- * from an open record: "all values are T" and "these named fields plus
- * anything" are different claims.
+ * from a record: "all values are T" and "exactly these named fields" are
+ * different claims — Dict is the honest type for data whose keys cannot
+ * be enumerated.
  */
 final class DictShape extends Shape
 {

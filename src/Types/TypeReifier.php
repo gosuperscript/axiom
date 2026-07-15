@@ -57,7 +57,7 @@ final class TypeReifier
             $fields[$name] = self::reify($field);
         }
 
-        return new RecordType($fields, $shape->open);
+        return new RecordType($fields);
     }
 
     private static function opaque(OpaqueShape $shape): OpaqueType

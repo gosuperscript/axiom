@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
-use SebastianBergmann\Exporter\Exporter;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Err;
@@ -17,8 +16,14 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * Named fields, open or closed. An optional field is a field whose type is
+ * Named fields, exact. An optional field is a field whose type is
  * OptionType — there is no separate presence flag.
+ *
+ * The two admission faces diverge on undeclared keys, by design: assert is
+ * strict membership (an extra key means the value is not a member), while
+ * coerce takes the declared slice of wide input — dropping undeclared keys
+ * is a conversion, like '5' → 5 — so hosts may pass a whole context row
+ * and only the declared fields enter.
  *
  * Coercion canonicalizes absence: a missing optional key becomes a present
  * null, so evaluation only ever sees one representation. A field coercion
@@ -34,11 +39,23 @@ final readonly class RecordType implements Type
      */
     public function __construct(
         public array $fields,
-        public bool $open = false,
     ) {}
 
     public function assert(mixed $value): Result
     {
+        if (!is_array($value)) {
+            return new Err(new TransformValueException(type: 'record', value: $value));
+        }
+
+        // Strict membership: records are exact, so an undeclared key means
+        // the value is not a member. Taking the declared slice belongs to
+        // coerce — asserting never converts.
+        foreach (array_keys($value) as $key) {
+            if (!isset($this->fields[$key])) {
+                return new Err(new InvalidArgumentException(sprintf('Field [%s] is not part of the record.', $key)));
+            }
+        }
+
         return $this->transform($value, fn(Type $field, mixed $item) => $field->assert($item));
     }
 
@@ -48,27 +65,24 @@ final readonly class RecordType implements Type
             $value = $decoded;
         }
 
-        return $this->transform($value, fn(Type $field, mixed $item) => $field->coerce($item));
-    }
-
-    /**
-     * @param callable(Type, mixed): Result<Option<mixed>, \Throwable> $transform
-     * @return Result<Option<array<array-key, mixed>>, \Throwable>
-     */
-    private function transform(mixed $value, callable $transform): Result
-    {
         if (!is_array($value)) {
             return new Err(new TransformValueException(type: 'record', value: $value));
         }
 
-        if (!$this->open) {
-            foreach (array_keys($value) as $key) {
-                if (!isset($this->fields[$key])) {
-                    return new Err(new InvalidArgumentException(sprintf('Field [%s] is not permitted by the closed record.', $key)));
-                }
-            }
-        }
+        return $this->transform($value, fn(Type $field, mixed $item) => $field->coerce($item));
+    }
 
+    /**
+     * Builds the record from the declared fields alone — undeclared keys in
+     * $value simply never enter, which is coerce's declared-slice behavior
+     * (assert has already rejected them).
+     *
+     * @param array<array-key, mixed> $value
+     * @param callable(Type, mixed): Result<Option<mixed>, \Throwable> $transform
+     * @return Result<Option<array<array-key, mixed>>, \Throwable>
+     */
+    private function transform(array $value, callable $transform): Result
+    {
         /** @var array<array-key, mixed> $record */
         $record = [];
 
@@ -90,24 +104,18 @@ final readonly class RecordType implements Type
             $record[$name] = $option->unwrap();
         }
 
-        if ($this->open) {
-            foreach ($value as $key => $item) {
-                if (!isset($this->fields[$key])) {
-                    $record[$key] = $item;
-                }
-            }
-        }
-
         return Ok(Some($record));
     }
 
+    /**
+     * Members of an exact record carry exactly the declared fields (transform
+     * canonicalizes), so comparison and formatting range over the fields.
+     */
     public function compare(mixed $a, mixed $b): bool
     {
-        return array_keys($a) === array_keys($b) && array_all(
-            array_keys($a),
-            fn(int|string $key) => isset($this->fields[$key])
-                ? $this->fields[$key]->compare($a[$key], $b[$key])
-                : $a[$key] === $b[$key],
+        return array_all(
+            array_keys($this->fields),
+            fn(string $key) => $this->fields[$key]->compare($a[$key], $b[$key]),
         );
     }
 
@@ -115,12 +123,8 @@ final readonly class RecordType implements Type
     {
         $parts = [];
 
-        foreach ($value as $key => $item) {
-            $parts[] = sprintf(
-                '%s: %s',
-                $key,
-                isset($this->fields[$key]) ? $this->fields[$key]->format($item) : (new Exporter())->export($item),
-            );
+        foreach ($this->fields as $key => $field) {
+            $parts[] = sprintf('%s: %s', $key, $field->format($value[$key]));
         }
 
         return implode(', ', $parts);
@@ -134,6 +138,6 @@ final readonly class RecordType implements Type
             $fields[$name] = $field->shape();
         }
 
-        return new RecordShape($fields, $this->open);
+        return new RecordShape($fields);
     }
 }

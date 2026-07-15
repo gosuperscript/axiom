@@ -98,22 +98,22 @@ final class RecordTypeTest extends TestCase
     }
 
     #[Test]
-    public function a_closed_record_polices_its_vocabulary(): void
+    public function assert_is_strict_membership_so_an_extra_key_is_a_rejection(): void
     {
         $result = self::subject()->assert(['name' => 'Ada', 'age' => 36, 'extra' => 1]);
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Field [extra] is not permitted', $result->unwrapErr()->getMessage());
+        $this->assertStringContainsString('Field [extra] is not part of the record', $result->unwrapErr()->getMessage());
     }
 
     #[Test]
-    public function an_open_record_passes_extra_fields_through(): void
+    public function coerce_takes_the_declared_slice_of_wide_input(): void
     {
-        $type = new RecordType(['a' => new NumberType()], open: true);
+        // Dropping undeclared keys is a conversion, like '5' → 5: hosts may
+        // pass a whole context row and only the declared fields enter.
+        $record = self::subject()->coerce(['name' => 'Ada', 'age' => '36', 'created_at' => '2026-01-01'])->unwrap()->unwrap();
 
-        $record = $type->assert(['a' => 1, 'extra' => 'kept'])->unwrap()->unwrap();
-
-        $this->assertSame(['a' => 1, 'extra' => 'kept'], $record);
+        $this->assertSame(['name' => 'Ada', 'age' => 36, 'note' => null], $record);
     }
 
     #[Test]
@@ -128,21 +128,19 @@ final class RecordTypeTest extends TestCase
     #[Test]
     public function it_compares_fieldwise(): void
     {
-        $type = new RecordType(['a' => new NumberType()], open: true);
+        $type = new RecordType(['a' => new NumberType(), 'b' => new StringType()]);
 
-        $this->assertTrue($type->compare(['a' => 1], ['a' => 1]));
-        $this->assertFalse($type->compare(['a' => 1], ['a' => 2]));
-        $this->assertFalse($type->compare(['a' => 1], ['b' => 1]));
-        $this->assertTrue($type->compare(['a' => 1, 'x' => 'y'], ['a' => 1, 'x' => 'y']));
-        $this->assertFalse($type->compare(['a' => 1, 'x' => 'y'], ['a' => 1, 'x' => 'z']));
+        $this->assertTrue($type->compare(['a' => 1, 'b' => 'x'], ['a' => 1, 'b' => 'x']));
+        $this->assertFalse($type->compare(['a' => 1, 'b' => 'x'], ['a' => 2, 'b' => 'x']));
+        $this->assertFalse($type->compare(['a' => 1, 'b' => 'x'], ['a' => 1, 'b' => 'y']));
     }
 
     #[Test]
     public function it_formats_declared_fields_through_their_types(): void
     {
-        $type = new RecordType(['a' => new NumberType()], open: true);
+        $type = new RecordType(['a' => new NumberType(), 'b' => new StringType()]);
 
-        $this->assertSame("a: 1, x: 'y'", $type->format(['a' => 1, 'x' => 'y']));
+        $this->assertSame('a: 1, b: y', $type->format(['a' => 1, 'b' => 'y']));
     }
 
     #[Test]
@@ -151,11 +149,8 @@ final class RecordTypeTest extends TestCase
         $shape = self::subject()->shape();
 
         $this->assertInstanceOf(RecordShape::class, $shape);
-        $this->assertFalse($shape->open);
         $this->assertInstanceOf(StringShape::class, $shape->fields['name']);
         $this->assertInstanceOf(NumberShape::class, $shape->fields['age']);
         $this->assertInstanceOf(OptionShape::class, $shape->fields['note']);
-
-        $this->assertTrue((new RecordType([], open: true))->shape()->open);
     }
 }

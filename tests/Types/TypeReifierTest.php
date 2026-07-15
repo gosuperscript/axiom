@@ -88,7 +88,6 @@ final class TypeReifierTest extends TestCase
         yield 'bounded list' => [new ListShape(new NumberShape(), 1, 3)];
         yield 'dict' => [new DictShape(new StringShape())];
         yield 'record' => [new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())])];
-        yield 'open record' => [new RecordShape(['a' => new NumberShape()], open: true)];
         yield 'unknown' => [new UnknownShape()];
         yield 'never' => [new NeverShape()];
         yield 'opaque' => [new OpaqueShape('ClaimId')];
