@@ -41,11 +41,6 @@ class StringType implements Type
         };
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
-    }
-
     public function format(mixed $value): string
     {
         return strval($value);

@@ -35,6 +35,12 @@ use function Superscript\Monads\Result\Ok;
  * - overlaps is symmetric and not derivable from assignability.
  * - admits is pessimistic: a union must be wholly assignable; there is no
  *   Unknown hole.
+ * - jointlyAdmissible answers dispatch ambiguity, and only that: does some
+ *   inhabited type get admitted by both slots? It shares overlap's
+ *   recursion but diverges exactly where a shared value is not a shared
+ *   type: List/Dict and List/Record overlap (the value []) yet are jointly
+ *   inadmissible (dispatch sees operand types, never values), and Unknown
+ *   overlaps everything yet admits nothing.
  */
 final class TypeRelations
 {
@@ -67,6 +73,21 @@ final class TypeRelations
     public static function overlaps(Type $a, Type $b): Result
     {
         return self::shapesOverlap($a->shape(), $b->shape());
+    }
+
+    /**
+     * Could one operand type be admitted by both slots? The row-ambiguity
+     * relation (RFC item 36): dispatch resolves operand types through
+     * admits(), so two rows conflict iff some inhabited type is admitted by
+     * both slots. Value overlap is neither necessary nor sufficient — the
+     * empty array inhabits both List and Dict, but no compilable operand
+     * type reaches both slots.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    public static function jointlyAdmissible(Type $a, Type $b): Result
+    {
+        return self::shapesJointlyAdmissible($a->shape(), $b->shape());
     }
 
     /**
@@ -226,8 +247,34 @@ final class TypeRelations
      */
     public static function shapesOverlap(Shape $a, Shape $b): Result
     {
+        return self::satisfiable($a, $b, dispatch: false);
+    }
+
+    /**
+     * @return Result<bool, TypeMismatch>
+     */
+    public static function shapesJointlyAdmissible(Shape $a, Shape $b): Result
+    {
+        return self::satisfiable($a, $b, dispatch: true);
+    }
+
+    /**
+     * One recursion, two questions. Overlap ($dispatch = false) asks "could
+     * one VALUE satisfy both?"; joint admissibility ($dispatch = true) asks
+     * "could one inhabited operand TYPE be admitted by both slots?". The
+     * questions share every structural rule and diverge exactly twice:
+     * Unknown overlaps everything but admits nothing, and the one-value-
+     * two-types corners (the empty array inhabits List, Dict, and the empty
+     * Record) overlap without any operand type reaching both slots.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    private static function satisfiable(Shape $a, Shape $b, bool $dispatch): Result
+    {
         if ($a instanceof UnknownShape || $b instanceof UnknownShape) {
-            return Ok(true);
+            return $dispatch
+                ? Err(new TypeMismatch('Unknown is inert: no compilable operand type reaches an Unknown slot.'))
+                : Ok(true);
         }
 
         if ($a instanceof NeverShape || $b instanceof NeverShape) {
@@ -243,13 +290,13 @@ final class TypeRelations
         }
 
         if ($a instanceof OptionShape) {
-            return self::shapesOverlap($a->inner, $b)
-                ->mapErr(fn(TypeMismatch $cause) => self::noOverlap($a, $b, [$cause]));
+            return self::satisfiable($a->inner, $b, $dispatch)
+                ->mapErr(fn(TypeMismatch $cause) => self::unsatisfiable($a, $b, $dispatch, [$cause]));
         }
 
         if ($b instanceof OptionShape) {
-            return self::shapesOverlap($a, $b->inner)
-                ->mapErr(fn(TypeMismatch $cause) => self::noOverlap($a, $b, [$cause]));
+            return self::satisfiable($a, $b->inner, $dispatch)
+                ->mapErr(fn(TypeMismatch $cause) => self::unsatisfiable($a, $b, $dispatch, [$cause]));
         }
 
         if ($a instanceof UnionShape || $b instanceof UnionShape) {
@@ -257,7 +304,7 @@ final class TypeRelations
             $causes = [];
 
             foreach ($union->members as $member) {
-                $result = self::shapesOverlap($member, $other);
+                $result = self::satisfiable($member, $other, $dispatch);
 
                 if ($result->isOk()) {
                     return Ok(true);
@@ -266,17 +313,17 @@ final class TypeRelations
                 $causes[] = $result->unwrapErr();
             }
 
-            return Err(self::noOverlap($a, $b, $causes));
+            return Err(self::unsatisfiable($a, $b, $dispatch, $causes));
         }
 
         if ($a instanceof LiteralShape || $b instanceof LiteralShape) {
             [$literal, $other] = $a instanceof LiteralShape ? [$a, $b] : [$b, $a];
 
-            return $literal->base->equals($other) ? Ok(true) : Err(self::noOverlap($a, $b));
+            return $literal->base->equals($other) ? Ok(true) : Err(self::unsatisfiable($a, $b, $dispatch));
         }
 
         if ($a instanceof ListShape && $b instanceof ListShape) {
-            return self::listsOverlap($a, $b);
+            return self::listsSatisfiable($a, $b, $dispatch);
         }
 
         if ($a instanceof DictShape && $b instanceof DictShape) {
@@ -284,38 +331,47 @@ final class TypeRelations
         }
 
         if ($a instanceof RecordShape && $b instanceof RecordShape) {
-            return self::recordsOverlap($a, $b);
+            return self::recordsSatisfiable($a, $b, $dispatch);
         }
 
         if ($a instanceof RecordShape && $b instanceof DictShape) {
-            return self::recordOverlapsDict($a, $b);
+            return self::recordDictSatisfiable($a, $b, $dispatch);
         }
 
         if ($a instanceof DictShape && $b instanceof RecordShape) {
-            return self::recordOverlapsDict($b, $a);
+            return self::recordDictSatisfiable($b, $a, $dispatch);
         }
 
         if ($a instanceof OpaqueShape && $b instanceof OpaqueShape) {
-            return self::opaquesOverlap($a, $b);
+            return self::opaquesSatisfiable($a, $b, $dispatch);
         }
 
         if ($a instanceof ListShape && $b instanceof DictShape) {
-            return self::listOverlapsDict($a, $b);
+            return $dispatch ? Err(self::noCommonOperandType($a, $b)) : self::listOverlapsDict($a, $b);
         }
 
         if ($a instanceof DictShape && $b instanceof ListShape) {
-            return self::listOverlapsDict($b, $a);
+            return $dispatch ? Err(self::noCommonOperandType($a, $b)) : self::listOverlapsDict($b, $a);
         }
 
         if ($a instanceof ListShape && $b instanceof RecordShape) {
-            return self::listOverlapsRecord($a, $b);
+            return $dispatch ? Err(self::noCommonOperandType($a, $b)) : self::listOverlapsRecord($a, $b);
         }
 
         if ($a instanceof RecordShape && $b instanceof ListShape) {
-            return self::listOverlapsRecord($b, $a);
+            return $dispatch ? Err(self::noCommonOperandType($a, $b)) : self::listOverlapsRecord($b, $a);
         }
 
-        return Err(self::noOverlap($a, $b));
+        return Err(self::unsatisfiable($a, $b, $dispatch));
+    }
+
+    private static function noCommonOperandType(Shape $a, Shape $b): TypeMismatch
+    {
+        return new TypeMismatch(sprintf(
+            '%s and %s admit no common operand type: the empty array is one value with two types, and dispatch sees types, never values.',
+            TypeDescriber::describeShape($a),
+            TypeDescriber::describeShape($b),
+        ));
     }
 
     /**
@@ -361,23 +417,23 @@ final class TypeRelations
     /**
      * @return Result<bool, TypeMismatch>
      */
-    private static function opaquesOverlap(OpaqueShape $a, OpaqueShape $b): Result
+    private static function opaquesSatisfiable(OpaqueShape $a, OpaqueShape $b, bool $dispatch): Result
     {
         if ($a->identity !== $b->identity || array_keys($a->parameters) !== array_keys($b->parameters)) {
-            return Err(self::noOverlap($a, $b));
+            return Err(self::unsatisfiable($a, $b, $dispatch));
         }
 
         $causes = [];
 
         foreach ($a->parameters as $name => $parameter) {
-            $result = self::shapesOverlap($parameter, $b->parameters[$name]);
+            $result = self::satisfiable($parameter, $b->parameters[$name], $dispatch);
 
             if ($result->isErr()) {
                 $causes[] = new TypeMismatch(sprintf("Parameter '%s' cannot satisfy both.", $name), [$result->unwrapErr()]);
             }
         }
 
-        return $causes === [] ? Ok(true) : Err(self::noOverlap($a, $b, $causes));
+        return $causes === [] ? Ok(true) : Err(self::unsatisfiable($a, $b, $dispatch, $causes));
     }
 
     /**
@@ -455,9 +511,13 @@ final class TypeRelations
     }
 
     /**
+     * When the bound intersection admits emptiness, both questions answer
+     * yes for the same reason stated in two vocabularies: the value [] for
+     * overlap, the inhabited type List<Never, 0, 0> for dispatch.
+     *
      * @return Result<bool, TypeMismatch>
      */
-    private static function listsOverlap(ListShape $a, ListShape $b): Result
+    private static function listsSatisfiable(ListShape $a, ListShape $b, bool $dispatch): Result
     {
         $lower = max($a->min, $b->min);
         $upper = match (true) {
@@ -467,21 +527,21 @@ final class TypeRelations
         };
 
         if ($upper !== null && $lower > $upper) {
-            return Err(self::noOverlap($a, $b, [new TypeMismatch('The length bounds do not intersect.')]));
+            return Err(self::unsatisfiable($a, $b, $dispatch, [new TypeMismatch('The length bounds do not intersect.')]));
         }
 
         if ($lower === 0) {
             return Ok(true);
         }
 
-        return self::shapesOverlap($a->element, $b->element)
-            ->mapErr(fn(TypeMismatch $cause) => self::noOverlap($a, $b, [$cause]));
+        return self::satisfiable($a->element, $b->element, $dispatch)
+            ->mapErr(fn(TypeMismatch $cause) => self::unsatisfiable($a, $b, $dispatch, [$cause]));
     }
 
     /**
      * @return Result<bool, TypeMismatch>
      */
-    private static function recordsOverlap(RecordShape $a, RecordShape $b): Result
+    private static function recordsSatisfiable(RecordShape $a, RecordShape $b, bool $dispatch): Result
     {
         $causes = [
             ...self::forbiddenRequiredFields($a, $b),
@@ -493,14 +553,14 @@ final class TypeRelations
                 continue;
             }
 
-            $result = self::shapesOverlap($field, $b->fields[$name]);
+            $result = self::satisfiable($field, $b->fields[$name], $dispatch);
 
             if ($result->isErr()) {
                 $causes[] = new TypeMismatch(sprintf("Field '%s' cannot satisfy both records.", $name), [$result->unwrapErr()]);
             }
         }
 
-        return $causes === [] ? Ok(true) : Err(self::noOverlap($a, $b, $causes));
+        return $causes === [] ? Ok(true) : Err(self::unsatisfiable($a, $b, $dispatch, $causes));
     }
 
     /**
@@ -520,9 +580,15 @@ final class TypeRelations
     }
 
     /**
+     * A record can satisfy a dict in both vocabularies: a record value
+     * whose required fields inhabit the dict's value type is a dict member
+     * (overlap), and the required-slice record type is assignable to the
+     * dict (dispatch) — optional fields drop out either way, since a
+     * missing optional key is a legal record member.
+     *
      * @return Result<bool, TypeMismatch>
      */
-    private static function recordOverlapsDict(RecordShape $record, DictShape $dict): Result
+    private static function recordDictSatisfiable(RecordShape $record, DictShape $dict, bool $dispatch): Result
     {
         $causes = [];
 
@@ -531,14 +597,14 @@ final class TypeRelations
                 continue;
             }
 
-            $result = self::shapesOverlap($field, $dict->value);
+            $result = self::satisfiable($field, $dict->value, $dispatch);
 
             if ($result->isErr()) {
                 $causes[] = new TypeMismatch(sprintf("Required field '%s' cannot inhabit the dict.", $name), [$result->unwrapErr()]);
             }
         }
 
-        return $causes === [] ? Ok(true) : Err(self::noOverlap($record, $dict, $causes));
+        return $causes === [] ? Ok(true) : Err(self::unsatisfiable($record, $dict, $dispatch, $causes));
     }
 
     /**
@@ -572,6 +638,21 @@ final class TypeRelations
     {
         return new TypeMismatch(
             sprintf('%s and %s share no values.', TypeDescriber::describeShape($a), TypeDescriber::describeShape($b)),
+            $causes,
+        );
+    }
+
+    /**
+     * @param list<TypeMismatch> $causes
+     */
+    private static function unsatisfiable(Shape $a, Shape $b, bool $dispatch, array $causes = []): TypeMismatch
+    {
+        return new TypeMismatch(
+            sprintf(
+                $dispatch ? '%s and %s admit no common operand type.' : '%s and %s share no values.',
+                TypeDescriber::describeShape($a),
+                TypeDescriber::describeShape($b),
+            ),
             $causes,
         );
     }

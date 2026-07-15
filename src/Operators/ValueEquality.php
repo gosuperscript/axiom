@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 /**
- * The one notion of value equality, shared by the comparison and set
- * operators: numeric comparison when both operands are numbers (1 == 1.0
- * holds — one Number base, matching literal-shape identity and
- * Type::compare), strict identity otherwise, element-wise for arrays, and
- * false across bases (5 never equals '5'; true never equals 1). Never PHP
- * juggling — this is what makes a dead verdict honest by construction.
+ * The one equality authority (RFC item 39) — consumed by the equality
+ * operator, membership, literal-shape identity, and match coverage; no
+ * second definition exists. Numeric comparison when both operands are
+ * numbers (1 == 1.0 holds — one Number base), strict identity otherwise,
+ * element-wise for arrays, and false across bases (5 never equals '5';
+ * true never equals 1). Never PHP juggling — this is what makes a dead
+ * verdict honest by construction.
  */
 final class ValueEquality
 {

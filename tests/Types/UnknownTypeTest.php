@@ -33,14 +33,6 @@ final class UnknownTypeTest extends TestCase
         $this->assertTrue($type->coerce(null)->unwrap()->isNone());
     }
 
-    #[Test]
-    public function it_compares_strictly(): void
-    {
-        $type = new UnknownType();
-
-        $this->assertTrue($type->compare(5, 5));
-        $this->assertFalse($type->compare(5, '5'));
-    }
 
     #[Test]
     public function it_formats_via_export(): void

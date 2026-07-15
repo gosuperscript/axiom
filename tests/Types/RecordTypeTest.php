@@ -134,15 +134,6 @@ final class RecordTypeTest extends TestCase
         $this->assertInstanceOf(TransformValueException::class, $result->unwrapErr());
     }
 
-    #[Test]
-    public function it_compares_fieldwise(): void
-    {
-        $type = new RecordType(['a' => new NumberType(), 'b' => new StringType()]);
-
-        $this->assertTrue($type->compare(['a' => 1, 'b' => 'x'], ['a' => 1, 'b' => 'x']));
-        $this->assertFalse($type->compare(['a' => 1, 'b' => 'x'], ['a' => 2, 'b' => 'x']));
-        $this->assertFalse($type->compare(['a' => 1, 'b' => 'x'], ['a' => 1, 'b' => 'y']));
-    }
 
     #[Test]
     public function it_formats_declared_fields_through_their_types(): void

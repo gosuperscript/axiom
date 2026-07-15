@@ -50,11 +50,6 @@ final readonly class OpaqueType implements Type
         return $this->assert($value);
     }
 
-    public function compare(mixed $a, mixed $b): bool
-    {
-        return $a === $b;
-    }
-
     public function format(mixed $value): string
     {
         return (new Exporter())->export($value);
