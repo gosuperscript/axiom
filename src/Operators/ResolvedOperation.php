@@ -12,9 +12,10 @@ use Throwable;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The success of {@see OperatorOverloader::resolve()}: the return type and
- * the evaluation, one value. The typing verdict and the runtime semantics
- * cannot drift because they are one statement.
+ * The success of {@see OperatorOverloader::resolve()}: the return type
+ * and the evaluation, together in one value — the compiler keeps the type
+ * and binds the evaluation into the program, so a node can never run
+ * under a different rule than the one that typed it.
  *
  * The evaluation closure takes one operand for unary rules and two for
  * binary rules, and must be total over the operand types the rule resolved

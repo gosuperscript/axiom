@@ -8,15 +8,20 @@ use Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder;
 use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
 
 /**
- * The front door for declaring operator rules: a signature is a row in a
- * dispatch table — one declaration of operand ownership, compiled to a
- * one-verdict rule (admissibility against the declared types; success
- * carries the declared return type and evaluation).
+ * The front door for declaring operator rules:
  *
- * Rules that need more than a row — verdicts computed from the operand
- * types, dead findings, absence-tolerant claims — implement
- * {@see OperatorOverloader}/{@see UnaryOverloader} directly: one method,
- * one obligation (the evaluation is total over the types it resolves for).
+ *   Operator::infix('-')
+ *       ->signature(new DateType(), new PeriodType())
+ *       ->returns(new DateType())
+ *       ->evaluate(fn (Date $d, Period $p) => $d->minus($p))
+ *
+ * The result is a dispatch-table row: it resolves when the operand types
+ * fit the declared slots and answers with the declared return type and
+ * closure.
+ *
+ * Rules a fixed row cannot express — answers computed from the operand
+ * types, dead-comparison findings, absence-tolerant rules — implement
+ * {@see OperatorOverloader}/{@see UnaryOverloader} directly.
  */
 final readonly class Operator
 {
