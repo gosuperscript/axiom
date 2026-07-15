@@ -145,9 +145,11 @@ final readonly class Dialect
 
     /**
      * Rows are statically comparable, so a dialect refuses two rows for the
-     * same operator whose operand types overlap — some value pair would be
-     * claimed by both, and which evaluation runs must never depend on
-     * anything but the types.
+     * same operator whose slots are jointly admissible — some operand type
+     * would resolve both, and with no precedence rule the compiler could
+     * never pick (RFC item 36). Value overlap is deliberately not the test:
+     * dispatch sees operand types, never values, so a List row beside a
+     * Dict row is a legal pair even though the empty array inhabits both.
      *
      * @param list<OperatorOverloader> $binaryRules
      * @param list<UnaryOverloader> $unaryRules
@@ -160,11 +162,11 @@ final readonly class Dialect
             foreach (array_slice($infixRows, $index + 1) as $other) {
                 if (
                     $row->operator === $other->operator
-                    && TypeRelations::overlaps($row->left, $other->left)->isOk()
-                    && TypeRelations::overlaps($row->right, $other->right)->isOk()
+                    && TypeRelations::jointlyAdmissible($row->left, $other->left)->isOk()
+                    && TypeRelations::jointlyAdmissible($row->right, $other->right)->isOk()
                 ) {
                     throw new InvalidArgumentException(sprintf(
-                        'The dialect is ambiguous: two [%s] rows overlap — (%s, %s) and (%s, %s) share operand values, and which evaluation runs must never depend on list order.',
+                        'The dialect is ambiguous: two [%s] rows collide — (%s, %s) and (%s, %s) admit a common operand type, and which evaluation runs must never depend on list order.',
                         $row->operator,
                         TypeDescriber::describe($row->left),
                         TypeDescriber::describe($row->right),
@@ -181,10 +183,10 @@ final readonly class Dialect
             foreach (array_slice($prefixRows, $index + 1) as $other) {
                 if (
                     $row->operator === $other->operator
-                    && TypeRelations::overlaps($row->operand, $other->operand)->isOk()
+                    && TypeRelations::jointlyAdmissible($row->operand, $other->operand)->isOk()
                 ) {
                     throw new InvalidArgumentException(sprintf(
-                        'The dialect is ambiguous: two unary [%s] rows overlap — %s and %s share operand values, and which evaluation runs must never depend on list order.',
+                        'The dialect is ambiguous: two unary [%s] rows collide — %s and %s admit a common operand type, and which evaluation runs must never depend on list order.',
                         $row->operator,
                         TypeDescriber::describe($row->operand),
                         TypeDescriber::describe($other->operand),
