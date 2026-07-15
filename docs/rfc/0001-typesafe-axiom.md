@@ -2,11 +2,11 @@
 
 - **Status**: Accepted
 - **Author**: Robert van Steen
-- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved; revised again 2026-07-14 after adversarial review — see §Resolved questions, second round; extension-DX round added the signature builder — see §Resolved questions, item 18; second-opinion review round traced eight soundness findings to root causes — see §Resolved questions, fourth round; fifth round (2026-07-15): the second Codex review's six findings led to deleting two mechanisms outright — binding descent and open records — see §Resolved questions, fifth round)
+- **Date**: 2026-07-14 (revised 2026-07-14 after design review — all open questions resolved; revised again 2026-07-14 after adversarial review — see §Resolved questions, second round; extension-DX round added the signature builder — see §Resolved questions, item 18; second-opinion review round traced eight soundness findings to root causes — see §Resolved questions, fourth round; fifth round (2026-07-15): the second Codex review's six findings led to deleting two mechanisms outright — binding descent and open records — see §Resolved questions, fifth round; sixth round (2026-07-15): the compilation pivot — a passed check becomes a precondition of evaluation, operator rules collapse to one face, and the runtime dispatch and resolver layers are deleted — see §Resolved questions, sixth round)
 
 ## Summary
 
-Axiom pivots from a dynamically evaluated expression engine to a **statically typed expression language**: every expression has an inferable `Type`, types stand in decidable relations to one another (assignability, equivalence, overlap, admissibility, orderability), and every operator owns its runtime *and* static semantics in one class, so the two can never drift. Hosts extend the type system the same way they extend evaluation today — by contributing types, literals, and overloaders through the existing plugin seams.
+Axiom pivots from a dynamically evaluated expression engine to a **statically typed, compiled expression language**: every expression has an inferable `Type`, types stand in decidable relations to one another (assignability, equivalence, overlap, admissibility, orderability), and every operator rule states its typing and its evaluation in **one verdict**, so the two can never drift. A program is checked once — `Expression::compile()` resolves every operator and every symbol against the declared input types and returns a `Program` — and trusted thereafter: a compiled program performs no runtime type dispatch, and the only places values are ever inspected are the three admission sites (the binding boundary, `Coerce`, `Ascription`). Hosts extend the type system the same way they extend evaluation — by contributing types, literals, operator rules, and sources through the plugin seams.
 
 The checker operates on the **runtime AST** (`Source`) — the programs hosts actually run today. It has no dependency on any authoring surface; if one is ever built, it would be a consumer of this layer, not a prerequisite for it (see §Future work).
 
@@ -14,7 +14,7 @@ The checker operates on the **runtime AST** (`Source`) — the programs hosts ac
 
 Two forces converge:
 
-1. **Hosts rebuild static semantics, and it drifts.** Answering static questions about Axiom expressions — "is this condition boolean?", "can this comparison ever hold?", "what does this derived value return?" — currently means building a type layer *outside* Axiom: structural shapes, relations between types, syntax-directed inference, and per-operator typing rules. That last part is the hazard: the static rules are a hand-maintained **mirror** of the runtime overloaders. `Option<Number> + Number` types differently under the bare `DefaultOverloader` (unsupported: no rule pairs an absent operand with a present one) than under a host dialect that deliberately reads an absent operand as zero — so inference is only correct if it is injected with the exact static mirror of the overloader stack the evaluator runs. Nothing enforces that mirror beyond discipline. Co-locating each rule's `evaluate` and `typeOf` in one class makes drift *unrepresentable* rather than merely tested-against.
+1. **Hosts rebuild static semantics, and it drifts.** Answering static questions about Axiom expressions — "is this condition boolean?", "can this comparison ever hold?", "what does this derived value return?" — currently means building a type layer *outside* Axiom: structural shapes, relations between types, syntax-directed inference, and per-operator typing rules. That last part is the hazard: the static rules are a hand-maintained **mirror** of the runtime overloaders. `Option<Number> + Number` types differently under the bare `DefaultOverloader` (unsupported: no rule pairs an absent operand with a present one) than under a host dialect that deliberately reads an absent operand as zero — so inference is only correct if it is injected with the exact static mirror of the overloader stack the evaluator runs. Nothing enforces that mirror beyond discipline. Collapsing each rule to a single verdict — one call whose success carries the return type *and* the evaluation — makes drift *unrepresentable* rather than merely tested-against: there are no longer two statements to diverge.
 
 2. **Every host pays the same tax.** A static layer built downstream is essentially host-agnostic: only the host's domain types and its enforcement policy are truly its own. The traversal, the relations, the typing rules for Axiom's own overloaders — all of it types *Axiom*, and belongs to Axiom. This design has been proven in production by a host application that built the full layer downstream; this RFC upstreams the host-agnostic core of it.
 
@@ -43,8 +43,8 @@ The design review surfaced places where the *current runtime* contradicts the se
 Three layers, each usable without the ones above it (a fourth — a typed authoring surface — is future work, see §Future work):
 
 ```
-3. Inference & checking  infer(Source, env) / check(Source, expected, env)
-2. Typed operators       evaluate() + typeOf() in one class (binary and unary)
+3. Compilation           Expression::compile() → Program — every node resolved once, then trusted
+2. Typed operators       resolve(operator, operand types) → (return type, evaluation): one verdict
 1. Types & relations     sealed shape algebra
                          + relations (assignable, equivalent, overlaps, admits, ordered)
 ```
@@ -73,7 +73,7 @@ The sealed constructors:
 | `RecordShape(fields)` | named fields, exact | A record's value set is fully described by its fields — no open variant, no width subtyping (see item 26); exactness is what makes whole-record equality total. **No presence flag**: an optional field is a field whose shape is `OptionShape` — missing-key and present-null are one absence concept (see laws). |
 | `DictShape(value)` | homogeneous string-keyed map, unknown keys | Distinct from a record: "all values are `T`" and "exactly these named fields" are different claims. `Dict` is the honest type for data whose keys cannot be enumerated. |
 | `ListShape(element, min, max)` | length-bounded list | A plain list is bounds `[0, ∞)`; there is no separate sized-list shape. Bounds participate in subtyping and overlap. |
-| `UnknownShape` | statically unnameable | Gradual typing. Admissible at every operand position; certifies nothing under assignability (accepted only by itself). Derived, never authored. |
+| `UnknownShape` | statically unnameable | Gradual typing, **inert** (item 30): refused at every operand, comparison, and member-access position; the ways out are the two explicit admission bridges, `Coerce` and `Ascription`. Accepted only by itself under assignability. Derived, never authored. |
 | `NeverShape` | bottom | The empty value set. Type of impossible joins; `Option<Never>` is the type of the `null` literal; union identity. |
 | `OpaqueShape(identity, parameters)` | nominal head, structural parameters | Related only under the same identity; then parameter-wise by the ordinary relations (`Opaque('money', ['currency' => Literal('GBP')])` is assignable to `Opaque('money', ['currency' => 'GBP' \| 'USD'])`). Parameterless opaques are plain nominal identities (claim IDs, catalogue keys). The shape for object-valued domain types. |
 
@@ -103,8 +103,9 @@ final class TypeRelations
     public static function overlaps(Type $a, Type $b): Result;                      // Result<bool, TypeMismatch> — Ok is the verdict; the payload is inert
 
     /** May values of $operand reach a rule's $slot? The operand-admissibility
-        relation every typing rule consults: assignable to the slot, OR the
-        operand is top-level Unknown. Nothing else. */
+        relation every typing rule consults — assignability, named for its
+        intent. The former top-level-Unknown hole is closed (item 30):
+        an Unknown operand is refused and bridged explicitly. */
     public static function admits(Type $operand, Type $slot): Result;               // Result<bool, TypeMismatch> — Ok is the verdict; the payload is inert
 }
 
@@ -137,9 +138,9 @@ Diagnostics are first-class: relations fail with a `TypeMismatch` — a message 
 
 *Overlap & admissibility*
 - `overlaps` is symmetric and is **not** derivable from assignability.
-- `overlaps(Unknown, T)` always holds — nothing can be ruled out.
+- `overlaps(Unknown, T)` always holds — nothing can be ruled out. (This is the ascription bridge working: a claim over an `Unknown` inner value is never statically false.)
 - `overlaps(List<T>, Dict<U>)` always holds — the empty array is a shared member (see the value-domain law below). Assignability and overlap answer to different masters: assignability must be **sound** (never certify a bad flow), overlap must be **complete** (never falsely declare deadness — a `dead` verdict is a constant-`false` claim, and `[] == []` is `true`).
-- `admits` is **pessimistic**: `Union(Number, String)` is refused at a `Number` slot (the author narrows with `match`; `Unknown` is the *only* sanctioned "can't rule it out" hole). Equality remains governed by the optimistic `overlaps`; operand slots by the pessimistic `admits`. Two relations, two purposes, both centrally owned.
+- `admits` is **pessimistic**: `Union(Number, String)` is refused at a `Number` slot, and since item 30 there is no `Unknown` hole — the author narrows with `match` or bridges with `Coerce`/`Ascription`. Equality remains governed by the optimistic `overlaps`; operand slots by the pessimistic `admits`. Two relations, two purposes, both centrally owned.
 
 *Order*
 - Orderability is not part of the assignability family. `hasDefinedOrder` is true for `Number` only in core — not `String` (PHP's willingness to rank strings is not a defined order; ISO-date-string comparison *should* be a type error, because it's begging for a `Date` type), not `Boolean`. `Literal`/`Union` derive from their bases; `Option` is unordered (`null` doesn't rank). A host that wants lexicographic string ranking ships a one-class overloader in its dialect.
@@ -148,136 +149,125 @@ Diagnostics are first-class: relations fail with a `TypeMismatch` — a message 
 - `assert` defines strict membership: `""` **is** a `String`, `'null'` **is** a `String`, `[]`/`{}` **are** a `List`/`Dict`. The absence readings (`'' → None`, `'null' → None`, `[] → None`) live in — and only in — `coerce`, the lenient input boundary where "empty CSV cell means no value" is a legitimate reading. Hosts keep binding-time leniency; the internal value domain becomes coherent.
 - **The empty array inhabits both `List` and `Dict`.** PHP has one value where the algebra has two types, and membership follows reality: `List` membership is `array_is_list` (which admits `[]`); `Dict` membership is "array that is not a non-empty list". Membership never converts — `ListType::assert` *rejects* an associative array rather than reindexing it (reindexing is coercion, and claiming dispatches on `assert` now that signatures exist). The consequence is the overlap law above: `list == dict` is a **live** comparison, `true` exactly when both are empty — the same shape of theorem as `x == null` being the emptiness test for options.
 - **Equality is value equality, never PHP juggling**: numeric comparison when both operands are numbers (`1 == 1.0` holds — one `Number` base, matching literal-shape identity and `Type::compare`), strict identity for strings/booleans/null, element-wise for lists, and **`false` across bases** (`5 == '5'` is `false`). This is what makes a `dead` verdict honest by construction: no overlap ⇒ genuinely constant-false. `===`/`!==` become aliases of `==`/`!=` (strictness was only distinct while `==` juggled). A host that coerced its stringly inputs — which the typed boundary now does for it — never notices.
-- **One representation of null in the resolution channel**: the value `null` travels as `None`; `Some(null)` never escapes a resolver (a bound `null` normalizes to `None` at symbol lookup — a bound null is still a *bound key*, since presence lives in `Bindings::has()`, checked before the value is read). The *coercion channel* deliberately keeps its two-value protocol — `Option::coerce(null) → Some(null)` ("present null") vs `None` ("read as missing") — but that distinction is consumed at boundaries (record fields, typed bindings), never propagated. `InfixResolver` already converts both directions at operator positions (`unwrapOr(null)` in, `Option::from` out); this law makes the whole engine as consistent as its operators.
+- **One representation of null in the resolution channel**: the value `null` travels as `None`; `Some(null)` never escapes a compiled node (a bound `null` normalizes to `None` at symbol lookup — a bound null is still a *bound key*, since presence lives in `Bindings::has()`, checked before the value is read). The *coercion channel* deliberately keeps its two-value protocol — `Option::coerce(null) → Some(null)` ("present null") vs `None` ("read as missing") — but that distinction is consumed at boundaries (record fields, typed bindings), never propagated. Compiled operator nodes convert both directions at operand positions (`unwrapOr(null)` in, `Option::from` out); this law makes the whole engine as consistent as its operators.
 
 *Coercion is the boundary*
 - `assert` defines **membership** (the value domain, what shapes describe); `coerce` defines **admission** (host-facing conversion policy). Coercion is statically opaque — the checker never reasons about it — and has exactly two homes: the typed binding boundary (declared inputs coerced at `Expression` invoke) and the explicit `Coerce` node. Certification is a conditional guarantee ("*if* inputs inhabit their declared types…"); the boundary is what establishes the condition, which is why `coerce` exists on `Type` at all.
 
-### 2. Typed operators — one class, both semantics
+### 2. Typed operators — one verdict, both semantics
 
-The centerpiece. **Hard break** (we are pre-1.0): `typeOf` and `handles` land directly on `OperatorOverloader` — no `TypedOverloader` sub-interface, no legacy adapter that types old overloaders as `Unknown`. A parallel tier would permit an overloader without a typing rule, which is the disease itself with a deprecation timer attached. One interface, one set of obligations; hosts update their overloaders in the same PR that bumps the dependency.
+The centerpiece, twice distilled: item 18 gave extensions one *declaration* of a rule's two faces; item 31 removes the second face entirely. With dispatch resolved at compile time (item 29) and `Unknown` inert (item 30), a rule has exactly one question to answer — asked once, with types, at compile time — and the contract is one method. **Hard break** (we are pre-1.0): no `supportsOverloading`, no `handles`, no separate `typeOf`; no adapter, no legacy tier. A parallel tier would permit a rule whose typing and evaluation live apart, which is the disease itself with a deprecation timer attached.
 
 ```php
 interface OperatorOverloader
 {
-    public function supportsOverloading(mixed $left, mixed $right, string $operator): bool;
-
-    /** @return Result<mixed, \Throwable> */
-    public function evaluate(mixed $left, mixed $right, string $operator): Result;
-
-    /** Which operators this rule types (the static face of supportsOverloading). */
-    public function handles(string $operator): bool;
-
     /**
-     * The return type for operands of these types.
+     * Does this rule own $operator over these operand types — and if so,
+     * what does it return and how does it evaluate?
      *
-     * CONTRACT (certification): Ok(T) means EVERY value of these operand
-     * types is handled by this rule and the result inhabits T — the checker
-     * may certify the expression. Err(TypeMismatch) means this rule does not
-     * certify these operand types: some values would fall outside it, or the
-     * operation is statically meaningless though runtime-tolerated (a "dead"
-     * mismatch — a comparison or membership test that can never hold).
+     * CONTRACT (certification): Ok(ResolvedOperation) means this rule
+     * certifies these operand types: the returned evaluation is TOTAL over
+     * every value pair of them (value-dependent partiality remains — division
+     * by zero is a runtime error, certified or not) and its result inhabits
+     * the returned type. Err(TypeMismatch) refuses: the operation is not this
+     * rule's (another rule's to resolve), or it is statically meaningless
+     * (a "dead" mismatch — a comparison that can never hold).
      *
-     * Absence is THIS rule's concern: a rule whose runtime rejects null
-     * refuses Option operands (which falls out of admits(): Option<T> is not
-     * assignable to a present slot); a rule that substitutes zero admits
-     * them; a rule whose result can be absent says so in its return type.
-     * The only sanctioned unsoundness is Unknown: gradual admission
-     * deliberately certifies what it cannot check.
+     * Absence is THIS rule's concern: a rule whose evaluation cannot take
+     * null refuses Option operands (which falls out of admits()); a rule
+     * that substitutes zero admits them; a rule whose result can be absent
+     * says so in its return type. There is no Unknown hole: an Unknown
+     * operand is refused (item 30).
      *
-     * @return Result<Type, TypeMismatch>
+     * @return Result<ResolvedOperation, TypeMismatch>
      */
-    public function typeOf(string $operator, Type $left, Type $right): Result;
+    public function resolve(string $operator, Type $left, Type $right): Result;
 }
-```
 
-`TypeMismatch` carries a `dead` flag distinguishing the two refusals: *unsupported* ("no rule accepts Date and Number" — the runtime would err) versus *dead* ("`Number == String` can never hold" — the runtime evaluates it, constantly, and that constancy is the probable author bug). Consumers render them differently; the agreement harness treats them differently (below).
-
-#### Honesty contract on `supportsOverloading`
-
-`supportsOverloading` must claim **only values the rule owns** — operator-only dispatch is dishonest and shadows every rule listed after it. Phase 0 audits core:
-
-- `ComparisonOverloader` claims equality for scalar/null/array pairs only (no objects — `money == money` is the money package's business), and ordering (`<`, `<=`, `>`, `>=`) for numeric pairs only.
-- `LogicalOverloader` claims boolean pairs only.
-- After the audit, "ordering is semantics" degrades to "ordering is tie-breaking between rules that genuinely both claim a value" — the only ordering the static composition rule models.
-
-The same contract read from the static side is **totality**: `typeOf` may certify only operand types whose *every* value the rule's runtime face claims — recursing through shapes, universally over union members (one supported branch certifies nothing), refusing `Opaque` wherever the runtime refuses objects. `Unknown` remains the one sanctioned hole. Signature-built rules get totality by construction (one declaration, both faces); the raw-contract rules gate their verdicts explicitly, through a shape traversal core ships once. The harness enforces the law generatively — see L1: an unclaimed specimen of a certified type pair is a *failure*, never a skip.
-
-#### Core typing rules
-
-| Overloader | Static rule (`typeOf`) |
-| --- | --- |
-| `LogicalOverloader` | two present booleans → `Boolean`; refuses `Option` (falls out of `admits`) |
-| `ComparisonOverloader` | runtime equality is **value equality** (numeric within `Number`, strict otherwise, `false` across bases — never PHP juggling; `===`/`!==` are aliases); statically, both operand types must lie **within the rule's claimed domain** (scalar/null/array shapes, every union member counted — no opaques: object equality is the owning package's business, and certifying it here is a certified crash) *and* `overlaps()` — outside the claimed domain the refusal is *unsupported*, no overlap is `dead`, and value equality makes `dead` mean constant-`false` *by construction*; ordering additionally requires `hasDefinedOrder` on present types; tolerates `Option` (equality against `null` is the emptiness test) → `Boolean` |
-| `BinaryOverloader` | two present numbers → `Number`; refuses `Option` |
-| `NullOverloader` | the degenerate `null ∘ null → null` rule; contributes no static admissibility beyond what `Option` operand positions of other rules claim |
-| `HasOverloader` / `InOverloader` | list side must be list-shaped and present; element types must `overlaps()` → `Boolean` |
-| `IntersectsOverloader` | either side list or scalar, absence tolerated (the runtime wraps and filters) → `Boolean` |
-
-The same contract reaches every dialect: `axiom-money`'s `MonetaryOverloader` types money arithmetic (currency agreement via `overlaps` — `Money<GBP> + Money<USD>` is dead, the runtime throws every time); a host's null-tolerant overloader types its absence-as-zero arms; `axiom-time` ships `Date − Period → Date` beside its runtime rule. **A rule's static and runtime semantics are in one class, in one package, in one diff.**
-
-#### Unary operators are overloader-driven too
-
-`UnaryResolver`'s hardcoded rules were a hand-maintained mirror readmitted through the side door — and already drifted (`!` evaluates PHP truthiness on any value while the intended rule is boolean-only, and nothing could catch it because the agreement harness iterates overloaders). A sibling contract, same philosophy:
-
-```php
-interface UnaryOverloader
-{
-    public function supportsOverloading(mixed $operand, string $operator): bool;
-
-    /** @return Result<mixed, \Throwable> */
-    public function evaluate(mixed $operand, string $operator): Result;
-
-    public function handles(string $operator): bool;
-
-    /** @return Result<Type, TypeMismatch> */
-    public function typeOf(string $operator, Type $operand): Result;
-}
-```
-
-Composed by the same manager pattern, consumed by `UnaryResolver` the way `InfixResolver` consumes the binary stack, covered by the same harness. Core ships `NotOverloader` (**booleans only** — `!5` becomes an error) and `NegateOverloader` (numbers). `axiom-money` can then ship `-money` as one class.
-
-Deliberate asymmetry, kept and documented: **absence stays resolver-level for unary.** The resolver short-circuits `None` before any rule runs, so unary rules only see present values and optionality propagates structurally (`!Option<Boolean>` is `Option<Boolean>`) as one inference rule. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary keeps value-level absence handling (`NullOverloader` and friends) because binary genuinely needs per-rule absence policy (absence-as-zero dialects).
-
-#### Composition: the dialect is one list
-
-`OverloaderManager` implements the full contract. Its `typeOf` resolves across the stack:
-
-1. Collect the verdicts of every member that `handles()` the operator.
-2. Any `Ok`s whose return types all agree (`areEquivalent`) → that type.
-3. `Ok`s that disagree → `Unknown`. Several rules certify these operand types with different result types; which rule evaluates a given pair depends on values and list order that inference cannot see. The honest answer is `Unknown` — never the accident of whichever rule was listed first.
-4. No `Ok`s → one mismatch (a lone handler's, directly) or an aggregate ("no overload of `-` accepts `Date` and `Number`", causes attached).
-
-Because the evaluator and the inference consume **the same composed list**, dialect drift by miscomposition — a runtime stack and a hand-maintained parallel registry of static rules — becomes structurally impossible.
-
-### 3. Inference and checking
-
-```php
-final readonly class TypeInference
+final readonly class ResolvedOperation
 {
     public function __construct(
-        private OperatorOverloader $operators,     // the evaluator's own stack
+        public Type $returns,
+        public Closure $evaluate,   // (mixed, mixed): mixed|Result — total over the resolved operand types
+    ) {}
+}
+```
+
+The typing verdict and the evaluation are one return value from one call: they cannot drift because there are no longer two statements to diverge. The compiler keeps `returns` and binds `evaluate` to the node; a compiled program never inspects an operand's type again. The former honesty contract ("claim only values you own") reduces to a single obligation, stated where the author writes it: **the closure must be total over the operand types it was resolved for** — enforced generatively by the harness's totality law (§Drift guarantees).
+
+`TypeMismatch` keeps its `dead` flag distinguishing the two refusals: *unsupported* ("no rule accepts Date and Number") versus *dead* ("`Number == String` can never hold" — constancy is the probable author bug). Consumers render them differently.
+
+#### Core rules: rows and type functions
+
+Most rules are **dispatch-table rows** — the signature builder (item 18) is unchanged for authors and now compiles to a one-method `resolve` that checks `admits` on each slot and returns the declared type with the declared closure. Everything row-shaped in core is declared as rows: arithmetic (`+ - * /` over `(Number, Number) → Number`), logical (`and`/`or` over booleans), ordering (`< <= > >=` over `(Number, Number) → Boolean` — `TypeOrder` remains the *static* orderability axis for hosts and diagnostics, but dispatch no longer consults it), `not` (booleans only), negate (numbers).
+
+A few rules are genuine **type functions** — their verdict is computed from the operand types, not looked up:
+
+| Rule | `resolve` |
+| --- | --- |
+| Equality (`=`, `==`, `===`, `!=`, `!==`) | both operand types within the claimed domain (scalar/null/array shapes, universally over union members — no opaques: object equality is the owning package's business, now expressible as an ordinary row over its own types) *and* `overlaps()` — no overlap is `dead`, and value equality makes `dead` mean constant-`false` by construction; tolerates `Option` (equality against `null` is the emptiness test) → `Boolean`, evaluating via `ValueEquality` with the negation baked into the closure at resolution |
+| `has` / `in` | list side list-shaped and present; element types must `overlaps()` → `Boolean` |
+| `intersects` | either side list or scalar, absence tolerated (the closure wraps and filters) → `Boolean` |
+| Absent-operand arithmetic (`NullOverloader`) | the degenerate `null ∘ null → null` rule; a dialect's absence policy lives in rules like this |
+
+The same contract reaches every dialect: `axiom-money` resolves money arithmetic (currency agreement computed over the operand types — `Money<GBP> + Money<USD>` refused with a real message), `axiom-time` declares `Date − Period → Date` as a row. **A rule's static and runtime semantics are one verdict, in one package, in one diff.**
+
+#### Unary operators: the same collapse
+
+`UnaryOverloader` is the sibling, one method: `resolve(string $operator, Type $operand): Result<ResolvedOperation>` (the resolved evaluation takes one argument). Prefix rows come from the same builder; core ships `not` (**booleans only** — `!5` is a compile error) and negate (numbers) as rows.
+
+Deliberate asymmetry, kept: **absence is handled structurally for unary.** The compiler resolves the rule against the *present* operand type and wraps the compiled node with the absence short-circuit, so optionality propagates (`!Option<Boolean>` is `Option<Boolean>`) and a unary rule never sees `null`. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary keeps per-rule absence policy (`NullOverloader` and friends) because dialects genuinely differ there (absence-as-zero).
+
+#### Composition: the dialect is one list, and ambiguity is refused
+
+`OverloaderManager` implements the same one-method contract. Resolution across the stack:
+
+1. Collect every member's `resolve` outcome.
+2. Exactly one `Ok` → that resolution, bound into the program.
+3. **Two or more `Ok`s → a compile error naming the competing rules.** The old rule — disagreeing verdicts type as `Unknown` because "which rule evaluates depends on values inference cannot see" — described value-directed dispatch, and died with it. With dispatch on types, two rules claiming the same operand types is not gradualness; it is a miscomposed dialect, and it is refused where it is visible.
+4. No `Ok`s → one mismatch (a lone contender's, directly) or an aggregate ("no overload of `-` accepts `Date` and `Number`", causes attached).
+
+Rows are statically comparable, so `Dialect` composition additionally refuses two rows for the same operator with overlapping operand types at construction — the earliest moment the conflict exists. List order decides nothing: it is a registration order, not a precedence.
+
+Because the compiler consumes the composed dialect and the program embeds what it resolved, dialect drift by miscomposition — checking with one set of rules and running another — is not merely guarded against; after compilation there is no dispatch left to miscompose.
+
+### 3. Compilation — inference that also builds the program
+
+Inference and evaluation used to be two walks over the `Source` tree: the checker computed a type per node, and a resolver layer re-walked the same tree per call, re-dispatching operators on values at every visit. The sixth round merges them: **inference is the compiler.** Each syntax-directed rule computes the node's type *and* emits the node's evaluation, as one `CompiledNode` — the source-level twin of `ResolvedOperation`:
+
+```php
+final readonly class CompiledNode
+{
+    public function __construct(
+        public Type $returns,
+        public Closure $evaluate,   // (Runtime): Result<Option<mixed>, Throwable>
+    ) {}
+}
+
+final readonly class TypeInference   // the compiler
+{
+    public function __construct(
+        private OperatorOverloader $operators,     // the dialect's own stack
         private UnaryOverloader $unaryOperators,   // likewise
         private LiteralTypeRegistry $literals,
     ) {}
 
-    /** @return Result<Type, TypeMismatch> — causes carry multiplicity */
-    public function infer(Source $source, TypeEnvironment $environment): Result;
-
-    /** @return Result<Type, TypeMismatch> — Ok carries the inferred type */
-    public function check(Source $source, Type $expected, TypeEnvironment $environment): Result;
+    /** @return Result<CompiledNode, TypeMismatch> — causes carry multiplicity */
+    public function compile(Source $source, TypeEnvironment $environment): Result;
 }
 ```
 
+The `Runtime` a compiled evaluation receives is small: the admitted bindings, the lazily-memoized definition slots, and the observability inspector. It carries no dialect and no resolver — there is nothing left to dispatch.
+
 #### The environment walks the symbol graph
 
-In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw values) or by resolving the **`Source`** it names in `Definitions` — defined symbols are derived expressions. A flat pre-seeded type map would force someone to hand-declare the type of every derived symbol: the mirror again. Instead `TypeEnvironment` mirrors `SymbolResolver` structurally — declarations give the types of bindings and take precedence, exactly as bindings shadow definitions at runtime:
+In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw values) or by the **`Source`** it names in `Definitions` — defined symbols are derived expressions. A flat pre-seeded type map would force someone to hand-declare the type of every derived symbol: the mirror again. Instead `TypeEnvironment` walks the symbol graph — declarations give the types of bindings, definitions compile recursively:
 
-- A defined symbol's type = `infer()` of the `Source` it names in the **same `Definitions` the evaluator will use** — one registry, both semantics, same principle as the overloader stack.
-- **Declared types terminate recursion**: a host-declared input type (`turnover: Money<GBP>`) enters as a declared leaf; a host `TypedSource` terminates via `returnType()`; `StaticSource` terminates via the literal registry.
-- **Memoized**, same key scheme as the resolver (`namespace.name`).
-- **Cycle detection is a graph property, not a typing feature**: declarations answer *typing*, never *termination* — the runtime follows definition edges whenever a binding is absent, declared or not, so a declared type must never terminate the cycle walk (an in-progress set inside inference misses exactly the cycles the declaration short-circuit truncates — self-cycles and mutual cycles alike). Well-foundedness is a standalone DFS over the `Definitions` symbol-reference graph, independent of declarations, run by `infer()`/`check()` before typing and reported as "cyclic symbol definition: a → b → a". The runtime backstops it: resolution marks a symbol in-progress before following its definition and errs on re-entry — an unchecked host gets a named error, not unbounded recursion (the memo alone cannot break a cycle; it is written only after resolution completes).
-- Unbound is an error; a scope that tolerates unknown symbols binds `UnknownType` explicitly.
+- A defined symbol compiles to a **definition slot**: its `Source` compiled in the **same `Definitions` the program embeds** — one registry, both semantics. At runtime a slot evaluates lazily and memoizes per invocation; it is compiled exactly once.
+- **Declared types terminate recursion**: a host-declared input type (`turnover: Money<GBP>`) enters as a declared leaf; a host source terminates via its own compile face; `StaticSource` terminates via the literal registry.
+- **Memoized**, same key scheme as the runtime slots (`namespace.name`).
+- **Cycle detection is a graph property, not a typing feature**: declarations answer *typing*, never *termination*, so a declared type must never terminate the cycle walk (an in-progress set inside inference misses exactly the cycles the declaration short-circuit truncates — self-cycles and mutual cycles alike). Well-foundedness is a standalone DFS over the `Definitions` symbol-reference graph, independent of declarations, run by `compile()` before typing and reported as "cyclic symbol definition: a → b → a". The former *runtime* re-entry backstop dies with unchecked evaluation (item 29): every program that runs has passed the graph check, so there is no re-entry left to guard.
+- Unbound is an error; a scope that tolerates unknown symbols binds `UnknownType` explicitly — and then must bridge it (item 30) before any operation touches it.
 
 #### Syntax-directed rules, one per node
 
@@ -286,20 +276,20 @@ In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw valu
 - List literals → **union element unification with exact bounds**: `[money<GBP>, money<USD>]` is `List<Money<GBP> | Money<USD>, 2, 2>`; `['shop', 'office']` is `List<'shop' | 'office', 2, 2>` (which is what makes `x in ['shop', 'office']` typecheck precisely against an enum-typed `x`); `[]` is `List<Never, 0, 0>`. Same join as `match`, same position, same precision — never equivalence-else-`Unknown`.
 - `Coerce(type, source)` → the declared type, **verbatim, unchecked**. The boundary node: runtime converts via `coerce()`; the boundary is statically opaque *by design* (coercion is admission policy, not membership — see the coercion-is-the-boundary law). The old `TypeDefinition` name is retired: it always behaved as coercion, and "definition" read as annotation — exactly the confusion that produced a review finding.
 - `Ascription(type, source)` → the declared type, **checked**: the inner type must be `Unknown` or `overlaps` the declaration; disjoint is an error (a false claim, assert-world, where overlap *is* the correct relation — TypeScript's `as` draws the same line). Runtime verifies via `assert()` and fails loudly, so a lying ascription is a tripwire, not a rot vector. The author's annotation: refine an `Unknown` host source, narrow a union.
-- `UnaryExpression` / `InfixExpression` → operand types through the composed overloader stacks; unary applies the structural `Option`-propagation rule first.
+- `UnaryExpression` / `InfixExpression` → compile the operands, `resolve` the operator against their types through the composed stacks, bind the `ResolvedOperation` into the node (with the absence short-circuit wrapped around it); unary applies the structural `Option`-propagation rule first.
 - `MatchExpression` → see below.
 - `MemberAccessSource` → see below.
-- **Host sources** → the extension seam:
+- **Host sources** → the extension seam, collapsed like the operators (item 33). The old shape — a type claim in `TypedSource::returnType()` and behavior in a `Resolver` registered separately in a class map — was the two-faces disease in its worst form: nothing, not even a harness, watched that the resolver produced what the type claimed. Now a host source states both in one step:
 
 ```php
 interface TypedSource extends Source
 {
-    /** @return Result<Type, TypeMismatch> — causes carry multiplicity */
-    public function returnType(TypeEnvironment $environment, TypeInference $inference): Result;
+    /** @return Result<CompiledNode, TypeMismatch> — the type claim and the evaluation, one statement */
+    public function compile(TypeEnvironment $environment, TypeInference $compiler): Result;
 }
 ```
 
-A host source that knows its type declares it (a geocoding source → its coordinates record); one that cannot returns `Unknown` honestly (a raw lookup cell); one that wraps another source delegates. An unhandled node is an inference *error*, not a silent `Unknown` — "any expression edge starts here" stays a kept promise.
+A host source that knows its type declares it with its evaluation beside it (a geocoding source → its coordinates record, and the lookup that produces one); one that cannot type itself returns `Unknown` honestly (a raw lookup cell) — whose value must then be bridged before use (item 30); one that wraps another source delegates through the compiler. An unhandled node is a compile *error*, not a silent `Unknown` — "any expression edge starts here" stays a kept promise. There is no separate place to register behavior, so a host **cannot** ship behavior its type claim doesn't describe.
 
 #### `match`: union join, mandatory exhaustiveness
 
@@ -313,8 +303,8 @@ A host source that knows its type declares it (a geocoding source → its coordi
 Member access is **shape-driven** — it dispatches on the operand's projection, not its concrete `Type` class, so any type whose (census-verified, therefore true) projection is record-like gets field access, extension types included. Field shapes **reify** back to types (`Shape → Type` is mechanical over the sealed constructors; an opaque field reifies to `OpaqueType` — an `@internal` reification artifact, statically nominal, dynamically **fail-closed**: core cannot verify membership of a host-owned identity, so its `assert`/`coerce` reject every value with a message naming the host as the owner. The public vocabulary is `OpaqueShape` plus a host-owned `Type` class with a real `assert`; a fail-open placeholder would duplicate `Unknown`'s job while wearing a nominal certificate — and, once signatures dispatch on `assert`, would claim every non-null value for any rule declared over it).
 
 - Record-shaped operand, declared field → the field's shape, reified. Record coercion canonicalizes, so declared-field access never hits the missing-key error.
-- `Option<record-shaped>.field` → `Option<FieldType>` — optionality propagates, mirroring the resolver; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
-- `Unknown.field` → `Unknown` (gradual admission).
+- `Option<record-shaped>.field` → `Option<FieldType>` — optionality propagates, mirroring the compiled evaluation; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
+- `Unknown`-shaped operand → compile error: `Unknown` is inert (item 30); ascribe a record type first.
 - Undeclared field → compile error. Records are exact (item 26), so "the field might be there anyway" is not a representable state — the optimistic hole `admits` closes for unions cannot reopen through records.
 - **Dict-shaped operand → compile error** (strict): a dict's nature is "keys unknown statically", so every access is fallible, and the runtime's missing-key `Err` stays exactly as is. `Dict` is a transport type you *type your way out of*. Escape valve reserved for later: an explicit `get(dict, key)` function typed `Option<V>`.
 - **Opaque-shaped operand → compile error**: nominal types make no structural claims, so there is nothing to certify accessing.
@@ -325,13 +315,13 @@ Shape-driven access is only sound *because of* the shape-truth law: an earlier d
 
 Literal-first inference and value-set `Option` semantics dissolve the bidirectional special cases into assignability theorems: `null` fills `Option` slots because `Option<Never> ⊆ Option<T>`; `"shop"` fills the enum because `Literal ⊆ Union`; `[]` fills any admitting list because `List<Never, 0, 0> ⊆ List<T, min≤0, _>`. **v1 `check(expr, expected, env)` is literally `infer` then `isTypeAssignableTo`** — no special cases to disagree with the relations later. The bidirectional *API* stays, because future lambda inference genuinely needs expected-type propagation to infer parameter types.
 
-### How hosts consume the checker
+### How hosts consume the compiler
 
-There is no compiler in the loop — hosts hold runtime-AST programs and call the API directly, through one object that owns everything type-relevant:
+The compiler *is* the API — hosts hold runtime-AST programs, compile each once, and invoke the compiled artifact many times, through one object that owns everything type-relevant:
 
 #### The `Dialect` and its extensions
 
-The operator rules live in exactly one place. A `Dialect` is a value object composing the binary manager, the unary manager, and the literal registry; both the evaluator and the checker consume the *same instance*. At runtime the dialect **travels in the per-call `Context`**, exactly as bindings do — `Expression::call()` puts its own dialect there, and resolvers are stateless with respect to operators (no resolver-held stack exists to diverge from the checked one). Checking with different rules than you run with is not representable, full stop — not merely outside the API a normal host touches: an install-unless-present resolver slot was tried and made the guarantee order-dependent under resolver sharing. Packages contribute through an `Extension` (an abstract class with empty-default hooks — `operators()`, `unaryOperators()`, `literals()` — abstract so hooks like `matchers()` can be added later without breaking implementors):
+The operator rules live in exactly one place. A `Dialect` is a value object composing the binary manager, the unary manager, and the literal registry, consumed **at compile time only**: `compile()` resolves every operator node against it and binds the resolutions into the `Program`. Checking with different rules than you run with is not representable, full stop — a compiled program carries no dialect at all, only what the dialect resolved, so there is nothing at runtime to miscompose. (Two earlier designs died on the way here: a resolver-held stack with an install-unless-present slot was order-dependent under resolver sharing; its replacement — the dialect riding the per-call `Context` — kept evaluator and checker honest but paid runtime dispatch per node for it. Compilation subsumes both.) Packages contribute through an `Extension` (an abstract class with empty-default hooks — `operators()`, `unaryOperators()`, `literals()` — abstract so hooks like `matchers()` can be added later without breaking implementors):
 
 ```php
 $dialect = Dialect::core()->with(new MoneyExtension(), new TimeExtension());
@@ -341,7 +331,7 @@ Extension rules **prepend** core's (specialization wins ties — rare and delibe
 
 #### Typed bindings: the boundary
 
-Certification is conditional — "*if* inputs inhabit their declared types, this expression is sound" — and the boundary establishes the condition. The same declarations map serves both faces: statically it seeds the `TypeEnvironment`; at invoke time each declared binding passes through its declared type (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
+Certification is conditional — "*if* inputs inhabit their declared types, this program is sound" — and the boundary establishes the condition, on every call of the compiled `Program`. `compile()` proves the program; it cannot prove future inputs — which is why the boundary is the one runtime type check that survives compilation, *by design*. The same declarations map serves both faces: statically it seeds the `TypeEnvironment`; at invoke time each declared binding passes through its declared type (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
 
 - Declared input, bad value → boundary error, pre-evaluation, aggregated across all bad inputs, named by binding (`binding [customer]: field [turnover]…`) — errors speak the host's language, not the AST's.
 - Declared required input, missing → boundary error (all missing inputs reported at once). Declared `Option`, missing or null → legal absence.
@@ -356,9 +346,24 @@ The guarantee, stated honestly: *declared inputs cannot deliver garbage past the
 
 (Rejected on the way here: typed value objects at the call site — `TypedValue::of($type, $value)` bindings. They put types on the wrong side of time — certification needs types *before* values exist — reopen the two-sources-of-truth drift the declarations map closed, and presuppose hosts convert values before the boundary whose job is converting. The co-location instinct is honored where it's sound: declaration-with-enforcement on the `Expression`, not type-with-value at the call site.)
 
-#### The `Expression` types itself
+#### `Expression` describes; `Program` runs
 
-`Expression` owns the dialect, the definitions, and the declarations — so it can answer static questions directly: `$expression->infer()` ("what does this return?"), `$expression->check($expected)` ("is this gate boolean?"). For the common case a host never hand-assembles `TypeInference`/`TypeEnvironment`. The constructor enforces the disjointness of declarations and definitions, and `infer()`/`check()` run the definition-graph well-foundedness pass before typing.
+`Expression` owns the source, the dialect, the definitions, and the declarations — a complete *description* of a program, and deliberately not a runnable one. The split (item 29):
+
+```php
+$expression = new Expression($source, definitions: $definitions,
+    declarations: ['radius' => new NumberType()]);
+
+$program = $expression->compile();   // Result<Program, TypeMismatch>
+// Err: cycles, unbound symbols, unresolvable or ambiguous operators,
+//      inert Unknown at an operand, false ascription claims — all here, named
+
+$program = $program->unwrap();
+$program->returns;                   // Type — a property of the artifact, not a query
+$program(['radius' => '5']);         // boundary coerces, then evaluates — no dispatch
+```
+
+Evaluation presupposes a passed check the way admitted values presuppose the boundary: `call()`/`__invoke` live **only** on `Program`, so running an unchecked program is unrepresentable — the same move as disjoint namespaces and the compiled-in dialect, applied to the program itself. `$expression->infer()` and `->check($expected)` remain as conveniences over `compile()` (the type of the compiled artifact; compile plus one assignability test). The constructor enforces the disjointness of declarations and definitions; `compile()` runs the definition-graph well-foundedness pass before typing. Hosts with stored corpora get the natural economics: compile once at authoring or deploy time, invoke per request — no per-call inference walk, no per-node dispatch, definitions resolved once.
 
 - **Corpus sweeps**: to migrate onto the strict runtime, a host runs `check`/`infer` across its stored programs and triages the mismatches — non-exhaustive matches, non-boolean negations, dead comparisons all surface before any evaluation happens. The sweep tool for the runtime strictness is this API, not an authoring-surface feature.
 - False `Ascription` claims (declared type disjoint from the inferred inner type) surface in the same sweep. `Coerce` nodes do not — coercion satisfiability is deliberately not modeled statically (a lint-grade `CoercionAware` opt-in may arrive later; its absence costs a diagnostic, never soundness).
@@ -374,7 +379,7 @@ The guarantee, stated honestly: *declared inputs cannot deliver garbage past the
 
 `Date`/`Period` live in a companion package, not core — and deliberately so: **`axiom-time` is the canary for the extension seams.** It exercises every one of them at once — a `Shaped` type, a literal-registry entry for its value class, and the hardest case: an *ordered* domain type contributed from outside core. If `axiom-time` can be built cleanly outside core, hosts can; if it can't, the missing seam is found before a host finds it. Core additionally stays neutral on genuinely contested policy (date vs datetime, timezones, calendar arithmetic, locale).
 
-How it lands: `Date` projects as the package chooses (`Opaque`, or a branded record if fields should be accessible). `hasDefinedOrder(Date)` is false in core — correct; the package ships a comparison overloader whose `typeOf` accepts `(Date, Date)` for ordering → `Boolean`, and the manager takes the lone `Ok` while core's rule refuses. `Date − Period → Date` and `Date − Date → Period` are two `typeOf` arms on the package's arithmetic overloader.
+How it lands: `Date` projects as the package chooses (`Opaque`, or a branded record if fields should be accessible). `hasDefinedOrder(Date)` is false in core — correct; the package declares ordering rows (`< : (Date, Date) → Boolean` and siblings), and the manager takes the lone resolution while core's rules refuse. `Date − Period → Date` and `Date − Date → Period` are two more rows beside them.
 
 ## Release plan
 
@@ -388,8 +393,9 @@ Internally, the release is staged as a PR series, in this order:
   3. Boolean-only `!` (kills PHP truthiness).
   4. `match` fall-through: `Ok(None())` → `Err`.
 - **Phase 1 — vocabulary and relations**: the sealed shape algebra + `Shaped` + `TypeRelations`/`TypeOrder`/`TypeMismatch`/`TypeDescriber`, with a full-coverage suite and a shape-soundness census with two laws: **(C1)** every projected or `Shaped` type must have specimens (the census fails when one doesn't), and **(C2, shape truth)** for every record-projected type, over its specimens, every projected field must be reachable by the member-access mechanism and inhabit the field's shape — the generative enforcement of the shape-truth law.
-- **Phase 2 — typed operators**: `typeOf`/`handles` on `OperatorOverloader`; `UnaryOverloader` + manager + `NotOverloader`/`NegateOverloader`; core overloaders gain their rules; `OverloaderManager` composes and resolves as above; the agreement harness lands.
+- **Phase 2 — typed operators**: static semantics land on the operator contract; `UnaryOverloader` + manager; core rules gain their static faces; the managers compose and resolve as above; the harness lands.
 - **Phase 3 — inference**: `TypeInference`, graph-walking `TypeEnvironment` with cycle detection, `LiteralTypeRegistry`, `TypedSource`.
+- **Phase 4 — compilation** (sixth round): the operator contract collapses to one `resolve` face; `Expression::compile()` → `Program` with evaluation living only on the artifact; `Unknown` becomes inert; the resolver layer and runtime dispatch are deleted; the harness becomes the totality + admission-honesty suite.
 
 `axiom-money` follows the release; hand-maintained mirror registries downstream are deleted — the composed evaluator stack *is* the registry now. Host sources adopt `TypedSource` (most can honestly declare `Unknown` at first — exactly what hosts bind for them today).
 
@@ -412,16 +418,14 @@ If a textual authoring surface is ever built over this engine, it builds on laye
 
 ## Drift guarantees
 
-1. **Co-location** — `evaluate` and `typeOf` in one class: a semantics change and its typing rule are one diff, one review. This now covers unary operators too; there are no operator rules outside the contract.
-2. **One composed list** — evaluator and inference consume the same managers, and the stacks **ride the evaluation `Context`** (resolvers hold no operator state; `Expression::call()` puts its own `Dialect` into the per-call context, the same instance `infer()`/`check()` read), so miscomposition is unrepresentable — not guarded against. The environment extends the same principle to symbols: one `Definitions`, both semantics.
-3. **Agreement harness, bidirectional and cross-package** — a generative suite in Axiom checking two laws for every overloader against a specimen matrix of typed values:
-   - **L1, soundness (total)**: if `typeOf` says `Ok(T)`, then every specimen value pair of those types **must be** claimed by `supportsOverloading` — an unclaimed specimen is a harness *failure*, never a skip (the filter reading of this law was the loophole that let certified crashes ship: values a rule didn't claim were silently exempted, which turned "every value is handled" into "every value the rule admits to handling is handled") — and `evaluate` must succeed on it with a result inhabiting `T`. (Skipped where an operand type is `Unknown` — gradual admission is deliberately unsound — and vacuous when `T` is `Unknown`. The specimen matrix includes opaque and mixed-union specimens so partial claims cannot hide.)
-   - **L2, anti-shadowing**: if every specimen value pair of a type pair is claimed by the rule, then `typeOf` must certify it — a rule that runtime-owns values it statically refuses is hiding semantics from the checker. Exempt: refusals marked `dead` (the runtime tolerates dead tests; the checker still flags them) and the degenerate `NullOverloader` (documented in the class).
-   - **L3, the dead law**: a refusal marked `dead` is a *claim* ("this can never hold"), and claims get verified — for every specimen value pair of the refused types, the rule must either not claim the pair or evaluate it to `false`. Never `true`. This law exists because its absence let a real bug ship: dead refusals were exempt from L2 on the unverified assumption that dead ⇒ constantly-false, and PHP's loose equality (`5 == '5'` → `true`) broke the assumption silently. Value equality restored the invariant; L3 pins it generatively, for core and every extension.
-
-   Packages and hosts run the same harness over their own overloaders by contributing specimens — and their specimens are thrown at *core's* overloaders too (L2, run against the pre-RFC code, would have caught `ComparisonOverloader` claiming `Money < Money` immediately).
-4. **Ambiguity is honest** — disagreement between certifying rules yields `Unknown`, so a new overload (date-period subtraction beside numeric subtraction) can never silently change an existing inference from one concrete type to another.
-5. **Honest runtime** — `supportsOverloading` claims only values the rule owns, so first-match shadowing cannot hide semantics from the static layer.
+1. **One verdict** — a rule's typing and its evaluation are one return value from one call. The first design co-located `evaluate` and `typeOf` in one class (one diff, one review); the sixth round made them one *statement*, so agreement between the faces is not a checkable property — it is an identity. This covers unary operators too; there are no operator rules outside the contract.
+2. **The program embeds its resolutions** — the compiler consumes the composed `Dialect` and binds what it resolved into the `Program`; a compiled program carries no dialect and performs no dispatch, so checking with one set of rules and running another is not guarded against but *gone*. The environment extends the same principle to symbols: one `Definitions`, compiled once, both semantics.
+3. **The totality harness** — the dual-face agreement laws (L1 soundness, L2 anti-shadowing, L3 the dead law) are unstatable now: there is one face and no dispatch order. What replaces them is generative enforcement of the two obligations that remain:
+   - **Totality**: for every rule and every operand-type pair it resolves `Ok` for, every specimen value pair of those types must evaluate without escaping, to a result inhabiting the resolved return type. This is the closure author's one obligation, tested the way the old L1 was.
+   - **Admission honesty** — promoted from bug-class to law: for every `Type`, first-party and extension alike, `coerce` output must pass `assert`. Compile-then-trust rests entirely on this (a value that crosses a boundary *is* its declared type from then on); the `DictType::coerce([1,2])` finding of the fifth round is the exact hole this law pins shut, generatively, for every type in the census.
+   - **Shape truth** (C1/C2) stays exactly as before: projections are census-verified truth claims.
+4. **Ambiguity is refused** — two rules resolving the same operator over overlapping operand types is a construction error for rows and a compile error otherwise, naming both rules. A new overload (date-period subtraction beside numeric subtraction) can never silently change what an existing program means — it either composes cleanly or is refused loudly. List order decides nothing.
+5. **Admission is the only gate** — values are inspected at exactly three places (the binding boundary, `Coerce`, `Ascription`), every one an explicit, author-visible node or declaration. Nothing else at runtime reads a value's type, so there is no hidden lenient path to drift away from the checked semantics.
 
 ## Alternatives considered
 
@@ -431,6 +435,9 @@ If a textual authoring surface is ever built over this engine, it builds on laye
 - **Open shape algebra (relation rules on the shapes, double dispatch).** Would let hosts add shape constructors — and with them, mutually inconsistent relation rules ("who wins when `A->assignableFrom(B)` and `B->assignableTo(A)` disagree?"). The laws stay checkable only if the case analysis is exhaustive. Rejected in favour of the sealed algebra with projection-only extensibility.
 - **`Option`-wrapped match results (silent fall-through).** Typing non-exhaustive matches as `Option<join>` was honest but preserved a silent-absence runtime. Resolved instead to fall-through-as-error + mandatory provable exhaustiveness: authors add deliberate default arms.
 - **Lenient dict access (`Dict<V>.field : Option<V>`, missing key → `None`).** Usable, but weakens the runtime — a typo'd key that errors loudly today becomes silent absence — cutting against every other strictness decision here. Rejected in favour of strict (compile error; schemas are the way out).
+- **Implicit gradual casts** (sixth round). The classic gradual-typing move: keep `Unknown` admissible and have the compiler plant runtime casts wherever it flows into a typed slot. Works, but the checker would be inserting checks the author never wrote — invisible machinery of exactly the kind this design keeps deleting. Rejected for inert `Unknown` with explicit bridges: the casts exist, but they are `Coerce`/`Ascription` nodes the author can see in their own source.
+- **Check lazily on first `call()`** (sixth round). Keeps one class, but a type error becomes a runtime `Err` on the first unlucky invocation, and "unchecked program" stays a representable state with a guard in front of it. Rejected for the explicit `compile()` step: checkedness becomes a *type* in our own API.
+- **Compilation as a side-table over the resolver walk** (sixth round). Resolve operators at check time but keep the resolver layer, with dispatch replaced by a node → resolution lookup. Minimal change, but it keeps the per-call tree walk, the per-node container dispatch, and — decisively — the split host seam (`TypedSource::returnType` in one place, a `Resolver` registration in another) that nothing verifies. Rejected for compiling nodes to `(type, evaluation)` outright.
 
 ## Resolved questions
 
@@ -476,3 +483,12 @@ Fifth round, resolved after the second Codex review of the implementation (six f
 26. **Open records deleted** → `RecordShape(fields)` is exact: a record's value set is fully described by its declared fields. `open` (introduced by the implementation, never actively decided) bought width subtyping plus boundary tolerance of wide input; its open tail was unclaimable by any total verdict — `==` over an open record certified crashes (the reviewer's stdClass-extras repro), the exact hole item 23 exists to forbid. Boundary tolerance is re-homed where conversion already lives: **`coerce` takes the declared slice** of wide input (dropping undeclared keys is a conversion, like `'5' → 5`), **`assert` stays strict membership** (extra keys are a rejection). Width subtyping inside the algebra is given up deliberately — exactness is what makes whole-record equality total (TypeScript makes the opposite trade and pays with unsound record equality; erased types never meet a runtime, ours certify one). "Named fields plus arbitrary extras" keeps an honest spelling: `Dict`, or declare what you use. Reintroducing openness later is additive; removing it later would have been breaking. (§1, Laws)
 27. **`Dict::coerce` honesty** → the two admission faces agree on the whole value domain: `coerce([])` yields `Some([])` — `[]` inhabits every `Dict` (item 20), and "empty reads as missing" is spelled `Option<Dict<T>>` by the host that wants it — and `coerce` rejects non-empty lists exactly as `assert` does. The first implementation coerced `[1, 2]` to itself (PHP re-normalizes stringified numeric keys), admitting a value the type's own `assert` refuses past a certified boundary. Completes the Phase-0 dishonesty item "`{}` is currently not a `Dict`" on the coerce face. (Laws, §Value domain)
 28. **Absence cannot cross a non-optional `Coerce`** → the `Coerce` node inherits the boundary's rule: when the declared type is not Option-shaped and the value reads as missing (the inner source resolves absent, or coercion yields `None` — `Number` over `''`), resolution is a runtime `Err` naming the node — never a silent `None`. Inference stays verbatim (`Coerce : T`, statically opaque by design); it was the runtime face that was dishonest — certifying `Number` while delivering `null` into `+`. The same guard applies to `Ascription` if its resolver shares the hole. Mechanical repairs in the same round: `overlaps(List, Record)` holds exactly at `[]` (an empty-capable list and the empty record share one value — a dead-verdict falsifier), and `List` bounds are validated at construction (`min ≥ 0`, `max ≥ min` — a negative min falsified `listOverlapsDict`'s emptiness test). (§2, §3, Laws)
+
+Sixth round, the compilation pivot — resolved in a design review that started from one discomfort: every operator was checked twice, statically at check time and again on values at every evaluation. The double check turned out to be a consequence of one architectural choice (dispatch on values), and removing it cascaded:
+
+29. **Evaluation presupposes a passed check** → `Expression::compile(): Result<Program, TypeMismatch>`; `call()`/`__invoke` exist only on `Program`. Running an unchecked program is unrepresentable — checkedness is a type in the API, not a guarded path. This is the keystone: value-directed runtime dispatch existed *because* evaluation could not assume anyone had checked the program; once it can, overload resolution happens once, at compile time, exactly as in natively typed languages — and the runtime check is not duplicated but deleted. Native-language precedent: overload resolution in C#/Swift/Java is a compile-time operation; runtime executes the resolved call and inspects nothing. Per-call cost follows: no inference walk, no per-node dispatch, definitions compiled once. The lazy check-on-first-call variant and the "run first, adopt the checker later" mode are rejected/retired (§Alternatives). (§3, §How hosts consume)
+30. **`Unknown` is inert; `Coerce`/`Ascription` are the two bridges** → the "sanctioned unsoundness" carve-out dies. `admits()` loses its top-level-`Unknown` hole; operators, comparisons, and member access refuse `Unknown` operands with a message pointing at the fix. The classic gradual-typing alternative — compiler-planted implicit casts wherever `Unknown` meets a typed slot — was rejected as invisible machinery; the language already has the explicit spellings, and they are the same pair as the boundary's two faces: `Coerce` (convert a representation: "make this a `T`") and `Ascription` (claim a membership: "this *is* a `T`, check me"). Gradualness stops being checker leniency and becomes syntax the author can see. Consequence: `typeOf` verdicts become genuinely sound, not sound-except-`Unknown`; every runtime type check in the system is admission through a `Type`'s two faces, at three visible sites — the binding boundary, `Coerce`, `Ascription`. (§1, §2, §3)
+31. **The operator contract collapses to one verdict** → `resolve(operator, Type, Type): Result<ResolvedOperation{returns, evaluate}, TypeMismatch>` replaces the four-method contract (`supportsOverloading`/`evaluate`/`handles`/`typeOf`); `UnaryOverloader` collapses identically. The typing verdict and the evaluation are one return value, so face-agreement is an identity, not a harness-checked property. The signature builder (item 18) is **unchanged for authors** — rows now compile to the one-method form — and capabilities that used to force the raw contract become rows (object equality over an owned type: `Operator::infix('==')->signature(Money, Money)->returns(Boolean)`). Genuine type functions (equality with overlap/dead analysis, membership, absence-policy rules) hand-write the one method. Dispatch-time value inspection disappears wholesale — including equality's per-evaluation recursive `isComparable` walk over both operand arrays, re-proving what the shape-domain check had already certified. The author's obligation shrinks to: *the closure is total over the operand types it resolved for* (harness-enforced, §Drift guarantees). (§2)
+32. **Ambiguity is refused, not absorbed** → more than one rule resolving the same operator over the same operand types is an error naming the competing rules: at `Dialect` construction for rows (statically comparable via `overlaps`), at compile time otherwise. The manager's disagreeing-verdicts-→-`Unknown` rule — which existed only because value-directed dispatch made "which rule runs" value-dependent — dies with its cause; `Unknown` has no producer left inside the operator layer. List order stops meaning anything. (§2)
+33. **The source seam collapses like the operators** → a host source's type claim (`TypedSource::returnType`) and its behavior (a `Resolver` registered in a class map) were two separately-registered faces that nothing — not even a harness — verified against each other. `TypedSource` becomes the one-step compile face returning `CompiledNode{returns, evaluate}` (the source-level twin of `ResolvedOperation`); first-party nodes compile inside `TypeInference`, which was already walking every node; the `Resolvers/` layer, the per-call `Context`, and the container dependency that existed to serve the resolver map are deleted. Deliberate consequence, accepted: first-party node semantics stop being host-swappable — the checker certifies semantics, so silently replacing them was a drift channel, not a feature. The runtime re-entry backstop for definition cycles dies too: with unchecked evaluation unrepresentable, every running program has passed the graph pass. What survives at runtime: the boundary, the two bridge nodes, absence short-circuiting, value-dependent partiality (division by zero), and the `ResolutionInspector` reporting through the compiled runtime context. (§3, §How hosts consume)
+34. **The harness transforms** → the dual-face agreement laws (L1/L2/L3) are unstatable against a one-face contract; what remains enforceable is what remains promised: **totality** (specimens of every resolved operand-type pair evaluate without escaping, into the resolved return type — L1's spirit, minus the claim face) and **admission honesty**, promoted from fifth-round bug-class to census law: for every `Type`, `coerce` output passes `assert`. Compile-then-trust makes this pair the entire trust chain: the boundary establishes types, totality carries them. Shape truth (C1/C2) is unchanged. (§Drift guarantees)
