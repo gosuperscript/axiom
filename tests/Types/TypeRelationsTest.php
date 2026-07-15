@@ -340,6 +340,20 @@ final class TypeRelationsTest extends TestCase
         );
     }
 
+    #[Test]
+    public function a_list_record_refusal_carries_the_empty_array_cause(): void
+    {
+        $result = TypeRelations::shapesOverlap(
+            new ListShape(new NumberShape(), min: 1),
+            new RecordShape([]),
+        );
+
+        $this->assertStringContainsString(
+            'Only the empty array inhabits both a list and a record, so they overlap exactly when the record is empty and the list can be empty.',
+            $result->unwrapErr()->describe(),
+        );
+    }
+
     public static function overlapCases(): \Generator
     {
         yield 'unknown overlaps everything' => [new UnknownShape(), new NumberShape(), true];

@@ -196,4 +196,25 @@ class ListTypeTest extends TestCase
 
         $this->assertTrue($exact->assert([1, 2])->isOk());
     }
+
+    #[Test]
+    public function zero_bounds_are_legal(): void
+    {
+        // min 0 is the emptiness claim overlap relies on, and an absent min
+        // reads as 0 against max — both edges of the validation, not inside it.
+        $emptyOnly = new ListType(new NumberType(), min: 0, max: 0);
+        $this->assertTrue($emptyOnly->assert([])->isOk());
+
+        $cappedAtZero = new ListType(new NumberType(), max: 0);
+        $this->assertTrue($cappedAtZero->assert([])->isOk());
+    }
+
+    #[Test]
+    public function a_negative_max_is_below_the_implicit_zero_min(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('max -1 is below min 0');
+
+        new ListType(new NumberType(), max: -1);
+    }
 }

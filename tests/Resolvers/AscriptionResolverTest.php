@@ -30,6 +30,9 @@ use Superscript\Axiom\Tests\Resolvers\Fixtures\SpyInspector;
 #[UsesClass(StringType::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Types\OptionType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 final class AscriptionResolverTest extends TestCase
 {
     #[Test]

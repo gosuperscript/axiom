@@ -74,10 +74,10 @@ final readonly class Expression
         // defined names can only collide literally: Symbol('turnover',
         // ns: 'customer') and member access on a declared customer record
         // are distinct, unambiguous programs.
-        $collisions = array_values(array_filter(
+        $collisions = array_filter(
             array_keys($this->declarations),
             fn(string $key) => $this->definitions->has($key),
-        ));
+        );
 
         if ($collisions !== []) {
             throw new InvalidArgumentException(sprintf(

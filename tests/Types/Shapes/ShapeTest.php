@@ -298,4 +298,13 @@ final class ShapeTest extends TestCase
 
         new ListShape(new NumberShape(), min: 2, max: 1);
     }
+
+    #[Test]
+    public function equal_list_bounds_are_legal(): void
+    {
+        $exact = new ListShape(new NumberShape(), min: 2, max: 2);
+
+        $this->assertSame(2, $exact->min);
+        $this->assertSame(2, $exact->max);
+    }
 }

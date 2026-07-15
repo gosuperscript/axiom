@@ -149,9 +149,9 @@ new SymbolSource('claims', 'quote'); // -> quote.claims
 new SymbolSource('version');         // -> version (global)
 ```
 
-**An array binding is both a record and a namespace.** `['quote' => ['claims' => 3]]` binds `quote` whole (a record value — coercible at the boundary, member-accessible) *and* answers the namespaced lookup `quote.claims` by descent. An explicit dotted key (`'quote.claims' => 3`) wins over descent.
+**Symbols are names; member access is structure.** A namespaced symbol is the flat dotted key and nothing else: `SymbolSource('claims', 'quote')` is answered by a binding or definition named exactly `quote.claims` — never by digging into the value of a `quote` binding. Bind keys exactly as declared (`['quote.claims' => 3]`), or declare `quote` as a record, bind it whole, and reach its fields with `MemberAccessSource` — one value, one reading, chosen at declaration time. This is what makes caller data structurally unable to answer for (and so shadow) a definition.
 
-**Declarations and definitions are disjoint namespaces.** A symbol is a *parameter* (declared, supplied by bindings) or a *derived value* (defined), never both — a collision, including through the record view (declaring `customer` as a record with a `turnover` field declares `customer.turnover`), is a constructor error. The boundary strips undeclared binding keys before evaluation, so shadowing a definition is unrepresentable. To let callers override a derived value, model the override in-language: an `Option`-typed parameter the definition consults.
+**Declarations and definitions are disjoint namespaces.** A symbol is a *parameter* (declared, supplied by bindings) or a *derived value* (defined), never both — a collision is a constructor error. The boundary strips undeclared binding keys before evaluation. Together with exact-key lookup, shadowing a definition is unrepresentable. To let callers override a derived value, model the override in-language: an `Option`-typed parameter the definition consults.
 
 ### Match Expressions
 
@@ -227,11 +227,11 @@ $gate = new Expression(
 $gate->infer();                    // Ok(BooleanType) — what does this return?
 $gate->check(new BooleanType());   // certified
 
-$gate(['quote' => ['turnover' => '600000']]);
+$gate(['quote.turnover' => '600000']);
 // the BOUNDARY coerces '600000' → 600000 through the declared type
 // before evaluation — certified expressions never see raw garbage
 
-$gate(['quote' => ['turnover' => 'lots']]);
+$gate(['quote.turnover' => 'lots']);
 // Err(BoundaryViolation): "binding [quote.turnover]: …" — aggregated,
 // named by input, before any evaluation
 ```
@@ -280,7 +280,7 @@ For collections and associative arrays with nested type validation. `ListType` o
 A possibly-absent value. `null` is a legal, *present* value of the option — coercing `null` yields `Some(null)`, not a failed coercion. That is what lets an optional field live inside a record whose required fields treat absence as "missing".
 
 #### RecordType
-Named, individually typed fields, open or closed. An optional field is a field whose type is `OptionType`; coercion canonicalizes a missing optional key to a present `null`. Closed records reject undeclared keys; open records pass them through.
+Named, individually typed fields, exact: a record's value set is fully described by its fields (data with unenumerable keys is a `Dict`). An optional field is a field whose type is `OptionType`; coercion canonicalizes a missing optional key to a present `null`. The two admission faces diverge on undeclared keys by design: `assert` rejects them (strict membership), while `coerce` takes the declared slice of wide input — pass a whole context row and only the declared fields enter.
 
 #### LiteralType and UnionType
 A singleton of a scalar (`new LiteralType('shop')`) and a set of alternatives. An enum is a union of literals:

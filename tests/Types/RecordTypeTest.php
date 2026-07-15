@@ -126,6 +126,15 @@ final class RecordTypeTest extends TestCase
     }
 
     #[Test]
+    public function a_non_array_does_not_coerce_either(): void
+    {
+        $result = self::subject()->coerce(5);
+
+        $this->assertTrue($result->isErr());
+        $this->assertInstanceOf(TransformValueException::class, $result->unwrapErr());
+    }
+
+    #[Test]
     public function it_compares_fieldwise(): void
     {
         $type = new RecordType(['a' => new NumberType(), 'b' => new StringType()]);
