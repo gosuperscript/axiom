@@ -44,10 +44,11 @@ final class BindingsTest extends TestCase
     }
 
     #[Test]
-    public function it_flattens_associative_arrays_into_namespaces(): void
+    public function a_namespaced_lookup_is_the_flat_dotted_key(): void
     {
         $bindings = new Bindings([
-            'quote' => ['claims' => 3, 'turnover' => 500000],
+            'quote.claims' => 3,
+            'quote.turnover' => 500000,
             'tier' => 'small',
         ]);
 
@@ -82,25 +83,17 @@ final class BindingsTest extends TestCase
     }
 
     #[Test]
-    public function an_array_binding_is_both_a_record_and_a_namespace(): void
+    public function an_array_binding_never_answers_a_namespaced_lookup(): void
     {
-        // Descent, not flattening: one value, both readings.
+        // Exact keys only: a record value is data, not a namespace. Digging
+        // into it is member access — an explicit Source node — never symbol
+        // lookup. This is what makes caller data unable to answer for (and
+        // so shadow) a definition.
         $bindings = new Bindings(['customer' => ['name' => 'Ada', 'turnover' => 600000]]);
 
         $this->assertSame(['name' => 'Ada', 'turnover' => 600000], $bindings->get('customer')->unwrap());
-        $this->assertSame(600000, $bindings->get('turnover', 'customer')->unwrap());
         $this->assertTrue($bindings->has('customer'));
-        $this->assertTrue($bindings->has('turnover', 'customer'));
-    }
-
-    #[Test]
-    public function an_explicit_dotted_key_wins_over_descent(): void
-    {
-        $bindings = new Bindings([
-            'customer' => ['turnover' => 1],
-            'customer.turnover' => 999,
-        ]);
-
-        $this->assertSame(999, $bindings->get('turnover', 'customer')->unwrap());
+        $this->assertFalse($bindings->has('turnover', 'customer'));
+        $this->assertTrue($bindings->get('turnover', 'customer')->isNone());
     }
 }

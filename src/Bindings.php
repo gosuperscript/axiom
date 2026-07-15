@@ -11,13 +11,11 @@ use Superscript\Monads\Option\Some;
 /**
  * A per-call map of input values for an expression.
  *
- * Bindings store what they are given — descent, not flattening. An array
- * binding binds its key whole (a record value: coercible at the boundary,
- * member-accessible), and a namespaced lookup descends one level into it,
- * so ['customer' => ['turnover' => 600000]] answers both 'customer' and
- * SymbolSource('turnover', 'customer'). An explicit dotted key
- * ('customer.turnover') wins over descent. A namespace is the record view
- * of a binding — one value, both readings.
+ * Bindings answer exact keys only: a namespaced lookup is the flat dotted
+ * key ('customer.turnover'), and nothing ever digs into a binding's value
+ * to answer a symbol lookup — a namespace is a naming convention, not a
+ * view into structure. Reaching into a record value is member access, an
+ * explicit Source node with its own static judgment.
  *
  * Bindings hold raw values and are typically constructed fresh for each
  * expression invocation. For stable named expressions (constants, named
@@ -32,13 +30,7 @@ final readonly class Bindings
 
     public function has(string $name, ?string $namespace = null): bool
     {
-        if (array_key_exists($this->key($name, $namespace), $this->values)) {
-            return true;
-        }
-
-        return $namespace !== null
-            && is_array($this->values[$namespace] ?? null)
-            && array_key_exists($name, $this->values[$namespace]);
+        return array_key_exists($this->key($name, $namespace), $this->values);
     }
 
     /**
@@ -50,10 +42,6 @@ final readonly class Bindings
 
         if (array_key_exists($key, $this->values)) {
             return new Some($this->values[$key]);
-        }
-
-        if ($namespace !== null && is_array($this->values[$namespace] ?? null) && array_key_exists($name, $this->values[$namespace])) {
-            return new Some($this->values[$namespace][$name]);
         }
 
         return new None();

@@ -681,15 +681,6 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function field_type_of_is_the_public_face_of_the_field_judgment(): void
-    {
-        $record = new RecordType(['turnover' => new NumberType()]);
-
-        $this->assertInstanceOf(NumberType::class, self::inference()->fieldTypeOf($record, 'turnover')->unwrap());
-        $this->assertTrue(self::inference()->fieldTypeOf($record, 'ghost')->isErr());
-    }
-
-    #[Test]
     public function member_access_on_a_dict_is_refused(): void
     {
         $env = self::env(declarations: ['bag' => new DictType(new NumberType())]);

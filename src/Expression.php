@@ -8,7 +8,6 @@ use InvalidArgumentException;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Resolvers\Resolver;
 use Superscript\Axiom\Types\Shapes\OptionShape;
-use Superscript\Axiom\Types\Shapes\RecordShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeEnvironment;
@@ -71,30 +70,14 @@ final readonly class Expression
     ) {
         $this->dialect = $dialect ?? Dialect::core();
 
-        $collisions = [];
-
-        foreach ($this->declarations as $key => $type) {
-            if ($this->definitions->has($key)) {
-                $collisions[] = $key;
-            }
-
-            // The record view of a declaration declares its fields:
-            // declaring customer as a record with a turnover field declares
-            // customer.turnover, so a definition there collides too.
-            $shape = $type->shape();
-
-            if ($shape instanceof OptionShape) {
-                $shape = $shape->inner;
-            }
-
-            if ($shape instanceof RecordShape) {
-                foreach (array_keys($shape->fields) as $field) {
-                    if ($this->definitions->has($key . '.' . $field)) {
-                        $collisions[] = $key . '.' . $field;
-                    }
-                }
-            }
-        }
+        // Symbol lookup is exact-key only (no descent), so declared and
+        // defined names can only collide literally: Symbol('turnover',
+        // ns: 'customer') and member access on a declared customer record
+        // are distinct, unambiguous programs.
+        $collisions = array_values(array_filter(
+            array_keys($this->declarations),
+            fn(string $key) => $this->definitions->has($key),
+        ));
 
         if ($collisions !== []) {
             throw new InvalidArgumentException(sprintf(
@@ -211,27 +194,19 @@ final readonly class Expression
      * undeclared key is stripped — the declaration list is the expression's
      * complete public signature, and disjointness (enforced at
      * construction) means no admitted binding can name a definition.
-     * Violations aggregate, named by binding. Admitted values enter as
-     * explicit dotted keys, which win over descent at lookup.
+     * Violations aggregate, named by binding. Callers bind keys exactly as
+     * declared — symbol lookup has no other reading.
      *
      * @param array<string, mixed> $raw
      * @return Result<Bindings, BoundaryViolation>
      */
     private function admit(array $raw): Result
     {
-        $bindings = new Bindings($raw);
         $violations = [];
         $overlay = [];
 
         foreach ($this->declarations as $key => $type) {
-            $namespace = null;
-            $name = $key;
-
-            if (str_contains($key, '.')) {
-                [$namespace, $name] = explode('.', $key, 2);
-            }
-
-            if (!$bindings->has($name, $namespace)) {
+            if (!array_key_exists($key, $raw)) {
                 // Required-ness is a property of the projection, not the
                 // concrete class: Union(Option<Number>, String) has shape
                 // (Number | String)? and a missing binding is legal absence.
@@ -242,7 +217,7 @@ final readonly class Expression
                 continue;
             }
 
-            $value = $bindings->get($name, $namespace)->unwrap();
+            $value = $raw[$key];
 
             $admitted = match ($this->boundary) {
                 Boundary::Coerce => $type->coerce($value),
@@ -274,8 +249,8 @@ final readonly class Expression
         // The declaration list is the expression's complete public
         // signature: only the admitted, declared slice enters evaluation.
         // Stripping is what makes undeclared inputs inert — they can never
-        // feed an undeclared symbol or reach a definition, top-level or by
-        // descent — while superset contexts stay legal to pass.
+        // feed an undeclared symbol — while superset contexts stay legal
+        // to pass.
         return Ok(new Bindings($overlay));
     }
 

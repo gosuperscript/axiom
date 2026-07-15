@@ -54,12 +54,6 @@ final class TypeEnvironment
             return Ok($this->declarations[$key]);
         }
 
-        // Descent, mirroring Bindings: a namespaced symbol whose namespace
-        // is declared resolves to that declaration's field type.
-        if ($namespace !== null && isset($this->declarations[$namespace])) {
-            return $inference->fieldTypeOf($this->declarations[$namespace], $name);
-        }
-
         if (isset($this->memo[$key])) {
             return $this->memo[$key];
         }

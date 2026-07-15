@@ -326,19 +326,6 @@ final readonly class TypeInference
     }
 
     /**
-     * The field judgment, public for the environment's namespace descent:
-     * a namespaced symbol whose namespace is declared record-typed resolves
-     * to that record's field type — a namespace is the record view of a
-     * binding, statically and dynamically.
-     *
-     * @return Result<Type, TypeMismatch>
-     */
-    public function fieldTypeOf(Type $object, string $property): Result
-    {
-        return $this->accessField($object->shape(), $property);
-    }
-
-    /**
      * @return Result<Type, TypeMismatch>
      */
     private function accessField(Shape $object, string $property): Result

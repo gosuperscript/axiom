@@ -145,8 +145,8 @@ class KitchenSinkTest extends TestCase
             declarations: ['quote.claims' => new NumberType()],
         );
 
-        $this->assertEquals(25.0, $expression(['quote' => ['claims' => 3]])->unwrap()->unwrap());
-        $this->assertEquals(0, $expression(['quote' => ['claims' => 1]])->unwrap()->unwrap());
+        $this->assertEquals(25.0, $expression(['quote.claims' => 3])->unwrap()->unwrap());
+        $this->assertEquals(0, $expression(['quote.claims' => 1])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -217,9 +217,9 @@ class KitchenSinkTest extends TestCase
             ],
         );
 
-        $this->assertEquals(0.5, $rate(['quote' => ['claims' => 5, 'turnover' => 100]])->unwrap()->unwrap());
-        $this->assertEquals(0.35, $rate(['quote' => ['claims' => 1, 'turnover' => 600000]])->unwrap()->unwrap());
-        $this->assertEquals(0.1, $rate(['quote' => ['claims' => 0, 'turnover' => 100]])->unwrap()->unwrap());
+        $this->assertEquals(0.5, $rate(['quote.claims' => 5, 'quote.turnover' => 100])->unwrap()->unwrap());
+        $this->assertEquals(0.35, $rate(['quote.claims' => 1, 'quote.turnover' => 600000])->unwrap()->unwrap());
+        $this->assertEquals(0.1, $rate(['quote.claims' => 0, 'quote.turnover' => 100])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -286,8 +286,8 @@ class KitchenSinkTest extends TestCase
         // The same declarations then guard the call: the boundary coerces
         // a stringly CSV cell before evaluation, so the certified
         // expression never sees raw input.
-        $this->assertTrue($gate(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
-        $this->assertFalse($gate(['quote' => ['turnover' => '100000']])->unwrap()->unwrap());
+        $this->assertTrue($gate(['quote.turnover' => '600000'])->unwrap()->unwrap());
+        $this->assertFalse($gate(['quote.turnover' => '100000'])->unwrap()->unwrap());
     }
 
     #[Test]

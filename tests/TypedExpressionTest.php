@@ -165,7 +165,7 @@ final class TypedExpressionTest extends TestCase
     {
         // A stringly CSV cell — Phase 0's honest arithmetic would refuse it
         // mid-expression; the boundary converts it before evaluation begins.
-        $result = ($this->gate())(['quote' => ['turnover' => '600000']]);
+        $result = ($this->gate())(['quote.turnover' => '600000']);
 
         $this->assertTrue($result->unwrap()->unwrap());
     }
@@ -250,41 +250,26 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function an_optional_record_declaration_also_collides_through_the_record_view(): void
+    public function a_record_declaration_and_a_namesake_definition_are_distinct_programs(): void
     {
-        // The record view looks through optionality: Option<Record> still
-        // declares its fields, so the collision holds.
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('[customer.turnover] is both declared and defined');
-
-        new Expression(
+        // No descent: Symbol('turnover', ns: 'customer') is the exact key
+        // customer.turnover — a definition — while the declared customer
+        // record is reachable only by member access. The caller's record
+        // content can never answer the symbol, so it can never shadow the
+        // definition (the second-opinion finding, closed structurally).
+        $expression = new Expression(
             source: new SymbolSource('turnover', 'customer'),
             resolver: $this->resolver(),
-            definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
-            declarations: ['customer' => new OptionType(new RecordType(['turnover' => new NumberType()]))],
+            definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
+            declarations: ['customer' => new RecordType(['name' => new StringType()])],
         );
+
+        $this->assertSame(1, $expression(['customer' => ['name' => 'Ada']])->unwrap()->unwrap());
+        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $expression->infer()->unwrap());
     }
 
     #[Test]
-    public function a_record_declaration_collides_with_a_definition_through_the_record_view(): void
-    {
-        // Declaring customer as a record with a turnover field declares
-        // customer.turnover — so a definition there is the same collision,
-        // and the nested-binding side door (finding: a raw array binding
-        // silently shadowing a namespaced definition) is unrepresentable.
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('[customer.turnover] is both declared and defined');
-
-        new Expression(
-            source: new SymbolSource('turnover', 'customer'),
-            resolver: $this->resolver(),
-            definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
-            declarations: ['customer' => new RecordType(['turnover' => new NumberType()])],
-        );
-    }
-
-    #[Test]
-    public function record_bindings_are_coerced_whole_and_namespaces_descend(): void
+    public function record_bindings_are_coerced_whole_and_fields_are_member_access(): void
     {
         $record = new RecordType([
             'turnover' => new NumberType(),
@@ -293,7 +278,7 @@ final class TypedExpressionTest extends TestCase
 
         $expression = new Expression(
             source: new InfixExpression(
-                left: new SymbolSource('turnover', 'customer'),
+                left: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
                 operator: '*',
                 right: new StaticSource(2),
             ),
@@ -302,11 +287,11 @@ final class TypedExpressionTest extends TestCase
         );
 
         // The whole record coerces at the boundary ('2' → 2, missing
-        // optional note canonicalizes) and the namespaced symbol reads
-        // through the coerced record.
+        // optional note canonicalizes) and member access — the one
+        // structural path — reads the coerced record's field.
         $this->assertSame(4, $expression(['customer' => ['turnover' => '2']])->unwrap()->unwrap());
 
-        // Statically, the namespaced symbol types as the record's field.
+        // Statically, the member access types as the record's field.
         $this->assertInstanceOf(NumberType::class, $expression->infer()->unwrap());
 
         // Field errors are named under the input.

@@ -142,19 +142,18 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
-    public function a_namespaced_symbol_descends_into_a_record_declaration(): void
+    public function a_record_declaration_never_answers_a_namespaced_symbol(): void
     {
+        // Exact keys only, mirroring runtime lookup: a record-typed
+        // declaration of customer types the symbol customer, not the
+        // symbol customer.turnover — reaching a field is member access.
         $environment = new TypeEnvironment(declarations: [
             'customer' => new \Superscript\Axiom\Types\RecordType(['turnover' => new NumberType()]),
         ]);
 
         $result = $environment->typeOfSymbol('turnover', 'customer', self::inference());
 
-        $this->assertInstanceOf(NumberType::class, $result->unwrap());
-
-        $missing = $environment->typeOfSymbol('ghost', 'customer', self::inference());
-
-        $this->assertStringContainsString("Field 'ghost' does not exist", $missing->unwrapErr()->describe());
+        $this->assertStringContainsString('Unbound symbol [customer.turnover]', $result->unwrapErr()->describe());
     }
 
     #[Test]
