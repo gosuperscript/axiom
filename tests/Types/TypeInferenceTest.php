@@ -80,15 +80,16 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\OpaqueType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Has::class)]
+#[UsesClass(\Superscript\Axiom\Operators\In::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\SetOperands::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\DeadOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
@@ -812,19 +813,24 @@ final class TypeInferenceTest extends TestCase
     #[Test]
     public function a_dialect_can_inject_its_own_unary_stack(): void
     {
-        $numericNot = new class implements \Superscript\Axiom\Operators\UnaryOverloader {
-            public function resolve(string $operator, Type $operand): Result
+        $numericNot = new class implements \Superscript\Axiom\Operators\UnaryOperatorRule {
+            public function operator(): string
             {
-                if ($operator !== '!') {
-                    return \Superscript\Monads\Result\Err(new TypeMismatch('Foreign.', unhandled: true));
-                }
+                return '!';
+            }
 
-                return Ok(new \Superscript\Axiom\Operators\ResolvedOperation(new NumberType(), fn(int $n) => -$n));
+            public function resolve(Type $operand): \Superscript\Axiom\Operators\OperatorResolution
+            {
+                return new \Superscript\Axiom\Operators\ResolvedOperation(new NumberType(), fn(int $n) => -$n);
             }
         };
 
         $dialect = Dialect::core();
-        $inference = new TypeInference($dialect->operators(), $numericNot, $dialect->literals());
+        $inference = new TypeInference(
+            $dialect->operators(),
+            new \Superscript\Axiom\Operators\UnaryOperatorResolver([$numericNot]),
+            $dialect->literals(),
+        );
 
         $result = $inference->infer(new UnaryExpression('!', new StaticSource(5)), self::env());
 

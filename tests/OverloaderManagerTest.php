@@ -9,22 +9,21 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
-use Superscript\Axiom\Operators\OverloadResolution;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\DeadOperation;
+use Superscript\Axiom\Operators\OperatorResolution;
 use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Monads\Result\Result;
 
-use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
-
-#[CoversClass(OverloaderManager::class)]
-#[CoversClass(OverloadResolution::class)]
+#[CoversClass(BinaryOperatorResolver::class)]
+#[CoversClass(UnsupportedOperation::class)]
+#[CoversClass(DeadOperation::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
@@ -33,137 +32,164 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 final class OverloaderManagerTest extends TestCase
 {
-    /**
-     * A rule that resolves one operator over one operand type class.
-     */
-    private static function rule(string $operator, string $operandClass, Type $returns, mixed $result): OperatorOverloader
+    private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): BinaryOperatorRule
     {
-        return new class ($operator, $operandClass, $returns, $result) implements OperatorOverloader {
+        return new class ($operator, $resolution, $calls) implements BinaryOperatorRule {
             public function __construct(
-                private readonly string $operator,
-                private readonly string $operandClass,
-                private readonly Type $returns,
-                private readonly mixed $result,
+                private readonly string $symbol,
+                private readonly OperatorResolution $resolution,
+                private ?int &$calls,
             ) {}
 
-            public function resolve(string $operator, Type $left, Type $right): Result
+            public function operator(): string
             {
-                if ($operator !== $this->operator) {
-                    return Err(new TypeMismatch(sprintf('This rule does not resolve [%s].', $operator), unhandled: true));
-                }
+                return $this->symbol;
+            }
 
-                if (!$left instanceof $this->operandClass || !$right instanceof $this->operandClass) {
-                    return Err(new TypeMismatch(sprintf('[%s] wants two %s.', $this->operator, $this->operandClass)));
-                }
+            public function resolve(Type $left, Type $right): OperatorResolution
+            {
+                ++$this->calls;
 
-                return Ok(new ResolvedOperation($this->returns, fn(mixed $l, mixed $r) => $this->result));
+                return $this->resolution;
+            }
+        };
+    }
+
+    /** A second concrete rule class, so owner ordering is observable. */
+    private static function alternativeRule(string $operator, OperatorResolution $resolution): BinaryOperatorRule
+    {
+        return new class ($operator, $resolution) implements BinaryOperatorRule {
+            public function __construct(
+                private readonly string $symbol,
+                private readonly OperatorResolution $resolution,
+            ) {}
+
+            public function operator(): string
+            {
+                return $this->symbol;
+            }
+
+            public function resolve(Type $left, Type $right): OperatorResolution
+            {
+                return $this->resolution;
             }
         };
     }
 
     #[Test]
-    public function it_asserts_all_overloaders_are_instance_of_interface(): void
+    public function it_requires_binary_rules(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
         /** @phpstan-ignore argument.type */
-        new OverloaderManager(['not a rule']);
+        new BinaryOperatorResolver(['not a rule']);
     }
 
     #[Test]
-    public function a_lone_resolution_is_the_verdict(): void
+    public function unknown_symbols_do_not_invoke_unrelated_rules(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', NumberType::class, new NumberType(), 3),
-            self::rule('+', StringType::class, new StringType(), 'ab'),
+        $calls = 0;
+        $resolver = new BinaryOperatorResolver([
+            self::rule('+', new UnsupportedOperation('No.'), $calls),
         ]);
 
-        $resolution = $manager->resolve('+', new NumberType(), new NumberType())->unwrap();
+        $verdict = $resolver->resolve('-', new NumberType(), new NumberType());
 
-        $this->assertInstanceOf(NumberType::class, $resolution->returns);
-        $this->assertSame(3, $resolution->evaluate(1, 2)->unwrap());
+        $this->assertSame(0, $calls);
+        $this->assertSame('Operator [-] is not supported.', $verdict->unwrapErr()->message);
     }
 
     #[Test]
-    public function two_resolutions_are_an_ambiguity_error_naming_the_owners(): void
+    public function a_lone_resolution_is_returned(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', NumberType::class, new NumberType(), 1),
-            self::rule('+', NumberType::class, new BooleanType(), 2),
-        ]);
+        $operation = new ResolvedOperation(new NumberType(), fn() => 3);
+        $resolver = new BinaryOperatorResolver([self::rule('+', $operation)]);
 
-        $verdict = $manager->resolve('+', new NumberType(), new NumberType());
-
-        $this->assertTrue($verdict->isErr());
-        $this->assertStringContainsString('Operator [+] over Number and Number is ambiguous:', $verdict->unwrapErr()->message);
-        $this->assertStringContainsString('exactly one owner', $verdict->unwrapErr()->message);
+        $this->assertSame($operation, $resolver->resolve('+', new NumberType(), new NumberType())->unwrap());
     }
 
     #[Test]
-    public function an_operator_no_rule_engages_is_unsupported(): void
+    public function a_resolution_wins_over_refusals(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', NumberType::class, new NumberType(), 3),
+        $operation = new ResolvedOperation(new NumberType(), fn() => 3);
+        $resolver = new BinaryOperatorResolver([
+            self::rule('+', new UnsupportedOperation('No.')),
+            self::rule('+', $operation),
         ]);
 
-        $verdict = $manager->resolve('has', new NumberType(), new NumberType());
-
-        $this->assertSame('Operator [has] is not supported.', $verdict->unwrapErr()->message);
-        // Marked unhandled, so a nesting manager keeps it out of its own
-        // aggregated diagnostics.
-        $this->assertTrue($verdict->unwrapErr()->unhandled);
+        $this->assertSame($operation, $resolver->resolve('+', new NumberType(), new NumberType())->unwrap());
     }
 
     #[Test]
-    public function a_lone_engaged_refusal_passes_through_directly(): void
+    public function ambiguity_is_stable_and_has_no_registration_precedence(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', NumberType::class, new NumberType(), 3),
-        ]);
+        $number = self::rule('+', new ResolvedOperation(new NumberType(), fn() => 1));
+        $boolean = self::alternativeRule('+', new ResolvedOperation(new BooleanType(), fn() => true));
 
-        $verdict = $manager->resolve('+', new StringType(), new StringType());
+        $first = (new BinaryOperatorResolver([$number, $boolean]))->resolve('+', new NumberType(), new NumberType())->unwrapErr()->message;
+        $second = (new BinaryOperatorResolver([$boolean, $number]))->resolve('+', new NumberType(), new NumberType())->unwrapErr()->message;
 
-        $this->assertSame('[+] wants two ' . NumberType::class . '.', $verdict->unwrapErr()->message);
+        $this->assertSame($first, $second);
+        $this->assertStringContainsString('Operator [+] over Number and Number is ambiguous:', $first);
+        $this->assertStringContainsString($number::class, $first);
+        $this->assertStringContainsString($boolean::class, $first);
+        $this->assertStringContainsString('exactly one owner', $first);
     }
 
     #[Test]
-    public function multiple_engaged_refusals_aggregate_with_causes(): void
+    public function a_single_refusal_preserves_its_exact_diagnostic(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', NumberType::class, new NumberType(), 3),
-            self::rule('+', StringType::class, new StringType(), 'ab'),
-        ]);
+        $cause = new TypeMismatch('Because.');
+        $verdict = (new BinaryOperatorResolver([
+            self::rule('+', new UnsupportedOperation('Not for these values.', [$cause])),
+        ]))->resolve('+', new StringType(), new StringType())->unwrapErr();
 
-        $verdict = $manager->resolve('+', new BooleanType(), new BooleanType());
-
-        $this->assertSame('No overload of [+] accepts Boolean and Boolean.', $verdict->unwrapErr()->message);
-        $this->assertCount(2, $verdict->unwrapErr()->causes);
-        $this->assertFalse($verdict->unwrapErr()->unhandled);
+        $this->assertSame('Not for these values.', $verdict->message);
+        $this->assertSame([$cause], $verdict->causes);
+        $this->assertFalse($verdict->dead);
     }
 
     #[Test]
-    public function unhandled_refusals_stay_out_of_the_aggregate(): void
+    public function multiple_refusals_aggregate_their_diagnostics(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('-', NumberType::class, new NumberType(), 1),
-            self::rule('+', NumberType::class, new NumberType(), 3),
-            self::rule('+', StringType::class, new StringType(), 'ab'),
-        ]);
+        $verdict = (new BinaryOperatorResolver([
+            self::rule('+', new UnsupportedOperation('First.')),
+            self::rule('+', new DeadOperation('Second.')),
+        ]))->resolve('+', new BooleanType(), new BooleanType())->unwrapErr();
 
-        $verdict = $manager->resolve('+', new BooleanType(), new BooleanType());
-
-        // The [-] rule's foreign-operator refusal contributes no cause.
-        $this->assertCount(2, $verdict->unwrapErr()->causes);
+        $this->assertSame('No overload of [+] accepts Boolean and Boolean.', $verdict->message);
+        $this->assertSame(['First.', 'Second.'], array_map(fn(TypeMismatch $cause) => $cause->message, $verdict->causes));
+        $this->assertFalse($verdict->dead);
+        $this->assertTrue($verdict->causes[1]->dead);
     }
 
     #[Test]
-    public function a_single_resolving_rule_wins_over_refusing_neighbours(): void
+    public function dead_refusals_preserve_dead_metadata_singly_and_when_aggregated(): void
     {
-        $manager = new OverloaderManager([
-            self::rule('+', StringType::class, new StringType(), 'ab'),
-            self::rule('+', NumberType::class, new NumberType(), 3),
-        ]);
+        $single = (new BinaryOperatorResolver([
+            self::rule('+', new DeadOperation('Dead.')),
+        ]))->resolve('+', new NumberType(), new StringType())->unwrapErr();
 
-        $this->assertInstanceOf(NumberType::class, $manager->resolve('+', new NumberType(), new NumberType())->unwrap()->returns);
+        $aggregate = (new BinaryOperatorResolver([
+            self::rule('+', new DeadOperation('First.')),
+            self::rule('+', new DeadOperation('Second.')),
+        ]))->resolve('+', new NumberType(), new StringType())->unwrapErr();
+
+        $this->assertTrue($single->dead);
+        $this->assertTrue($aggregate->dead);
+        $this->assertTrue($aggregate->causes[0]->dead);
+        $this->assertTrue($aggregate->causes[1]->dead);
+    }
+
+    #[Test]
+    public function an_unknown_resolution_variant_is_rejected(): void
+    {
+        $unknown = new class implements OperatorResolution {};
+        $resolver = new BinaryOperatorResolver([self::rule('+', $unknown)]);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Unknown operator resolution');
+
+        $resolver->resolve('+', new NumberType(), new NumberType());
     }
 }

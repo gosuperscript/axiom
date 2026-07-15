@@ -23,10 +23,10 @@ use Superscript\Axiom\Types\Type;
 
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
@@ -36,10 +36,10 @@ use Superscript\Axiom\Types\Type;
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
-#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Has::class)]
+#[UsesClass(\Superscript\Axiom\Operators\In::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\SetOperands::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
@@ -198,7 +198,7 @@ final class DialectTest extends TestCase
             public function operators(): array
             {
                 return [
-                    new \Superscript\Axiom\Operators\EqualityOverloader(),
+                    new \Superscript\Axiom\Operators\Equality('==', negated: false),
                     Operator::infix('++')
                         ->signature(new StringType(), new StringType())
                         ->returns(new StringType())
@@ -238,10 +238,15 @@ final class DialectTest extends TestCase
     #[Test]
     public function prefix_row_ambiguity_is_detected_behind_non_row_rules(): void
     {
-        $nonRow = new class implements \Superscript\Axiom\Operators\UnaryOverloader {
-            public function resolve(string $operator, Type $operand): \Superscript\Monads\Result\Result
+        $nonRow = new class implements \Superscript\Axiom\Operators\UnaryOperatorRule {
+            public function operator(): string
             {
-                return \Superscript\Monads\Result\Err(new \Superscript\Axiom\Types\TypeMismatch('Nothing.', unhandled: true));
+                return 'abs';
+            }
+
+            public function resolve(Type $operand): \Superscript\Axiom\Operators\OperatorResolution
+            {
+                return new \Superscript\Axiom\Operators\UnsupportedOperation('Nothing.');
             }
         };
 
@@ -249,7 +254,7 @@ final class DialectTest extends TestCase
         $this->expectExceptionMessage('The dialect is ambiguous: two unary [abs] rows collide');
 
         Dialect::core()->with(new class ($nonRow) extends Extension {
-            public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOverloader $nonRow) {}
+            public function __construct(private readonly \Superscript\Axiom\Operators\UnaryOperatorRule $nonRow) {}
 
             public function unaryOperators(): array
             {

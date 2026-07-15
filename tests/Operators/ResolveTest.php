@@ -10,12 +10,16 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Dialect;
-use Superscript\Axiom\Operators\EqualityOverloader;
-use Superscript\Axiom\Operators\HasOverloader;
-use Superscript\Axiom\Operators\InOverloader;
-use Superscript\Axiom\Operators\IntersectsOverloader;
-use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\Equality;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
+use Superscript\Axiom\Operators\DeadOperation;
+use Superscript\Axiom\Operators\Has;
+use Superscript\Axiom\Operators\In;
+use Superscript\Axiom\Operators\Intersects;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\SetOperands;
+use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ListType;
@@ -26,6 +30,7 @@ use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\UnionType;
 use Superscript\Axiom\Types\UnknownType;
 
@@ -36,15 +41,16 @@ use Superscript\Axiom\Types\UnknownType;
  * core dialect; the type functions (equality, membership, intersection)
  * also directly.
  */
-#[CoversClass(EqualityOverloader::class)]
-#[CoversClass(HasOverloader::class)]
-#[CoversClass(InOverloader::class)]
-#[CoversClass(IntersectsOverloader::class)]
+#[CoversClass(Equality::class)]
+#[CoversClass(Has::class)]
+#[CoversClass(In::class)]
+#[CoversClass(Intersects::class)]
 #[CoversClass(SetOperands::class)]
 #[CoversClass(Dialect::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
+#[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\DeadOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
@@ -54,7 +60,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(DictType::class)]
 #[UsesClass(ListType::class)]
@@ -86,9 +92,14 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 final class ResolveTest extends TestCase
 {
-    private static function core(): OperatorOverloader
+    private static function core(): BinaryOperatorResolver
     {
         return Dialect::core()->operators();
+    }
+
+    private static function equality(string $operator): Equality
+    {
+        return new Equality($operator, in_array($operator, ['!=', '!=='], strict: true));
     }
 
     private static function opaque(): Type
@@ -125,12 +136,14 @@ final class ResolveTest extends TestCase
 
     #[Test]
     #[DataProvider('certifiedCases')]
-    public function it_certifies(OperatorOverloader $rule, string $operator, Type $left, Type $right, string $expected): void
+    public function it_certifies(BinaryOperatorRule|BinaryOperatorResolver $rule, string $operator, Type $left, Type $right, string $expected): void
     {
-        $result = $rule->resolve($operator, $left, $right);
+        $resolution = $rule instanceof BinaryOperatorResolver
+            ? $rule->resolve($operator, $left, $right)->unwrap()
+            : $rule->resolve($left, $right);
 
-        $this->assertTrue($result->isOk(), $result->isErr() ? $result->unwrapErr()->describe() : '');
-        $this->assertInstanceOf($expected, $result->unwrap()->returns);
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertInstanceOf($expected, $resolution->returns);
     }
 
     public static function certifiedCases(): \Generator
@@ -145,16 +158,15 @@ final class ResolveTest extends TestCase
         yield 'ordering of number literals' => [$core, '>=', new LiteralType(1), new LiteralType(2), BooleanType::class];
         yield 'booleans conjoin' => [$core, '&&', new BooleanType(), new BooleanType(), BooleanType::class];
 
-        $equality = new EqualityOverloader();
-        yield 'equality of overlapping types' => [$equality, '==', new NumberType(), new NumberType(), BooleanType::class];
+        yield 'equality of overlapping types' => [self::equality('=='), '==', new NumberType(), new NumberType(), BooleanType::class];
         yield 'equality of a literal against its enum' => [
-            $equality, '=', new LiteralType('shop'), new UnionType(new LiteralType('shop'), new LiteralType('office')), BooleanType::class,
+            self::equality('='), '=', new LiteralType('shop'), new UnionType(new LiteralType('shop'), new LiteralType('office')), BooleanType::class,
         ];
         yield 'the emptiness test: option against the null literal' => [
-            $equality, '==', new OptionType(new NumberType()), new OptionType(new NeverType()), BooleanType::class,
+            self::equality('=='), '==', new OptionType(new NumberType()), new OptionType(new NeverType()), BooleanType::class,
         ];
 
-        $has = new HasOverloader();
+        $has = new Has();
         yield 'list has element' => [$has, 'has', new ListType(new StringType()), new StringType(), BooleanType::class];
         yield 'list has enum member' => [
             $has, 'has', new ListType(new StringType()), new UnionType(new LiteralType('a'), new LiteralType('b')), BooleanType::class,
@@ -170,14 +182,14 @@ final class ResolveTest extends TestCase
             $has, 'has', new ListType(new StringType()), new OptionType(new NeverType()), BooleanType::class,
         ];
 
-        $in = new InOverloader();
+        $in = new In();
         yield 'element in list' => [$in, 'in', new LiteralType(5), new ListType(new NumberType()), BooleanType::class];
         yield 'subset in list' => [$in, 'in', new ListType(new NumberType()), new ListType(new NumberType()), BooleanType::class];
         yield 'a fully-claimed union needle is judged member-wise' => [
             $in, 'in', new UnionType(new LiteralType(1), new NumberType()), new ListType(new NumberType()), BooleanType::class,
         ];
 
-        $intersects = new IntersectsOverloader();
+        $intersects = new Intersects();
         yield 'lists intersect' => [$intersects, 'intersects', new ListType(new StringType()), new ListType(new StringType()), BooleanType::class];
         yield 'scalar intersects list' => [$intersects, 'intersects', new StringType(), new ListType(new StringType()), BooleanType::class];
         yield 'intersects tolerates absence' => [
@@ -193,13 +205,18 @@ final class ResolveTest extends TestCase
 
     #[Test]
     #[DataProvider('refusedCases')]
-    public function it_refuses(OperatorOverloader $rule, string $operator, Type $left, Type $right, string $fragment, bool $dead = false): void
+    public function it_refuses(BinaryOperatorRule|BinaryOperatorResolver $rule, string $operator, Type $left, Type $right, string $fragment, bool $dead = false): void
     {
-        $result = $rule->resolve($operator, $left, $right);
+        if ($rule instanceof BinaryOperatorResolver) {
+            $mismatch = $rule->resolve($operator, $left, $right)->unwrapErr();
+        } else {
+            $resolution = $rule->resolve($left, $right);
+            $this->assertTrue($resolution instanceof UnsupportedOperation || $resolution instanceof DeadOperation);
+            $mismatch = new TypeMismatch($resolution->message, $resolution->causes, $resolution instanceof DeadOperation);
+        }
 
-        $this->assertTrue($result->isErr(), 'expected a refusal');
-        $this->assertStringContainsString($fragment, $result->unwrapErr()->describe());
-        $this->assertSame($dead, $result->unwrapErr()->dead);
+        $this->assertStringContainsString($fragment, $mismatch->describe());
+        $this->assertSame($dead, $mismatch->dead);
     }
 
     public static function refusedCases(): \Generator
@@ -242,42 +259,38 @@ final class ResolveTest extends TestCase
             $core, '+', new OptionType(new NeverType()), new OptionType(new NeverType()), '[+] expects Number and Number',
         ];
 
-        $equality = new EqualityOverloader();
         // Totality: Ok certifies EVERY value of the operand types, and value
         // equality makes no claim about objects — so opaque-typed operands
         // are unsupported (not dead: no evaluation exists for them here).
         yield 'equality refuses an opaque left operand' => [
-            $equality, '==', self::opaque(), new NumberType(), 'object equality belongs to the rule that owns the type',
+            self::equality('=='), '==', self::opaque(), new NumberType(), 'object equality belongs to the rule that owns the type',
         ];
         yield 'equality refuses an opaque right operand' => [
-            $equality, '!=', new NumberType(), self::opaque(), 'does not claim the right operand',
+            self::equality('!='), '!=', new NumberType(), self::opaque(), 'does not claim the right operand',
         ];
         yield 'equality refuses an opaque buried in a union' => [
-            $equality, '==', new UnionType(new NumberType(), self::opaque()), new NumberType(), 'object equality belongs to the rule that owns the type',
+            self::equality('=='), '==', new UnionType(new NumberType(), self::opaque()), new NumberType(), 'object equality belongs to the rule that owns the type',
         ];
         yield 'equality refuses an inert Unknown' => [
-            $equality, '==', new UnknownType(), new NumberType(), 'does not claim the left operand',
+            self::equality('=='), '==', new UnknownType(), new NumberType(), 'does not claim the left operand',
         ];
         yield 'a dead comparison is refused as dead' => [
-            $equality, '==', new NumberType(), new StringType(), 'can never hold', true,
+            self::equality('=='), '==', new NumberType(), new StringType(), 'can never hold', true,
         ];
         yield 'dead negated equality is constant-true, and says so' => [
-            $equality, '!=', new NumberType(), new StringType(), 'always holds', true,
+            self::equality('!='), '!=', new NumberType(), new StringType(), 'always holds', true,
         ];
         yield 'dead strict negated equality says so too' => [
-            $equality, '!==', new NumberType(), new StringType(), 'always holds', true,
+            self::equality('!=='), '!==', new NumberType(), new StringType(), 'always holds', true,
         ];
         yield 'a dead comparison carries the overlap cause' => [
-            $equality, '==', new NumberType(), new StringType(), 'Number and String share no values.', true,
+            self::equality('=='), '==', new NumberType(), new StringType(), 'Number and String share no values.', true,
         ];
         yield 'a dead enum comparison names the union' => [
-            $equality, '=', new UnionType(new LiteralType('shop'), new LiteralType('office')), new LiteralType('warehouse'), 'can never hold', true,
-        ];
-        yield 'equality does not resolve foreign operators' => [
-            $equality, '+', new NumberType(), new NumberType(), 'Equality does not resolve [+].',
+            self::equality('='), '=', new UnionType(new LiteralType('shop'), new LiteralType('office')), new LiteralType('warehouse'), 'can never hold', true,
         ];
 
-        $has = new HasOverloader();
+        $has = new Has();
         yield 'has refuses a non-list left side' => [$has, 'has', new StringType(), new StringType(), 'must be a present list'];
         yield 'has refuses an absent list side' => [
             $has, 'has', new OptionType(new ListType(new StringType())), new StringType(), 'must be a present list',
@@ -298,9 +311,8 @@ final class ResolveTest extends TestCase
         yield 'dead membership carries the element cause' => [
             $has, 'has', new ListType(new NumberType()), new StringType(), 'Number and String share no values.', true,
         ];
-        yield 'has does not resolve foreign operators' => [$has, 'in', new ListType(new StringType()), new StringType(), 'Membership does not resolve [in].'];
 
-        $in = new InOverloader();
+        $in = new In();
         // Universal over union members: one supported branch certifies
         // nothing, and opaque needles are objects value equality never claims.
         yield 'a union needle with an unclaimed branch is refused' => [
@@ -313,9 +325,8 @@ final class ResolveTest extends TestCase
         yield 'dead in-membership is refused as dead' => [
             $in, 'in', new StringType(), new ListType(new NumberType()), 'can never hold', true,
         ];
-        yield 'in does not resolve foreign operators' => [$in, 'has', new StringType(), new ListType(new StringType()), 'Membership does not resolve [has].'];
 
-        $intersects = new IntersectsOverloader();
+        $intersects = new Intersects();
         yield 'dead intersection is refused as dead' => [
             $intersects, 'intersects', new ListType(new NumberType()), new ListType(new StringType()), 'can never hold', true,
         ];
@@ -331,24 +342,5 @@ final class ResolveTest extends TestCase
         yield 'intersects refuses an inert Unknown' => [
             $intersects, 'intersects', new UnknownType(), new ListType(new StringType()), 'requires lists or scalars',
         ];
-        yield 'intersects does not resolve foreign operators' => [
-            $intersects, 'has', new ListType(new StringType()), new ListType(new StringType()), 'Intersection does not resolve [has].',
-        ];
-    }
-
-    #[Test]
-    public function a_foreign_operator_refusal_is_marked_unhandled(): void
-    {
-        $this->assertTrue((new EqualityOverloader())->resolve('+', new NumberType(), new NumberType())->unwrapErr()->unhandled);
-        $this->assertTrue((new HasOverloader())->resolve('in', new ListType(new StringType()), new StringType())->unwrapErr()->unhandled);
-        $this->assertTrue((new InOverloader())->resolve('has', new StringType(), new ListType(new StringType()))->unwrapErr()->unhandled);
-        $this->assertTrue((new IntersectsOverloader())->resolve('has', new StringType(), new StringType())->unwrapErr()->unhandled);
-    }
-
-    #[Test]
-    public function an_engaged_refusal_is_not_marked_unhandled(): void
-    {
-        $this->assertFalse((new EqualityOverloader())->resolve('==', new NumberType(), new StringType())->unwrapErr()->unhandled);
-        $this->assertFalse((new HasOverloader())->resolve('has', new StringType(), new StringType())->unwrapErr()->unhandled);
     }
 }

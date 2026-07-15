@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
-use Superscript\Axiom\Operators\EqualityOverloader;
-use Superscript\Axiom\Operators\HasOverloader;
-use Superscript\Axiom\Operators\InOverloader;
-use Superscript\Axiom\Operators\IntersectsOverloader;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\Equality;
+use Superscript\Axiom\Operators\Has;
+use Superscript\Axiom\Operators\In;
+use Superscript\Axiom\Operators\Intersects;
 use Superscript\Axiom\Operators\Operator;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
 use Superscript\Axiom\Operators\Signatures\InfixSignature;
 use Superscript\Axiom\Operators\Signatures\PrefixSignature;
-use Superscript\Axiom\Operators\UnaryOverloader;
-use Superscript\Axiom\Operators\UnaryOverloaderManager;
+use Superscript\Axiom\Operators\UnaryOperatorResolver;
+use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralTypeRegistry;
 use Superscript\Axiom\Types\NumberType;
@@ -37,7 +37,7 @@ use function Superscript\Monads\Result\attempt;
  * operand types. Ambiguity is refused at the earliest moment it exists:
  * two rows for the same operator whose slots admit a common operand type
  * are a construction error here, and any remaining multi-resolution is a
- * compile error in the manager. List order decides nothing.
+ * compile error in the resolver. List order decides nothing.
  *
  * Packages contribute through {@see Extension}; duplicate literal
  * registrations are loud errors.
@@ -45,8 +45,8 @@ use function Superscript\Monads\Result\attempt;
 final readonly class Dialect
 {
     /**
-     * @param list<OperatorOverloader> $binaryRules
-     * @param list<UnaryOverloader> $unaryRules
+     * @param list<BinaryOperatorRule> $binaryRules
+     * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
      */
     private function __construct(
@@ -86,10 +86,14 @@ final readonly class Dialect
                     ->evaluate(fn(bool $left, bool $right) => $left || $right),
                 Operator::infix('xor')->signature($boolean, $boolean)->returns($boolean)
                     ->evaluate(fn(bool $left, bool $right) => $left xor $right),
-                new EqualityOverloader(),
-                new HasOverloader(),
-                new InOverloader(),
-                new IntersectsOverloader(),
+                new Equality('=', negated: false),
+                new Equality('==', negated: false),
+                new Equality('===', negated: false),
+                new Equality('!=', negated: true),
+                new Equality('!==', negated: true),
+                new Has(),
+                new In(),
+                new Intersects(),
             ],
             unaryRules: [
                 Operator::prefix('!')->signature($boolean)->returns($boolean)
@@ -128,14 +132,14 @@ final readonly class Dialect
         return new self($binary, $unary, $literals);
     }
 
-    public function operators(): OperatorOverloader
+    public function operators(): BinaryOperatorResolver
     {
-        return new OverloaderManager($this->binaryRules);
+        return new BinaryOperatorResolver($this->binaryRules);
     }
 
-    public function unaryOperators(): UnaryOverloader
+    public function unaryOperators(): UnaryOperatorResolver
     {
-        return new UnaryOverloaderManager($this->unaryRules);
+        return new UnaryOperatorResolver($this->unaryRules);
     }
 
     public function literals(): LiteralTypeRegistry
@@ -151,23 +155,23 @@ final readonly class Dialect
      * dispatch sees operand types, never values, so a List row beside a
      * Dict row is a legal pair even though the empty array inhabits both.
      *
-     * @param list<OperatorOverloader> $binaryRules
-     * @param list<UnaryOverloader> $unaryRules
+     * @param list<BinaryOperatorRule> $binaryRules
+     * @param list<UnaryOperatorRule> $unaryRules
      */
     private static function assertUnambiguousRows(array $binaryRules, array $unaryRules): void
     {
-        $infixRows = array_values(array_filter($binaryRules, fn(OperatorOverloader $rule) => $rule instanceof InfixSignature));
+        $infixRows = array_values(array_filter($binaryRules, fn(BinaryOperatorRule $rule) => $rule instanceof InfixSignature));
 
         foreach ($infixRows as $index => $row) {
             foreach (array_slice($infixRows, $index + 1) as $other) {
                 if (
-                    $row->operator === $other->operator
+                    $row->operator() === $other->operator()
                     && TypeRelations::jointlyAdmissible($row->left, $other->left)->isOk()
                     && TypeRelations::jointlyAdmissible($row->right, $other->right)->isOk()
                 ) {
                     throw new InvalidArgumentException(sprintf(
                         'The dialect is ambiguous: two [%s] rows collide — (%s, %s) and (%s, %s) admit a common operand type, and which evaluation runs must never depend on list order.',
-                        $row->operator,
+                        $row->operator(),
                         TypeDescriber::describe($row->left),
                         TypeDescriber::describe($row->right),
                         TypeDescriber::describe($other->left),
@@ -177,17 +181,17 @@ final readonly class Dialect
             }
         }
 
-        $prefixRows = array_values(array_filter($unaryRules, fn(UnaryOverloader $rule) => $rule instanceof PrefixSignature));
+        $prefixRows = array_values(array_filter($unaryRules, fn(UnaryOperatorRule $rule) => $rule instanceof PrefixSignature));
 
         foreach ($prefixRows as $index => $row) {
             foreach (array_slice($prefixRows, $index + 1) as $other) {
                 if (
-                    $row->operator === $other->operator
+                    $row->operator() === $other->operator()
                     && TypeRelations::jointlyAdmissible($row->operand, $other->operand)->isOk()
                 ) {
                     throw new InvalidArgumentException(sprintf(
                         'The dialect is ambiguous: two unary [%s] rows collide — %s and %s admit a common operand type, and which evaluation runs must never depend on list order.',
-                        $row->operator,
+                        $row->operator(),
                         TypeDescriber::describe($row->operand),
                         TypeDescriber::describe($other->operand),
                     ));

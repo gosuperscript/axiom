@@ -346,7 +346,7 @@ The core dialect ships these rules:
 - **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never array_intersect string juggling)
 - **Unary**: `!`/`not` (booleans only), `-` (numbers only)
 
-Every rule answers one question — `resolve(operator, operand types)` — whose success carries the return type *and* the evaluation, so rule selection and evaluation cannot drift apart: they are one statement. (That the evaluation honors its stated type is your certified obligation, tested by the totality harness — see the guide.) Most rules are declarative rows built with the signature builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (jointly admissible rows) or compile time (multiple resolutions), never absorbed. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
+Every rule owns one symbol (`operator()`) and answers one question — `resolve(operand types)` — with a `ResolvedOperation`, `UnsupportedOperation`, or `DeadOperation`. A success carries the return type *and* evaluation, so rule selection and evaluation cannot drift apart. (That the evaluation honors its stated type is your certified obligation, tested by the totality harness — see the guide.) Resolvers index rules by symbol, so unrelated rules are never invoked. Most rules are declarative rows built with the signature builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (jointly admissible rows) or compile time (multiple resolutions), never absorbed. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
 
 ### Resolution Inspector
 
@@ -419,7 +419,7 @@ The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the sh
 | You want to… | Implement / use | Guide section |
 | --- | --- | --- |
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
-| Give operators new semantics | `Operator::infix()` / `Operator::prefix()` signatures — or `OperatorOverloader` / `UnaryOverloader` by hand for verdicts computed from operand types | Custom operators |
+| Give operators new semantics | `Operator::infix()` / `Operator::prefix()` signatures — or `BinaryOperatorRule` / `UnaryOperatorRule` by hand for verdicts computed from operand types | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
 | Add a data source | `TypedSource::compile()` — the type claim and the evaluation, one statement | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |

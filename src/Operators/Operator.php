@@ -21,7 +21,7 @@ use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
  *
  * Rules a fixed row cannot express — answers computed from the operand
  * types, dead-comparison findings, absence-tolerant rules — implement
- * {@see OperatorOverloader}/{@see UnaryOverloader} directly.
+ * {@see BinaryOperatorRule}/{@see UnaryOperatorRule} directly.
  */
 final readonly class Operator
 {

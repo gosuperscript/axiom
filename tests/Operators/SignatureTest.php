@@ -11,8 +11,8 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Superscript\Axiom\Operators\Operator;
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Operators\OverloaderManager;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\Signatures\InfixSignature;
 use Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder;
@@ -22,7 +22,8 @@ use Superscript\Axiom\Operators\Signatures\PrefixSignature;
 use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
 use Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand;
 use Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn;
-use Superscript\Axiom\Operators\UnaryOverloader;
+use Superscript\Axiom\Operators\UnaryOperatorRule;
+use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
@@ -42,8 +43,8 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(PrefixSignatureWithReturn::class)]
 #[CoversClass(PrefixSignature::class)]
 #[CoversClass(ResolvedOperation::class)]
-#[UsesClass(OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
+#[UsesClass(UnsupportedOperation::class)]
+#[UsesClass(BinaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]
@@ -80,8 +81,8 @@ final class SignatureTest extends TestCase
     #[Test]
     public function the_staged_chain_compiles_to_an_operator_rule(): void
     {
-        $this->assertInstanceOf(OperatorOverloader::class, self::concat());
-        $this->assertInstanceOf(UnaryOverloader::class, self::absolute());
+        $this->assertInstanceOf(BinaryOperatorRule::class, self::concat());
+        $this->assertInstanceOf(UnaryOperatorRule::class, self::absolute());
     }
 
     #[Test]
@@ -94,26 +95,32 @@ final class SignatureTest extends TestCase
             ->returns($returns)
             ->evaluate(fn(string $a, string $b) => $a . $b);
 
-        $this->assertSame($returns, $rule->resolve('++', new StringType(), new StringType())->unwrap()->returns);
+        $resolved = $rule->resolve(new StringType(), new StringType());
+        $this->assertInstanceOf(ResolvedOperation::class, $resolved);
+        $this->assertSame($returns, $resolved->returns);
         // Admissibility, not equality: a subtype fills the slot.
-        $this->assertSame($returns, $rule->resolve('++', new LiteralType('a'), new StringType())->unwrap()->returns);
+        $literal = $rule->resolve(new LiteralType('a'), new StringType());
+        $this->assertInstanceOf(ResolvedOperation::class, $literal);
+        $this->assertSame($returns, $literal->returns);
     }
 
     #[Test]
     public function the_resolved_evaluation_is_the_declared_closure(): void
     {
-        $operation = self::concat()->resolve('++', new StringType(), new StringType())->unwrap();
+        $operation = self::concat()->resolve(new StringType(), new StringType());
 
+        $this->assertInstanceOf(ResolvedOperation::class, $operation);
         $this->assertSame('ab', $operation->evaluate('a', 'b')->unwrap());
     }
 
     #[Test]
     public function an_inert_unknown_operand_is_refused_with_the_fix(): void
     {
-        $verdict = self::concat()->resolve('++', new UnknownType(), new StringType());
+        $verdict = self::concat()->resolve(new UnknownType(), new StringType());
 
-        $this->assertStringContainsString('An Unknown operand is inert', $verdict->unwrapErr()->describe());
-        $this->assertStringContainsString('Ascription', $verdict->unwrapErr()->describe());
+        $this->assertInstanceOf(UnsupportedOperation::class, $verdict);
+        $this->assertStringContainsString('An Unknown operand is inert', $verdict->causes[0]->describe());
+        $this->assertStringContainsString('Ascription', $verdict->causes[0]->describe());
     }
 
     #[Test]
@@ -147,37 +154,36 @@ final class SignatureTest extends TestCase
     #[Test]
     public function refuses_inadmissible_operands_naming_both_expectation_and_arrival(): void
     {
-        $verdict = self::concat()->resolve('++', new NumberType(), new StringType());
+        $verdict = self::concat()->resolve(new NumberType(), new StringType());
 
-        $this->assertSame('[++] expects String and String; got Number and String.', $verdict->unwrapErr()->message);
-        $this->assertCount(1, $verdict->unwrapErr()->causes);
-        $this->assertFalse($verdict->unwrapErr()->unhandled);
+        $this->assertInstanceOf(UnsupportedOperation::class, $verdict);
+        $this->assertSame('[++] expects String and String; got Number and String.', $verdict->message);
+        $this->assertCount(1, $verdict->causes);
     }
 
     #[Test]
     public function each_inadmissible_side_contributes_its_own_cause(): void
     {
-        $right = self::concat()->resolve('++', new StringType(), new NumberType());
-        $this->assertCount(1, $right->unwrapErr()->causes);
+        $right = self::concat()->resolve(new StringType(), new NumberType());
+        $this->assertInstanceOf(UnsupportedOperation::class, $right);
+        $this->assertCount(1, $right->causes);
 
-        $both = self::concat()->resolve('++', new NumberType(), new BooleanType());
-        $this->assertCount(2, $both->unwrapErr()->causes);
-        $this->assertSame('[++] expects String and String; got Number and Boolean.', $both->unwrapErr()->message);
+        $both = self::concat()->resolve(new NumberType(), new BooleanType());
+        $this->assertInstanceOf(UnsupportedOperation::class, $both);
+        $this->assertCount(2, $both->causes);
+        $this->assertSame('[++] expects String and String; got Number and Boolean.', $both->message);
     }
 
     #[Test]
-    public function a_foreign_operator_is_refused_as_unhandled(): void
+    public function an_infix_signature_advertises_its_operator(): void
     {
-        $verdict = self::concat()->resolve('+', new StringType(), new StringType());
-
-        $this->assertSame('The [++] signature does not resolve [+].', $verdict->unwrapErr()->message);
-        $this->assertTrue($verdict->unwrapErr()->unhandled);
+        $this->assertSame('++', self::concat()->operator());
     }
 
     #[Test]
     public function signature_families_compose_in_the_manager(): void
     {
-        $manager = new OverloaderManager([
+        $manager = new BinaryOperatorResolver([
             self::concat(),
             Operator::infix('++')
                 ->signature(new NumberType(), new NumberType())
@@ -210,9 +216,13 @@ final class SignatureTest extends TestCase
             ->returns($returns)
             ->evaluate(fn(int|float $n) => abs($n));
 
-        $this->assertSame($returns, $rule->resolve('abs', new NumberType())->unwrap()->returns);
-        $this->assertSame($returns, $rule->resolve('abs', new LiteralType(5))->unwrap()->returns);
-        $this->assertSame(7, $rule->resolve('abs', new NumberType())->unwrap()->evaluate(-7)->unwrap());
+        $number = $rule->resolve(new NumberType());
+        $literal = $rule->resolve(new LiteralType(5));
+        $this->assertInstanceOf(ResolvedOperation::class, $number);
+        $this->assertInstanceOf(ResolvedOperation::class, $literal);
+        $this->assertSame($returns, $number->returns);
+        $this->assertSame($returns, $literal->returns);
+        $this->assertSame(7, $number->evaluate(-7)->unwrap());
     }
 
     #[Test]
@@ -224,34 +234,34 @@ final class SignatureTest extends TestCase
             ->returns(new NumberType())
             ->evaluate(fn(int|float $n) => $partial);
 
-        $this->assertSame($partial, $rule->resolve('abs', new NumberType())->unwrap()->evaluate(-7));
+        $operation = $rule->resolve(new NumberType());
+        $this->assertInstanceOf(ResolvedOperation::class, $operation);
+        $this->assertSame($partial, $operation->evaluate(-7));
     }
 
     #[Test]
     public function prefix_refuses_inadmissible_operands_with_a_cause_chain(): void
     {
-        $verdict = self::absolute()->resolve('abs', new StringType());
+        $verdict = self::absolute()->resolve(new StringType());
 
-        $this->assertSame('[abs] expects Number; got String.', $verdict->unwrapErr()->message);
-        $this->assertCount(1, $verdict->unwrapErr()->causes);
-        $this->assertFalse($verdict->unwrapErr()->unhandled);
+        $this->assertInstanceOf(UnsupportedOperation::class, $verdict);
+        $this->assertSame('[abs] expects Number; got String.', $verdict->message);
+        $this->assertCount(1, $verdict->causes);
     }
 
     #[Test]
     public function prefix_refuses_an_inert_unknown(): void
     {
-        $verdict = self::absolute()->resolve('abs', new UnknownType());
+        $verdict = self::absolute()->resolve(new UnknownType());
 
-        $this->assertStringContainsString('An Unknown operand is inert', $verdict->unwrapErr()->describe());
+        $this->assertInstanceOf(UnsupportedOperation::class, $verdict);
+        $this->assertStringContainsString('An Unknown operand is inert', $verdict->causes[0]->describe());
     }
 
     #[Test]
-    public function a_foreign_prefix_operator_is_refused_as_unhandled(): void
+    public function a_prefix_signature_advertises_its_operator(): void
     {
-        $verdict = self::absolute()->resolve('-', new NumberType());
-
-        $this->assertSame('The [abs] signature does not resolve [-].', $verdict->unwrapErr()->message);
-        $this->assertTrue($verdict->unwrapErr()->unhandled);
+        $this->assertSame('abs', self::absolute()->operator());
     }
 
     #[Test]

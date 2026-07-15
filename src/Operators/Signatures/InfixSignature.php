@@ -5,24 +5,21 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators\Signatures;
 
 use Closure;
-use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\OperatorResolution;
 use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
-use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
-use Superscript\Monads\Result\Result;
-
-use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * One binary operator rule, declared as data: "the operator [-], taking
  * (Date, Period), returns Date, computed by this closure". Built via the
  * Operator::infix() builder.
  *
- * resolve() answers Ok when the asked-about operator is this row's and
- * both operand types fit the declared slots; the answer carries the
+ * resolve() answers with a resolution when both operand types fit the
+ * declared slots; the answer carries the
  * declared return type and closure. Because the compiler only ever calls
  * the closure with values of the declared operand types, the closure may
  * declare native parameter types (fn (Date $d, Period $p) => ...).
@@ -31,7 +28,7 @@ use function Superscript\Monads\Result\Ok;
  * reads them at construction to detect two rows that could both match
  * the same expression, which it refuses as ambiguous.
  */
-final readonly class InfixSignature implements OperatorOverloader
+final readonly class InfixSignature implements BinaryOperatorRule
 {
     public function __construct(
         public string $operator,
@@ -41,16 +38,13 @@ final readonly class InfixSignature implements OperatorOverloader
         private Closure $evaluation,
     ) {}
 
-    /** @return Result<ResolvedOperation, TypeMismatch> */
-    public function resolve(string $operator, Type $left, Type $right): Result
+    public function operator(): string
     {
-        if ($operator !== $this->operator) {
-            return Err(new TypeMismatch(
-                sprintf('The [%s] signature does not resolve [%s].', $this->operator, $operator),
-                unhandled: true,
-            ));
-        }
+        return $this->operator;
+    }
 
+    public function resolve(Type $left, Type $right): OperatorResolution
+    {
         $causes = [];
 
         foreach ([[$left, $this->left], [$right, $this->right]] as [$operand, $slot]) {
@@ -62,7 +56,7 @@ final readonly class InfixSignature implements OperatorOverloader
         }
 
         if ($causes !== []) {
-            return Err(new TypeMismatch(
+            return new UnsupportedOperation(
                 sprintf(
                     '[%s] expects %s and %s; got %s and %s.',
                     $this->operator,
@@ -72,9 +66,9 @@ final readonly class InfixSignature implements OperatorOverloader
                     TypeDescriber::describe($right),
                 ),
                 $causes,
-            ));
+            );
         }
 
-        return Ok(new ResolvedOperation($this->returns, $this->evaluation));
+        return new ResolvedOperation($this->returns, $this->evaluation);
     }
 }

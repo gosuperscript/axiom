@@ -250,33 +250,58 @@ This works because currency is part of the type's *value set*, so the rows are d
 
 ### Advanced: writing a rule by hand
 
-A signature is a row; some rules are not rows. Implement `OperatorOverloader` (binary) or `UnaryOverloader` directly when you need:
+A signature is a row; some rules are not rows. Implement `BinaryOperatorRule` (binary) or `UnaryOperatorRule` directly when you need:
 
 - **Verdicts that are relations, not slots** — core's equality resolves operand types that *overlap*, something no fixed operand type expresses.
-- **Dead findings** — refusing an operation as *statically constant* (`dead: true`) so hosts can render it as a probable author bug rather than an unsupported operation.
+- **Dead findings** — returning `DeadOperation` for an operation that is *statically constant*, so hosts can render it as a probable author bug rather than an unsupported operation.
 - **Return types computed from operand types** over an unbounded space (`List<T> ++ List<U> → List<T|U>`).
 - **Absence-tolerant rules** — a rule that wants absence-as-zero arithmetic resolves operand types where a side is `Option`-shaped (and *refuses present-present pairs*, which stay core's — that disjointness is what keeps the composition unambiguous). Its closure then handles `null`.
 
 The one obligation:
 
 ```php
-interface OperatorOverloader
+interface BinaryOperatorRule
 {
-    /**
-     * Does this rule own $operator over these operand types — and if so,
-     * what does it return and how does it evaluate?
-     *
-     * @return Result<ResolvedOperation, TypeMismatch>
-     */
-    public function resolve(string $operator, Type $left, Type $right): Result;
+    public function operator(): string;
+
+    public function resolve(Type $left, Type $right): OperatorResolution;
 }
 ```
 
-`Ok(new ResolvedOperation($returnType, $closure))` means: *this rule certifies these operand types — the closure is total over every value pair of them, and its result inhabits the return type* (value-dependent partiality remains: a closure may return an `Err`). `Err(TypeMismatch)` refuses, in three flavors you should distinguish:
+The result is one explicit variant:
 
-- **Unhandled** — the operator simply is not yours. Construct with `unhandled: true` so the composing manager keeps your refusal out of aggregated diagnostics for operators you never claimed to own.
-- **Unsupported** — your operator, but these operand types fall outside your rule. Plain `new TypeMismatch(...)` with a message naming what you expected.
-- **Dead** — the operation is well-formed but statically meaningless (a comparison that can never hold). Construct with `dead: true`; consumers render dead findings as probable author bugs rather than unsupported operations.
+- `new ResolvedOperation($returnType, $closure)` certifies the operand types. The closure must be total over every value pair of them and its result must inhabit the return type. Value-dependent partiality remains: a closure may return an `Err`.
+- `new UnsupportedOperation($message, $causes)` means the rule owns the operator but rejects these operand types.
+- `new DeadOperation($message, $causes)` means the operation is valid in principle but statically meaningless. The compiler converts this to a dead `TypeMismatch` for host-facing diagnostics.
+
+The rule never branches on a symbol: `operator()` advertises its sole symbol, and the resolver only invokes rules in that bucket. A computed absence-as-zero rule can therefore use concise early returns:
+
+```php
+final readonly class AddWithAbsentAsZero implements BinaryOperatorRule
+{
+    public function operator(): string
+    {
+        return '+';
+    }
+
+    public function resolve(Type $left, Type $right): OperatorResolution
+    {
+        if (!$left->shape() instanceof OptionShape && !$right->shape() instanceof OptionShape) {
+            return new UnsupportedOperation('Present pairs belong to the ordinary numeric row.');
+        }
+
+        if (TypeRelations::admits($left, new OptionType(new NumberType()))->isErr()
+            || TypeRelations::admits($right, new OptionType(new NumberType()))->isErr()) {
+            return new UnsupportedOperation('[+] with absence requires optional numbers.');
+        }
+
+        return new ResolvedOperation(
+            new NumberType(),
+            fn (?float $left, ?float $right) => ($left ?? 0) + ($right ?? 0),
+        );
+    }
+}
+```
 
 Use the relation registry rather than hand-rolling type tests — it is what keeps rules consistent with each other:
 
@@ -286,7 +311,7 @@ Use the relation registry rather than hand-rolling type tests — it is what kee
 
 Orderability has exactly one authority: whether the dialect resolves `<` for the type. Shipping ordering rows *is* declaring the type ordered.
 
-Core's rules (`src/Operators/`) are the reference implementations — `EqualityOverloader` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `HasOverloader`/`InOverloader` show shared operand judgments via `SetOperands`.
+Core's rules (`src/Operators/`) are the reference implementations — `Equality` shows overlap-based resolution with dead verdicts and the negation baked into the closure at resolve time; `Has`/`In` show shared operand judgments via `SetOperands`.
 
 ## Literal registration
 

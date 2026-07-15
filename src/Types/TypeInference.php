@@ -7,9 +7,9 @@ namespace Superscript\Axiom\Types;
 use Closure;
 use RuntimeException;
 use Superscript\Axiom\CompiledNode;
-use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Operators\UnaryOverloader;
+use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
@@ -54,8 +54,8 @@ use function Superscript\Monads\Result\Ok;
 final readonly class TypeInference
 {
     public function __construct(
-        private OperatorOverloader $operators,
-        private UnaryOverloader $unaryOperators,
+        private BinaryOperatorResolver $operators,
+        private UnaryOperatorResolver $unaryOperators,
         private LiteralTypeRegistry $literals = new LiteralTypeRegistry(),
     ) {}
 

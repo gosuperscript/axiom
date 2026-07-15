@@ -14,9 +14,6 @@ namespace Superscript\Axiom\Types;
  * mismatches flag probable author bugs; ordinary mismatches flag
  * operations no rule resolves.
  *
- * A mismatch is $unhandled when a rule refuses an operator that simply is
- * not its own — the refusal says nothing about the operand types, so the
- * composing manager keeps it out of aggregated diagnostics.
  */
 final readonly class TypeMismatch
 {
@@ -27,7 +24,6 @@ final readonly class TypeMismatch
         public string $message,
         public array $causes = [],
         public bool $dead = false,
-        public bool $unhandled = false,
     ) {}
 
     public function describe(): string

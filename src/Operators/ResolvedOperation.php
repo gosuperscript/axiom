@@ -12,7 +12,7 @@ use Throwable;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The success of {@see OperatorOverloader::resolve()}: the return type
+ * The successful verdict of an operator rule: the return type
  * and the evaluation, together in one value — the compiler keeps the type
  * and binds the evaluation into the program, so a node can never run
  * under a different rule than the one that typed it.
@@ -24,7 +24,7 @@ use function Superscript\Monads\Result\Ok;
  * closure may return an Err (division by zero); a throw is a defect of the
  * rule, not a property of the input, and propagates.
  */
-final readonly class ResolvedOperation
+final readonly class ResolvedOperation implements OperatorResolution
 {
     public function __construct(
         public Type $returns,

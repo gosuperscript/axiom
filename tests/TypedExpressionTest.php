@@ -15,9 +15,9 @@ use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
-use Superscript\Axiom\Operators\OperatorOverloader;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Operators\UnaryOverloader;
+use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -36,10 +36,6 @@ use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Monads\Result\Result;
-
-use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * The typed surface end to end: declarations as the public signature, the
@@ -67,15 +63,15 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(MatchArm::class)]
 #[UsesClass(LiteralPattern::class)]
 #[UsesClass(WildcardPattern::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\EqualityOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\HasOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\InOverloader::class)]
-#[UsesClass(\Superscript\Axiom\Operators\IntersectsOverloader::class)]
+#[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Has::class)]
+#[UsesClass(\Superscript\Axiom\Operators\In::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(ResolvedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
@@ -305,26 +301,27 @@ final class TypedExpressionTest extends TestCase
         // rule resolves ONLY operand types where a side can be absent, so
         // core's (Number, Number) row keeps sole ownership of present
         // pairs and no operand types ever have two owners.
-        $absenceAsZero = new class implements OperatorOverloader {
-            public function resolve(string $operator, Type $left, Type $right): Result
+        $absenceAsZero = new class implements BinaryOperatorRule {
+            public function operator(): string
             {
-                if ($operator !== '+') {
-                    return Err(new TypeMismatch('Absence-as-zero only resolves [+].', unhandled: true));
-                }
+                return '+';
+            }
 
+            public function resolve(Type $left, Type $right): \Superscript\Axiom\Operators\OperatorResolution
+            {
                 if (!($left->shape() instanceof OptionShape) && !($right->shape() instanceof OptionShape)) {
-                    return Err(new TypeMismatch('Present pairs belong to the core row.'));
+                    return new \Superscript\Axiom\Operators\UnsupportedOperation('Present pairs belong to the core row.');
                 }
 
-                return Ok(new ResolvedOperation(
+                return new ResolvedOperation(
                     new NumberType(),
                     fn(?float $l, ?float $r) => ($l ?? 0) + ($r ?? 0),
-                ));
+                );
             }
         };
 
         $extension = new class ($absenceAsZero) extends Extension {
-            public function __construct(private readonly OperatorOverloader $rule) {}
+            public function __construct(private readonly BinaryOperatorRule $rule) {}
 
             public function operators(): array
             {
@@ -352,20 +349,24 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function extension_unary_rules_reach_the_compiler_through_the_dialect(): void
     {
-        $absValue = new class implements UnaryOverloader {
-            public function resolve(string $operator, Type $operand): Result
+        $absValue = new class implements UnaryOperatorRule {
+            public function operator(): string
             {
-                if ($operator !== 'abs') {
-                    return Err(new TypeMismatch('Only [abs].', unhandled: true));
-                }
+                return 'abs';
+            }
 
-                return \Superscript\Axiom\Types\TypeRelations::admits($operand, new NumberType())
-                    ->map(fn() => new ResolvedOperation(new NumberType(), fn(int|float $n) => abs($n)));
+            public function resolve(Type $operand): \Superscript\Axiom\Operators\OperatorResolution
+            {
+                $admitted = \Superscript\Axiom\Types\TypeRelations::admits($operand, new NumberType());
+
+                return $admitted->isOk()
+                    ? new ResolvedOperation(new NumberType(), fn(int|float $n) => abs($n))
+                    : new \Superscript\Axiom\Operators\UnsupportedOperation('Only numbers.', [$admitted->unwrapErr()]);
             }
         };
 
         $extension = new class ($absValue) extends Extension {
-            public function __construct(private readonly UnaryOverloader $rule) {}
+            public function __construct(private readonly UnaryOperatorRule $rule) {}
 
             public function unaryOperators(): array
             {

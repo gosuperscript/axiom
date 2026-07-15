@@ -11,10 +11,10 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Dialect;
-use Superscript\Axiom\Operators\EqualityOverloader;
-use Superscript\Axiom\Operators\HasOverloader;
-use Superscript\Axiom\Operators\InOverloader;
-use Superscript\Axiom\Operators\IntersectsOverloader;
+use Superscript\Axiom\Operators\Equality;
+use Superscript\Axiom\Operators\Has;
+use Superscript\Axiom\Operators\In;
+use Superscript\Axiom\Operators\Intersects;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Types\ListType;
@@ -36,15 +36,14 @@ use Superscript\Monads\Result\Result;
  * refusals.
  */
 #[CoversClass(Dialect::class)]
-#[CoversClass(EqualityOverloader::class)]
-#[CoversClass(HasOverloader::class)]
-#[CoversClass(InOverloader::class)]
-#[CoversClass(IntersectsOverloader::class)]
+#[CoversClass(Equality::class)]
+#[CoversClass(Has::class)]
+#[CoversClass(In::class)]
+#[CoversClass(Intersects::class)]
 #[CoversClass(ValueEquality::class)]
 #[CoversClass(ResolvedOperation::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloaderManager::class)]
-#[UsesClass(\Superscript\Axiom\Operators\OverloadResolution::class)]
-#[UsesClass(\Superscript\Axiom\Operators\UnaryOverloaderManager::class)]
+#[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
 #[CoversClass(\Superscript\Axiom\Operators\SetOperands::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
@@ -250,25 +249,28 @@ final class CoreDialectEvaluationTest extends TestCase
     #[Test]
     public function equality_across_bases_is_false_where_the_types_overlap(): void
     {
-        $operation = (new EqualityOverloader())
-            ->resolve('==', new UnionType(new NumberType(), new StringType()), new NumberType())
-            ->unwrap();
+        $operation = (new Equality('==', negated: false))
+            ->resolve(new UnionType(new NumberType(), new StringType()), new NumberType());
+
+        $this->assertInstanceOf(ResolvedOperation::class, $operation);
 
         $this->assertFalse($operation->evaluate('5', 5)->unwrap());
         $this->assertTrue($operation->evaluate(5, 5)->unwrap());
         $this->assertTrue($operation->evaluate(5.0, 5)->unwrap());
 
-        $negated = (new EqualityOverloader())
-            ->resolve('!=', new UnionType(new NumberType(), new StringType()), new NumberType())
-            ->unwrap();
+        $negated = (new Equality('!=', negated: true))
+            ->resolve(new UnionType(new NumberType(), new StringType()), new NumberType());
+
+        $this->assertInstanceOf(ResolvedOperation::class, $negated);
 
         $this->assertTrue($negated->evaluate('5', 5)->unwrap());
         $this->assertFalse($negated->evaluate(5, 5)->unwrap());
 
         // true is not 1 — value equality is false across bases.
-        $boolean = (new EqualityOverloader())
-            ->resolve('==', new UnionType(new \Superscript\Axiom\Types\BooleanType(), new NumberType()), new NumberType())
-            ->unwrap();
+        $boolean = (new Equality('==', negated: false))
+            ->resolve(new UnionType(new \Superscript\Axiom\Types\BooleanType(), new NumberType()), new NumberType());
+
+        $this->assertInstanceOf(ResolvedOperation::class, $boolean);
 
         $this->assertFalse($boolean->evaluate(true, 1)->unwrap());
     }

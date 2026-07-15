@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Superscript\Axiom\Operators\OperatorOverloader;
-use Superscript\Axiom\Operators\UnaryOverloader;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\Type;
 
 /**
@@ -25,7 +25,7 @@ abstract class Extension
      * operator with jointly admissible slots are refused at construction,
      * whichever contributed them.
      *
-     * @return list<OperatorOverloader>
+     * @return list<BinaryOperatorRule>
      */
     public function operators(): array
     {
@@ -35,7 +35,7 @@ abstract class Extension
     /**
      * Unary operator rules, same join semantics.
      *
-     * @return list<UnaryOverloader>
+     * @return list<UnaryOperatorRule>
      */
     public function unaryOperators(): array
     {
