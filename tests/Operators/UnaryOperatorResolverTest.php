@@ -54,7 +54,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
-final class UnaryOverloaderManagerTest extends TestCase
+final class UnaryOperatorResolverTest extends TestCase
 {
     private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): UnaryOperatorRule
     {

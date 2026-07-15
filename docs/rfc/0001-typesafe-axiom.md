@@ -227,7 +227,7 @@ The same contract reaches every dialect: `axiom-money` resolves money arithmetic
 
 `UnaryOperatorRule` is the sibling: `operator(): string` and `resolve(Type $operand): OperatorResolution` (the resolved evaluation takes one argument). Prefix rows come from the same builder; core ships `not` (**booleans only** — `!5` is a compile error) and negate (numbers) as rows.
 
-Deliberate asymmetry, kept: **absence is handled structurally for unary.** The compiler resolves the rule against the *present* operand type and wraps the compiled node with the absence short-circuit, so optionality propagates (`!Option<Boolean>` is `Option<Boolean>`) and a unary rule never sees `null`. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary keeps per-rule absence policy (`NullOverloader` and friends) because dialects genuinely differ there (absence-as-zero).
+Deliberate asymmetry, kept: **absence is handled structurally for unary.** The compiler resolves the rule against the *present* operand type and wraps the compiled node with the absence short-circuit, so optionality propagates (`!Option<Boolean>` is `Option<Boolean>`) and a unary rule never sees `null`. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary leaves absence policy to each rule: a dialect may deliberately resolve `Option`-shaped operands for semantics such as absence-as-zero.
 
 #### Composition: the dialect is one list, and ambiguity is refused
 
@@ -382,7 +382,7 @@ Evaluation presupposes a passed check the way admitted values presuppose the bou
 ## What stays in hosts
 
 - **Domain types** — anything whose meaning is the host's (addresses, claims, catalogue keys) implements `Shaped` (projecting into the sealed algebra — `Opaque` where structure shouldn't leak) and, where a literal class exists, registers with the literal registry.
-- **Dialect composition** — which overloaders an evaluator runs was always the host's choice; it remains exactly that, now with static semantics attached for free.
+- **Dialect composition** — which operator rules the compiler resolves against was always the host's choice; it remains exactly that, with static semantics and evaluation contributed together.
 - **Policy relations** — derived relations that encode a host's configuration policy (e.g. "does a partial supply agree with an interface on every member it does supply?", built as assignability against a masked interface) **stay downstream**, built on the upstreamed registry. This is host policy, not a language relation; upstream it later only if a second host independently reinvents it.
 - **Enforcement** — gates, sweeps, feature flags, when a finding blocks anything: entirely host concerns. The language reports; the host decides.
 

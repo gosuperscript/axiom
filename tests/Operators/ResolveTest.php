@@ -35,7 +35,7 @@ use Superscript\Axiom\Types\UnionType;
 use Superscript\Axiom\Types\UnknownType;
 
 /**
- * The one question every rule answers: resolve(operator, operand types) —
+ * The one question every rule answers: resolve(operand types) —
  * certification carries the return type, refusal carries the diagnosis.
  * Rows (arithmetic, ordering, logic) are exercised through the composed
  * core dialect; the type functions (equality, membership, intersection)

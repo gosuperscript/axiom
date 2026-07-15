@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Tests;
+namespace Superscript\Axiom\Tests\Operators;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -30,7 +30,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[UsesClass(StringType::class)]
 #[UsesClass(TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
-final class OverloaderManagerTest extends TestCase
+final class BinaryOperatorResolverTest extends TestCase
 {
     private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): BinaryOperatorRule
     {
