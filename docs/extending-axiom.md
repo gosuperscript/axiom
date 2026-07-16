@@ -382,6 +382,23 @@ final class GeocodeExtension extends Extension
 
 The map key is the ownership declaration; matching is by exact class and two extensions cannot own the same class. The callback needs no compiler bootstrapping: `SourceCompilation::compile()` recursively compiles one child in the current environment, while `compileAll()` does the same for a list (for example, a filter source containing several dynamic `SymbolSource` expressions).
 
+When a source owns a typed operation over values it supplies at runtime—such as a lookup source comparing a typed row cell with a compiled filter value—bind it once through the same composed dialect as ordinary expressions:
+
+```php
+/** @return Result<array{CompiledNode, ResolvedOperation}, TypeMismatch> */
+private function compileComparison(FilterSource $source, SourceCompilation $compilation): Result
+{
+    return $compilation->compile($source->value)
+        ->andThen(fn(CompiledNode $value) => $compilation
+            ->infix($source->cellType, $source->operator, $value->returns)
+            ->map(fn(ResolvedOperation $comparison) => [$value, $comparison]));
+}
+```
+
+The source compiler stores both objects in its `CompiledNode`: it evaluates the value node once per invocation, admits each runtime cell through `cellType`, and calls `$comparison->evaluate($cell, $resolvedValue)` for each row.
+
+`infix()` returns the dialect's `ResolvedOperation`: the return type and evaluation together, including extension-owned rules and normal ambiguity/refusal diagnostics. The caller must provide honest operand types and admit its runtime values into them. It does not infer types from runtime values or restore value-directed dispatch.
+
 Three honest postures, pick per compiler: **declare** the type beside the lookup that produces it (as above); **delegate** through `$compilation->compile($source->inner)` when your source wraps another source; **return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`. What you may not do is nothing: a `Source` whose exact class has no compiler is a compile error, so "any expression edge starts here" stays a kept promise.
 
 Persist the `Source` tree, not the compiled `Program`: compilation deliberately captures the extension's live collaborators in evaluation closures. Reconstruct the extension (normally through your container), compose the dialect, and compile after loading the source.

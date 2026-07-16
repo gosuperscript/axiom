@@ -96,7 +96,10 @@ final readonly class TypeInference
 
         return $compiler(
             $source,
-            new SourceCompilation(fn(Source $child): Result => $this->compile($child, $environment)),
+            new SourceCompilation(
+                fn(Source $child): Result => $this->compile($child, $environment),
+                fn(Type $left, string $operator, Type $right): Result => $this->operators->resolve($operator, $left, $right),
+            ),
         );
     }
 
