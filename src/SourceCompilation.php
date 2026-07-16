@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
@@ -13,15 +15,20 @@ use function Superscript\Monads\Result\Ok;
 /**
  * Recursive compilation capability handed to an extension's source
  * compiler. It keeps TypeInference and TypeEnvironment behind the compiler
- * seam while allowing a host source to compile the Source children it owns.
+ * seam while allowing a host source to compile the Source children and bind
+ * the typed infix operations it owns.
  */
 final readonly class SourceCompilation
 {
     /**
      * @internal Constructed by TypeInference for the current environment.
      * @param Closure(Source): Result<CompiledNode, TypeMismatch> $compileNode
+     * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      */
-    public function __construct(private Closure $compileNode) {}
+    public function __construct(
+        private Closure $compileNode,
+        private Closure $compileInfix,
+    ) {}
 
     /** @return Result<CompiledNode, TypeMismatch> */
     public function compile(Source $source): Result
@@ -48,5 +55,18 @@ final readonly class SourceCompilation
         }
 
         return Ok($compiled);
+    }
+
+    /**
+     * Bind one infix operation from the composed Dialect, once, using the
+     * operand types the source compiler certifies. The returned operation is
+     * the same type-and-evaluation pair an ordinary InfixExpression embeds;
+     * evaluating it later performs no value-directed dispatch.
+     *
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    public function infix(Type $left, string $operator, Type $right): Result
+    {
+        return ($this->compileInfix)($left, $operator, $right);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests;
 
+use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -12,6 +13,8 @@ use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Operators\Operator;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -21,6 +24,8 @@ use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\StringType;
+use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
 
@@ -40,6 +45,18 @@ class ParentHostSource implements Source {}
 
 /** @internal */
 final class ChildHostSource extends ParentHostSource {}
+
+/** @internal Test fixture for a source compiler that binds an operator. */
+final readonly class HostInfixSource implements Source
+{
+    public function __construct(
+        public Type $leftType,
+        public mixed $left,
+        public string $operator,
+        public Type $rightType,
+        public mixed $right,
+    ) {}
+}
 
 #[CoversClass(SourceCompilation::class)]
 #[UsesClass(CompiledNode::class)]
@@ -64,6 +81,7 @@ final class ChildHostSource extends ParentHostSource {}
 #[UsesClass(\Superscript\Axiom\Operators\In::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
+#[UsesClass(ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
@@ -77,15 +95,24 @@ final class ChildHostSource extends ParentHostSource {}
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 final class SourceCompilationTest extends TestCase
 {
+    private static function compilation(Closure $compileNode): SourceCompilation
+    {
+        return new SourceCompilation(
+            $compileNode,
+            fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
+        );
+    }
+
     #[Test]
     public function compile_delegates_one_source(): void
     {
         $source = new StaticSource(1);
         $seen = null;
         $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
-        $compilation = new SourceCompilation(function (Source $candidate) use (&$seen, $node): Result {
+        $compilation = self::compilation(function (Source $candidate) use (&$seen, $node): Result {
             $seen = $candidate;
 
             return Ok($node);
@@ -98,7 +125,7 @@ final class SourceCompilationTest extends TestCase
     #[Test]
     public function compile_all_preserves_order_and_accepts_an_empty_list(): void
     {
-        $compilation = new SourceCompilation(fn(StaticSource $source): Result => Ok(
+        $compilation = self::compilation(fn(StaticSource $source): Result => Ok(
             new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
         ));
 
@@ -114,7 +141,7 @@ final class SourceCompilationTest extends TestCase
     {
         $calls = 0;
         $refusal = new TypeMismatch('second child is invalid');
-        $compilation = new SourceCompilation(function (Source $source) use (&$calls, $refusal): Result {
+        $compilation = self::compilation(function (Source $source) use (&$calls, $refusal): Result {
             $calls++;
 
             return $calls === 2
@@ -126,6 +153,63 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($refusal, $result->unwrapErr());
         $this->assertSame(2, $calls);
+    }
+
+    #[Test]
+    public function infix_delegates_the_operator_and_operand_types(): void
+    {
+        $left = new StringType();
+        $right = new NumberType();
+        $operation = new ResolvedOperation(new NumberType(), fn() => 1);
+        $seen = null;
+        $compilation = new SourceCompilation(
+            fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
+            function (Type $actualLeft, string $operator, Type $actualRight) use (&$seen, $operation): Result {
+                $seen = [$actualLeft, $operator, $actualRight];
+
+                return Ok($operation);
+            },
+        );
+
+        $this->assertSame($operation, $compilation->infix($left, '<=>', $right)->unwrap());
+        $this->assertSame([$left, '<=>', $right], $seen);
+    }
+
+    #[Test]
+    public function a_host_compiler_binds_operations_from_the_composed_dialect(): void
+    {
+        $extension = new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('at-most')
+                        ->signature(new NumberType(), new NumberType())
+                        ->returns(new \Superscript\Axiom\Types\BooleanType())
+                        ->evaluate(fn(int|float $left, int|float $right): bool => $left <= $right),
+                ];
+            }
+
+            public function sourceCompilers(): array
+            {
+                return [
+                    HostInfixSource::class => fn(HostInfixSource $source, SourceCompilation $compilation): Result => $compilation
+                        ->infix($source->leftType, $source->operator, $source->rightType)
+                        ->map(fn(ResolvedOperation $operation) => new CompiledNode(
+                            $operation->returns,
+                            fn(Runtime $runtime): Result => $operation
+                                ->evaluate($source->left, $source->right)
+                                ->map(Some(...)),
+                        )),
+                ];
+            }
+        };
+
+        $program = (new Expression(
+            new HostInfixSource(new NumberType(), 3, 'at-most', new NumberType(), 12),
+            dialect: Dialect::core()->with($extension),
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program()->unwrap()->unwrap());
     }
 
     #[Test]
