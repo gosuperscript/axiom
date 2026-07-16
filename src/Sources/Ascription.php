@@ -24,7 +24,7 @@ use Superscript\Axiom\Types\Type;
  */
 final readonly class Ascription implements Source, Describable
 {
-    use DescribesTypedSource;
+    use DescribesTypeBridge;
 
     /**
      * @param Type<T> $type

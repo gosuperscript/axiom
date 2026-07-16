@@ -14,6 +14,9 @@ use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Tests\Fixtures\CountingSource;
+use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
+use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\TypeEnvironment;
@@ -26,6 +29,8 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(Runtime::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Extension::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
@@ -58,11 +63,16 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 final class TypeEnvironmentTest extends TestCase
 {
-    private static function compiler(): TypeInference
+    private static function compiler(?Dialect $dialect = null): TypeInference
     {
-        $dialect = Dialect::core();
+        $dialect ??= Dialect::core();
 
-        return new TypeInference($dialect->operators(), $dialect->unaryOperators(), $dialect->literals());
+        return new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $dialect->literals(),
+            $dialect->sourceCompilers(),
+        );
     }
 
     #[Test]
@@ -165,21 +175,9 @@ final class TypeEnvironmentTest extends TestCase
     #[Test]
     public function a_definition_evaluates_lazily_and_at_most_once_per_invocation(): void
     {
-        $counting = new class implements \Superscript\Axiom\TypedSource {
-            public int $evaluations = 0;
-
-            public function compile(TypeEnvironment $environment, TypeInference $compiler): \Superscript\Monads\Result\Result
-            {
-                return \Superscript\Monads\Result\Ok(new \Superscript\Axiom\CompiledNode(
-                    new NumberType(),
-                    function (Runtime $runtime) {
-                        $this->evaluations++;
-
-                        return \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(2));
-                    },
-                ));
-            }
-        };
+        $counting = new CountingSource(2);
+        $counter = new EvaluationCounter();
+        $dialect = Dialect::core()->with(new SourceCompilerExtension($counter));
 
         $environment = new TypeEnvironment(
             definitions: new Definitions([
@@ -188,10 +186,10 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $node = $environment->nodeOfSymbol('derived', null, self::compiler())->unwrap();
+        $node = $environment->nodeOfSymbol('derived', null, self::compiler($dialect))->unwrap();
 
         $this->assertSame(4, ($node->evaluate)(new Runtime())->unwrap()->unwrap());
-        $this->assertSame(1, $counting->evaluations, 'both references read one memoized slot');
+        $this->assertSame(1, $counter->evaluations, 'both references read one memoized slot');
     }
 
     #[Test]

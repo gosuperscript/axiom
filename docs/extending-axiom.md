@@ -341,25 +341,35 @@ An unregistered object literal is an inference *error*, with a message pointing 
 
 ## Host sources
 
-If your host contributes its own `Source` kinds (a lookup-table cell, a geocoding call), implement `TypedSource` — the type claim and the evaluation, **one statement**, so your source cannot register behavior its claim does not describe (there is no separate place to put it):
+If your host contributes its own `Source` kinds (a lookup-table cell, a geocoding call), keep them as data-only descriptions and register their exact classes through `Extension::sourceCompilers()`. Services belong to the extension, not to the source: source trees can then be serialized, stored, and compiled later after the host reconstructs its dialect.
 
 ```php
 use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\Extension;
 use Superscript\Axiom\Runtime;
-use Superscript\Axiom\TypedSource;
-use Superscript\Axiom\Types\TypeEnvironment;
-use Superscript\Axiom\Types\TypeInference;
+use Superscript\Axiom\Source;
+use Superscript\Axiom\SourceCompilation;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use function Superscript\Monads\Result\Ok;
 
-final readonly class GeocodeSource implements TypedSource
+final readonly class GeocodeSource implements Source
 {
-    public function __construct(public Source $address, private Geocoder $geocoder) {}
+    public function __construct(public Source $address) {}
+}
 
-    public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
+final class GeocodeExtension extends Extension
+{
+    public function __construct(private Geocoder $geocoder) {}
+
+    public function sourceCompilers(): array
     {
-        return $compiler->compile($this->address, $environment)->map(
+        return [GeocodeSource::class => $this->compileGeocode(...)];
+    }
+
+    private function compileGeocode(GeocodeSource $source, SourceCompilation $compilation): Result
+    {
+        return $compilation->compile($source->address)->map(
             fn(CompiledNode $address) => new CompiledNode(
                 new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
                 fn(Runtime $runtime) => ($address->evaluate)($runtime)
@@ -370,7 +380,11 @@ final readonly class GeocodeSource implements TypedSource
 }
 ```
 
-Three honest postures, pick per source: **declare** the type beside the lookup that produces it (as above); **delegate** through `$compiler->compile($this->inner, $environment)` when you wrap another source; **return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`. What you may not do is nothing: a `Source` the compiler cannot handle is a compile error, so "any expression edge starts here" stays a kept promise.
+The map key is the ownership declaration; matching is by exact class and two extensions cannot own the same class. The callback needs no compiler bootstrapping: `SourceCompilation::compile()` recursively compiles one child in the current environment, while `compileAll()` does the same for a list (for example, a filter source containing several dynamic `SymbolSource` expressions).
+
+Three honest postures, pick per compiler: **declare** the type beside the lookup that produces it (as above); **delegate** through `$compilation->compile($source->inner)` when your source wraps another source; **return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`. What you may not do is nothing: a `Source` whose exact class has no compiler is a compile error, so "any expression edge starts here" stays a kept promise.
+
+Persist the `Source` tree, not the compiled `Program`: compilation deliberately captures the extension's live collaborators in evaluation closures. Reconstruct the extension (normally through your container), compose the dialect, and compile after loading the source.
 
 The one obligation mirrors the operator closure's: **your evaluation must deliver what your type claims.** The compiler certifies downstream operations against the claimed type, and nothing re-checks the values — a lying source meets named runtime errors at the structural reads (a missing field, an unmatched exhaustive match), not silent corruption, but the honest fix is an honest claim. Sources that cannot promise their payload declare `Unknown` and let the program's author place the `Ascription`, which *is* runtime-verified.
 
@@ -430,7 +444,7 @@ Be clear about what the harness quantifies over (RFC item 38). Its semantics com
 - **Generated** — the sweep over every certified pair of the family. Nobody hand-writes cases.
 - **Trusted** — everything outside the family. The harness is *evidence, not proof*: a certification test sampling the domain at its edges. Totality over the full domain is the obligation you certified when your rule answered `Ok`; the library trusts it and never re-checks results at runtime.
 
-Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time. (The same obligation applies to a `TypedSource`: it is an operator rule with zero operands — its evaluation must land in the type it declares, and your suite should prove it on real fixtures.)
+Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time. (The same obligation applies to a source compiler callback: its evaluation must land in the type it declares, and your suite should prove it on real fixtures.)
 
 ## What stays yours
 

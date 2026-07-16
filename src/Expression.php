@@ -17,9 +17,10 @@ use function Superscript\Monads\Result\Err;
 
 /**
  * A complete description of a program: a {@see Source} tree, the
- * {@see Dialect} (operator rules + literal registry), any {@see Definitions}
- * it depends on, and the declared input types. Deliberately not runnable —
- * compile() is the one way from description to execution:
+ * {@see Dialect} (operator rules + literal and source registrations), any
+ * {@see Definitions} it depends on, and the declared input types.
+ * Deliberately not runnable — compile() is the one way from description
+ * to execution:
  *
  * ```php
  * $area = new Expression($source,
@@ -158,6 +159,7 @@ final readonly class Expression
             $this->dialect->operators(),
             $this->dialect->unaryOperators(),
             $this->dialect->literals(),
+            $this->dialect->sourceCompilers(),
         );
     }
 

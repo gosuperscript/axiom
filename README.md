@@ -421,7 +421,7 @@ The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the sh
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
 | Give operators new semantics | `Operator::infix()` / `Operator::prefix()` signatures — or `BinaryOperatorRule` / `UnaryOperatorRule` by hand for verdicts computed from operand types | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
-| Add a data source | `TypedSource::compile()` — the type claim and the evaluation, one statement | Host sources |
+| Add a data source | `Extension::sourceCompilers()` — exact source class to compile-time callback; sources stay data-only | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |
 | Prove your rules honest | the totality harness + admission-honesty law patterns | Testing your extension |
 

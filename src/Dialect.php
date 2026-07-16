@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Closure;
 use InvalidArgumentException;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
@@ -21,15 +22,17 @@ use Superscript\Axiom\Types\LiteralTypeRegistry;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
+use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
+use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\attempt;
 
 /**
  * The operator rules live in exactly one place. A Dialect composes the
- * binary rules, the unary rules, and the literal registry, and is consumed
- * at compile time only: the compiler resolves every operator node against
- * it and binds the resolutions into the Program, so there is nothing at
+ * binary rules, the unary rules, the literal registry, and exact-class host
+ * source compilers. It is consumed at compile time only: the compiler binds
+ * every selected evaluation into the Program, so there is nothing at
  * runtime to miscompose.
  *
  * Most core rules are dispatch-table rows (the signature builder's
@@ -39,7 +42,7 @@ use function Superscript\Monads\Result\attempt;
  * are a construction error here, and any remaining multi-resolution is a
  * compile error in the resolver. List order decides nothing.
  *
- * Packages contribute through {@see Extension}; duplicate literal
+ * Packages contribute through {@see Extension}; duplicate literal or source
  * registrations are loud errors.
  */
 final readonly class Dialect
@@ -48,11 +51,13 @@ final readonly class Dialect
      * @param list<BinaryOperatorRule> $binaryRules
      * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
+     * @param array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
      */
     private function __construct(
         private array $binaryRules,
         private array $unaryRules,
         private array $literalMappings,
+        private array $sourceCompilers,
     ) {
         self::assertUnambiguousRows($this->binaryRules, $this->unaryRules);
     }
@@ -104,6 +109,7 @@ final readonly class Dialect
                     ->evaluate(fn(int|float $operand) => -$operand),
             ],
             literalMappings: [],
+            sourceCompilers: [],
         );
     }
 
@@ -112,6 +118,7 @@ final readonly class Dialect
         $binary = $this->binaryRules;
         $unary = $this->unaryRules;
         $literals = $this->literalMappings;
+        $sourceCompilers = $this->sourceCompilers;
 
         foreach ($extensions as $extension) {
             $binary = [...$extension->operators(), ...$binary];
@@ -127,9 +134,20 @@ final readonly class Dialect
 
                 $literals[$class] = $factory;
             }
+
+            foreach ($extension->sourceCompilers() as $sourceClass => $compiler) {
+                if (array_key_exists($sourceClass, $sourceCompilers)) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Source class [%s] has two compilers; source compiler ownership is exact and extension order carries no precedence.',
+                        $sourceClass,
+                    ));
+                }
+
+                $sourceCompilers[$sourceClass] = $compiler;
+            }
         }
 
-        return new self($binary, $unary, $literals);
+        return new self($binary, $unary, $literals, $sourceCompilers);
     }
 
     public function operators(): BinaryOperatorResolver
@@ -145,6 +163,12 @@ final readonly class Dialect
     public function literals(): LiteralTypeRegistry
     {
         return new LiteralTypeRegistry($this->literalMappings);
+    }
+
+    /** @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+    public function sourceCompilers(): array
+    {
+        return $this->sourceCompilers;
     }
 
     /**
