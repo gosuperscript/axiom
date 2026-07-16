@@ -13,6 +13,7 @@ use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\ExpressionPattern;
@@ -25,7 +26,6 @@ use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
-use Superscript\Axiom\TypedSource;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -53,10 +53,14 @@ use function Superscript\Monads\Result\Ok;
  */
 final readonly class TypeInference
 {
+    /**
+     * @param array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
+     */
     public function __construct(
         private BinaryOperatorResolver $operators,
         private UnaryOperatorResolver $unaryOperators,
         private LiteralTypeRegistry $literals = new LiteralTypeRegistry(),
+        private array $sourceCompilers = [],
     ) {}
 
     /**
@@ -65,7 +69,6 @@ final readonly class TypeInference
     public function compile(Source $source, TypeEnvironment $environment): Result
     {
         return match (true) {
-            $source instanceof TypedSource => $source->compile($environment, $this),
             $source instanceof StaticSource => $this->compileStatic($source),
             $source instanceof SymbolSource => $environment->nodeOfSymbol($source->name, $source->namespace, $this),
             $source instanceof Coerce => $this->compileCoerce($source, $environment),
@@ -74,11 +77,27 @@ final readonly class TypeInference
             $source instanceof InfixExpression => $this->compileInfix($source, $environment),
             $source instanceof MatchExpression => $this->compileMatch($source, $environment),
             $source instanceof MemberAccessSource => $this->compileMemberAccess($source, $environment),
-            default => Err(new TypeMismatch(sprintf(
-                'Cannot compile [%s]; implement TypedSource to declare its type and evaluation in one statement.',
-                get_class($source),
-            ))),
+            default => $this->compileHostSource($source, $environment),
         };
+    }
+
+    /** @return Result<CompiledNode, TypeMismatch> */
+    private function compileHostSource(Source $source, TypeEnvironment $environment): Result
+    {
+        $sourceClass = $source::class;
+        $compiler = $this->sourceCompilers[$sourceClass] ?? null;
+
+        if ($compiler === null) {
+            return Err(new TypeMismatch(sprintf(
+                'Cannot compile [%s]; register its exact class through Extension::sourceCompilers().',
+                $sourceClass,
+            )));
+        }
+
+        return $compiler(
+            $source,
+            new SourceCompilation(fn(Source $child): Result => $this->compile($child, $environment)),
+        );
     }
 
     /**

@@ -8,10 +8,8 @@ use Superscript\Axiom\Describable;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Types\Type;
 
-/**
- * Shared rendering for the two typed nodes (Coerce, Ascription).
- */
-trait DescribesTypedSource
+/** Shared rendering for the two explicit type-bridge nodes. */
+trait DescribesTypeBridge
 {
     private function describeSource(Source $source): string
     {

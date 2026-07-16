@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Runtime;
@@ -25,8 +26,11 @@ use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
+use Superscript\Axiom\Tests\Fixtures\CountingSource;
+use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
+use Superscript\Axiom\Tests\Fixtures\HostValueSource;
+use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Tests\Fixtures\SpyInspector;
-use Superscript\Axiom\TypedSource;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
@@ -37,10 +41,6 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\UnionType;
-use Superscript\Monads\Result\Result;
-
-use function Superscript\Monads\Option\Some;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * The compiled runtime, node by node: what evaluation still does (absence
@@ -57,6 +57,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Extension::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
@@ -118,20 +120,14 @@ final class ProgramTest extends TestCase
      * A host source that claims one type and evaluates to whatever it
      * likes — the dishonest host every runtime backstop exists for.
      */
-    private static function lyingSource(Type $claims, mixed $actual): TypedSource
+    private static function lyingSource(Type $claims, mixed $actual): HostValueSource
     {
-        return new class ($claims, $actual) implements TypedSource {
-            public function __construct(private readonly Type $claims, private readonly mixed $actual) {}
+        return new HostValueSource($claims, $actual);
+    }
 
-            public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
-            {
-                // One representation of null in the resolution channel.
-                return Ok(new CompiledNode(
-                    $this->claims,
-                    fn(Runtime $runtime) => Ok($this->actual === null ? \Superscript\Monads\Option\None() : Some($this->actual)),
-                ));
-            }
-        };
+    private static function dialect(?EvaluationCounter $counter = null): Dialect
+    {
+        return Dialect::core()->with(new SourceCompilerExtension($counter));
     }
 
     #[Test]
@@ -181,10 +177,10 @@ final class ProgramTest extends TestCase
     {
         $blob = self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), 42);
 
-        $honest = (new Expression(new Ascription(new NumberType(), $blob)))->compile()->unwrap();
+        $honest = (new Expression(new Ascription(new NumberType(), $blob), dialect: self::dialect()))->compile()->unwrap();
         $this->assertSame(42, $honest()->unwrap()->unwrap());
 
-        $lying = (new Expression(new Ascription(new StringType(), self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), 42))))->compile()->unwrap();
+        $lying = (new Expression(new Ascription(new StringType(), self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), 42)), dialect: self::dialect()))->compile()->unwrap();
         $this->assertTrue($lying()->isErr(), 'a false claim is a tripwire, not a rot vector');
     }
 
@@ -199,7 +195,7 @@ final class ProgramTest extends TestCase
         // The runtime guard exists for what the checker cannot see: an
         // Unknown-typed source that reads absent under a required claim.
         $absent = self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), null);
-        $viaUnknown = (new Expression(new Ascription(new NumberType(), $absent)))->compile()->unwrap();
+        $viaUnknown = (new Expression(new Ascription(new NumberType(), $absent), dialect: self::dialect()))->compile()->unwrap();
         $result = $viaUnknown();
 
         $this->assertStringContainsString('The ascribed value reads as missing, but the claim Number is required; claim Number? instead', $result->unwrapErr()->getMessage());
@@ -210,7 +206,7 @@ final class ProgramTest extends TestCase
     {
         $absent = self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), null);
 
-        $program = (new Expression(new Ascription(new OptionType(new NumberType()), $absent)))->compile()->unwrap();
+        $program = (new Expression(new Ascription(new OptionType(new NumberType()), $absent), dialect: self::dialect()))->compile()->unwrap();
 
         $this->assertTrue($program()->unwrap()->isNone());
     }
@@ -228,7 +224,7 @@ final class ProgramTest extends TestCase
 
         // An object with a true record projection reads by property.
         $projected = self::lyingSource($record, (object) ['turnover' => 7]);
-        $object = (new Expression(new MemberAccessSource($projected, 'turnover')))->compile()->unwrap();
+        $object = (new Expression(new MemberAccessSource($projected, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
 
         $this->assertSame(7, $object()->unwrap()->unwrap());
     }
@@ -249,18 +245,18 @@ final class ProgramTest extends TestCase
     public function a_field_a_lying_host_source_never_delivered_errs_by_name(): void
     {
         // The projection claims the field; the value lacks it. Shape truth
-        // is census law for types, but a TypedSource answers for itself —
+        // is census law for types, but a host compiler answers for it —
         // so the structural read errs instead of inventing absence.
         $lying = self::lyingSource(new RecordType(['turnover' => new NumberType()]), ['other' => 1]);
 
-        $program = (new Expression(new MemberAccessSource($lying, 'turnover')))->compile()->unwrap();
+        $program = (new Expression(new MemberAccessSource($lying, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
 
         $result = $program();
 
         $this->assertStringContainsString("Property 'turnover' does not exist", $result->unwrapErr()->getMessage());
 
         $scalar = self::lyingSource(new RecordType(['turnover' => new NumberType()]), 5);
-        $onScalar = (new Expression(new MemberAccessSource($scalar, 'turnover')))->compile()->unwrap();
+        $onScalar = (new Expression(new MemberAccessSource($scalar, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
 
         $this->assertStringContainsString("Property 'turnover' does not exist on int", $onScalar()->unwrapErr()->getMessage());
     }
@@ -354,6 +350,7 @@ final class ProgramTest extends TestCase
                     new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),
                 ],
             ),
+            dialect: self::dialect(),
         ))->compile()->unwrap();
 
         $result = $program();
@@ -376,29 +373,20 @@ final class ProgramTest extends TestCase
     #[Test]
     public function definitions_evaluate_lazily_and_fresh_per_invocation(): void
     {
-        $counting = new class implements TypedSource {
-            public int $evaluations = 0;
-
-            public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
-            {
-                return Ok(new CompiledNode(new NumberType(), function (Runtime $runtime) {
-                    $this->evaluations++;
-
-                    return Ok(Some(10));
-                }));
-            }
-        };
+        $counting = new CountingSource(10);
+        $counter = new EvaluationCounter();
 
         $program = (new Expression(
             source: new InfixExpression(new SymbolSource('base'), '+', new SymbolSource('base')),
             definitions: new Definitions(['base' => $counting]),
+            dialect: self::dialect($counter),
         ))->compile()->unwrap();
 
         $this->assertSame(20, $program()->unwrap()->unwrap());
-        $this->assertSame(1, $counting->evaluations, 'one slot per invocation');
+        $this->assertSame(1, $counter->evaluations, 'one slot per invocation');
 
         $this->assertSame(20, $program()->unwrap()->unwrap());
-        $this->assertSame(2, $counting->evaluations, 'a fresh invocation evaluates afresh');
+        $this->assertSame(2, $counter->evaluations, 'a fresh invocation evaluates afresh');
     }
 
     #[Test]
@@ -505,6 +493,7 @@ final class ProgramTest extends TestCase
         $program = (new Expression(
             source: new Ascription(new NumberType(), self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), 42)),
             inspector: $inspector,
+            dialect: self::dialect(),
         ))->compile()->unwrap();
 
         $this->assertSame(42, $program()->unwrap()->unwrap());

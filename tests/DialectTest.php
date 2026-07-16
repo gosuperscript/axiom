@@ -23,6 +23,7 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
+use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
@@ -352,6 +353,25 @@ final class DialectTest extends TestCase
         $this->expectExceptionMessage('registered by two extensions');
 
         Dialect::core()->with($registering, clone $registering);
+    }
+
+    #[Test]
+    public function duplicate_source_compilers_are_a_loud_configuration_error(): void
+    {
+        $registering = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [HostValueSource::class => fn() => throw new \LogicException('not compiled')];
+            }
+        };
+
+        $dialect = Dialect::core()->with($registering);
+        $this->assertArrayHasKey(HostValueSource::class, $dialect->sourceCompilers());
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('Source class [%s] has two compilers', HostValueSource::class));
+
+        $dialect->with(clone $registering);
     }
 
     #[Test]

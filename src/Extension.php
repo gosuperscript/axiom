@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Closure;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Monads\Result\Result;
 
 /**
  * The package-sized contributor to a {@see Dialect}: what a companion
  * package (money, time) or a host ships to give the language its domain
- * rules — each rule carrying both its runtime and static semantics.
+ * rules — each rule carrying both its runtime and static semantics — and
+ * source compilers, whose injected collaborators stay outside persisted
+ * Source trees.
  *
  * An abstract class rather than an interface so hooks can be added later
  * (matchers, resolvers) without breaking existing extensions: override
@@ -50,6 +55,23 @@ abstract class Extension
      * @return array<class-string, callable(object): Type>
      */
     public function literals(): array
+    {
+        return [];
+    }
+
+    /**
+     * Exact host Source class → compile-time adapter. The map key must match
+     * the concrete Source accepted by the closure. The adapter returns its
+     * type claim and evaluation together as one CompiledNode; selection
+     * happens once during compilation and list order carries no precedence.
+     *
+     * A Closure is used deliberately: packages may point at a private method
+     * for the common case, or capture a dedicated compiler module when the
+     * implementation merits one, without Axiom requiring either shape.
+     *
+     * @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>>
+     */
+    public function sourceCompilers(): array
     {
         return [];
     }

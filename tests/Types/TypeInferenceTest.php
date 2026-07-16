@@ -22,7 +22,8 @@ use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
-use Superscript\Axiom\TypedSource;
+use Superscript\Axiom\Tests\Fixtures\HostValueSource;
+use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ListType;
@@ -50,6 +51,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
 #[UsesClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Extension::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(Coerce::class)]
@@ -114,11 +117,16 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 final class TypeInferenceTest extends TestCase
 {
-    private static function inference(?LiteralTypeRegistry $literals = null): TypeInference
+    private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference
     {
-        $dialect = Dialect::core();
+        $dialect ??= Dialect::core();
 
-        return new TypeInference($dialect->operators(), $dialect->unaryOperators(), $literals ?? $dialect->literals());
+        return new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $literals ?? $dialect->literals(),
+            $dialect->sourceCompilers(),
+        );
     }
 
     private static function env(array $declarations = [], ?\Superscript\Axiom\Definitions $definitions = null): TypeEnvironment
@@ -840,17 +848,10 @@ final class TypeInferenceTest extends TestCase
     #[Test]
     public function host_sources_declare_their_type_and_evaluation_in_one_statement(): void
     {
-        $source = new class implements TypedSource {
-            public function compile(TypeEnvironment $environment, TypeInference $compiler): Result
-            {
-                return Ok(new CompiledNode(
-                    new NumberType(),
-                    fn(\Superscript\Axiom\Runtime $runtime) => Ok(Some(42)),
-                ));
-            }
-        };
+        $source = new HostValueSource(new NumberType(), 42);
+        $dialect = Dialect::core()->with(new SourceCompilerExtension());
 
-        $result = self::inference()->infer($source, self::env());
+        $result = self::inference(dialect: $dialect)->infer($source, self::env());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap());
     }
@@ -863,7 +864,7 @@ final class TypeInferenceTest extends TestCase
         $result = self::inference()->infer($source, self::env());
 
         $this->assertStringContainsString('Cannot compile [', $result->unwrapErr()->message);
-        $this->assertStringContainsString('implement TypedSource', $result->unwrapErr()->message);
+        $this->assertStringContainsString('register its exact class through Extension::sourceCompilers()', $result->unwrapErr()->message);
     }
 
     #[Test]
