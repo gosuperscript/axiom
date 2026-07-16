@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Superscript\Axiom\Exceptions\BoundaryViolation;
+use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -57,7 +58,6 @@ final readonly class Program
         private CompiledNode $node,
         private array $declarations = [],
         private Boundary $boundary = Boundary::Coerce,
-        private ?ResolutionInspector $inspector = null,
     ) {
         $this->returns = $node->returns;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
@@ -67,9 +67,9 @@ final readonly class Program
      * @param array<string, mixed> $bindings
      * @return Result<Option<mixed>, Throwable>
      */
-    public function __invoke(array $bindings = []): Result
+    public function __invoke(array $bindings = [], ?Observer $observer = null): Result
     {
-        return $this->call($bindings);
+        return $this->call($bindings, $observer);
     }
 
     /**
@@ -79,7 +79,7 @@ final readonly class Program
      * @param array<string, mixed> $bindings
      * @return Result<Option<mixed>, Throwable>
      */
-    public function call(array $bindings = []): Result
+    public function call(array $bindings = [], ?Observer $observer = null): Result
     {
         $admitted = $this->admit($bindings);
 
@@ -87,7 +87,7 @@ final readonly class Program
             return Err($admitted->unwrapErr());
         }
 
-        return ($this->node->evaluate)(new Runtime($admitted->unwrap(), $this->inspector));
+        return $this->node->evaluate(new Runtime($admitted->unwrap(), $observer));
     }
 
     /**

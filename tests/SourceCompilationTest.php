@@ -131,8 +131,8 @@ final class SourceCompilationTest extends TestCase
 
         $compiled = $compilation->compileAll([new StaticSource(1), new StaticSource(2)])->unwrap();
 
-        $this->assertSame(1, ($compiled[0]->evaluate)(new Runtime())->unwrap()->unwrap());
-        $this->assertSame(2, ($compiled[1]->evaluate)(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(1, $compiled[0]->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(2, $compiled[1]->evaluate(new Runtime())->unwrap()->unwrap());
         $this->assertSame([], $compilation->compileAll([])->unwrap());
     }
 
@@ -228,7 +228,10 @@ final class SourceCompilationTest extends TestCase
 
                         $first = $children->unwrap()[0];
 
-                        return Ok(new CompiledNode($first->returns, $first->evaluate));
+                        return Ok(new CompiledNode(
+                            $first->returns,
+                            fn(Runtime $runtime): Result => $first->evaluate($runtime),
+                        ));
                     },
                 ];
             }

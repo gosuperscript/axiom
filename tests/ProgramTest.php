@@ -30,7 +30,7 @@ use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
-use Superscript\Axiom\Tests\Fixtures\SpyInspector;
+use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
@@ -52,6 +52,10 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(Program::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Node::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
 #[UsesClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
@@ -390,33 +394,32 @@ final class ProgramTest extends TestCase
     }
 
     #[Test]
-    public function the_inspector_observes_the_compiled_evaluation(): void
+    public function an_observer_observes_one_program_invocation(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new InfixExpression(new SymbolSource('base'), '*', new Coerce(new NumberType(), new StaticSource('4'))),
             definitions: new Definitions(['base' => new StaticSource(3)]),
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $this->assertSame(12, $program()->unwrap()->unwrap());
+        $this->assertSame(12, $program(observer: $observer)->unwrap()->unwrap());
 
-        $this->assertSame('*', $inspector->annotations['label']);
-        $this->assertSame(3, $inspector->annotations['left']);
-        $this->assertSame(4, $inspector->annotations['right']);
-        $this->assertSame(12, $inspector->annotations['result']);
-        $this->assertSame('string -> int', $inspector->annotations['coercion']);
-        $this->assertContains(['label', 'base'], $inspector->timeline);
-        $this->assertContains(['memo', 'miss'], $inspector->timeline);
-        $this->assertContains(['label', 'Number'], $inspector->timeline);
-        $this->assertContains(['label', 'static(int)'], $inspector->timeline);
+        $this->assertSame('*', $observer->annotations['label']);
+        $this->assertSame(3, $observer->annotations['left']);
+        $this->assertSame(4, $observer->annotations['right']);
+        $this->assertSame(12, $observer->annotations['result']);
+        $this->assertSame('string -> int', $observer->annotations['coercion']);
+        $this->assertContains(['label', 'base'], $observer->timeline);
+        $this->assertContains(['memo', 'miss'], $observer->timeline);
+        $this->assertContains(['label', 'Number'], $observer->timeline);
+        $this->assertContains(['label', 'static(int)'], $observer->timeline);
     }
 
     #[Test]
-    public function the_inspector_observes_memo_hits_and_match_arms(): void
+    public function an_observer_observes_memo_hits_and_match_arms(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new MatchExpression(
@@ -428,106 +431,99 @@ final class ProgramTest extends TestCase
             ),
             definitions: new Definitions(['base' => new StaticSource(5)]),
             declarations: ['flag' => new BooleanType()],
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $this->assertSame(10, $program(['flag' => true])->unwrap()->unwrap());
+        $this->assertSame(10, $program(['flag' => true], $observer)->unwrap()->unwrap());
 
-        $this->assertSame('match', $inspector->annotations['label']);
-        $this->assertSame(true, $inspector->annotations['subject']);
-        $this->assertSame(0, $inspector->annotations['matched_arm']);
-        $this->assertContains(['memo', 'miss'], $inspector->timeline);
-        $this->assertContains(['memo', 'hit'], $inspector->timeline);
+        $this->assertSame('match', $observer->annotations['label']);
+        $this->assertSame(true, $observer->annotations['subject']);
+        $this->assertSame(0, $observer->annotations['matched_arm']);
+        $this->assertContains(['memo', 'miss'], $observer->timeline);
+        $this->assertContains(['memo', 'hit'], $observer->timeline);
     }
 
     #[Test]
     public function symbol_nodes_annotate_their_resolved_values(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         // A declared symbol annotates the bound value it read...
         $declared = (new Expression(
             source: new SymbolSource('turnover'),
             declarations: ['turnover' => new NumberType()],
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $declared(['turnover' => 600000]);
+        $declared(['turnover' => 600000], $observer);
 
-        $this->assertContains(['result', 600000], $inspector->timeline);
+        $this->assertContains(['result', 600000], $observer->timeline);
 
         // ...and a defined symbol annotates the value its slot produced.
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
         $defined = (new Expression(
             source: new SymbolSource('base'),
             definitions: new Definitions(['base' => new StaticSource(7)]),
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $defined();
+        $defined(observer: $observer);
 
-        $this->assertContains(['label', 'base'], $inspector->timeline);
-        $this->assertContains(['result', 7], $inspector->timeline);
+        $this->assertContains(['label', 'base'], $observer->timeline);
+        $this->assertContains(['result', 7], $observer->timeline);
     }
 
     #[Test]
     public function no_coercion_annotation_when_the_value_is_unchanged(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new Coerce(new NumberType(), new StaticSource(42)),
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $this->assertSame(42, $program()->unwrap()->unwrap());
-        $this->assertArrayNotHasKey('coercion', $inspector->annotations);
-        $this->assertSame('Number', $inspector->annotations['label']);
+        $this->assertSame(42, $program(observer: $observer)->unwrap()->unwrap());
+        $this->assertArrayNotHasKey('coercion', $observer->annotations);
+        $this->assertSame('Number', $observer->annotations['label']);
     }
 
     #[Test]
     public function the_ascription_annotates_its_claim(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new Ascription(new NumberType(), self::lyingSource(new \Superscript\Axiom\Types\UnknownType(), 42)),
-            inspector: $inspector,
             dialect: self::dialect(),
         ))->compile()->unwrap();
 
-        $this->assertSame(42, $program()->unwrap()->unwrap());
-        $this->assertSame('is Number', $inspector->annotations['label']);
+        $this->assertSame(42, $program(observer: $observer)->unwrap()->unwrap());
+        $this->assertSame('is Number', $observer->annotations['label']);
     }
 
     #[Test]
     public function member_access_annotates_the_property_and_result(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new MemberAccessSource(new SymbolSource('customer'), 'age'),
             declarations: ['customer' => new RecordType(['age' => new NumberType()])],
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $this->assertSame(30, $program(['customer' => ['age' => 30]])->unwrap()->unwrap());
-        $this->assertSame('.age', $inspector->annotations['label']);
-        $this->assertSame(30, $inspector->annotations['result']);
+        $this->assertSame(30, $program(['customer' => ['age' => 30]], $observer)->unwrap()->unwrap());
+        $this->assertSame('.age', $observer->annotations['label']);
+        $this->assertSame(30, $observer->annotations['result']);
     }
 
     #[Test]
     public function unary_nodes_annotate_operator_and_result(): void
     {
-        $inspector = new SpyInspector();
+        $observer = new SpyObserver();
 
         $program = (new Expression(
             source: new UnaryExpression('-', new StaticSource(7)),
-            inspector: $inspector,
         ))->compile()->unwrap();
 
-        $this->assertSame(-7, $program()->unwrap()->unwrap());
-        $this->assertSame('-', $inspector->annotations['label']);
-        $this->assertSame(-7, $inspector->annotations['result']);
+        $this->assertSame(-7, $program(observer: $observer)->unwrap()->unwrap());
+        $this->assertSame('-', $observer->annotations['label']);
+        $this->assertSame(-7, $observer->annotations['result']);
     }
 }

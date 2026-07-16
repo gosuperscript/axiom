@@ -28,6 +28,10 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(Bindings::class)]
 #[UsesClass(Runtime::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Node::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
@@ -91,15 +95,15 @@ final class TypeEnvironmentTest extends TestCase
         $environment = new TypeEnvironment(declarations: ['turnover' => new NumberType()]);
         $node = $environment->nodeOfSymbol('turnover', null, self::compiler())->unwrap();
 
-        $bound = ($node->evaluate)(new Runtime(new Bindings(['turnover' => 600000])));
+        $bound = $node->evaluate(new Runtime(new Bindings(['turnover' => 600000])));
         $this->assertSame(600000, $bound->unwrap()->unwrap());
 
         // A bound null is still a bound key, but its value is honestly
         // absent: one representation of null in the resolution channel.
-        $null = ($node->evaluate)(new Runtime(new Bindings(['turnover' => null])));
+        $null = $node->evaluate(new Runtime(new Bindings(['turnover' => null])));
         $this->assertTrue($null->unwrap()->isNone());
 
-        $missing = ($node->evaluate)(new Runtime(new Bindings()));
+        $missing = $node->evaluate(new Runtime(new Bindings()));
         $this->assertTrue($missing->unwrap()->isNone());
     }
 
@@ -109,24 +113,24 @@ final class TypeEnvironmentTest extends TestCase
         $compiler = self::compiler();
 
         // A declared symbol annotates the bound value it read...
-        $inspector = new \Superscript\Axiom\Tests\Fixtures\SpyInspector();
+        $observer = new \Superscript\Axiom\Tests\Fixtures\SpyObserver();
         $declared = (new TypeEnvironment(declarations: ['turnover' => new NumberType()]))
             ->nodeOfSymbol('turnover', null, $compiler)->unwrap();
 
-        ($declared->evaluate)(new Runtime(new Bindings(['turnover' => 600000]), $inspector));
+        $declared->evaluate(new Runtime(new Bindings(['turnover' => 600000]), $observer));
 
-        $this->assertContains(['label', 'turnover'], $inspector->timeline);
-        $this->assertContains(['result', 600000], $inspector->timeline);
+        $this->assertContains(['label', 'turnover'], $observer->timeline);
+        $this->assertContains(['result', 600000], $observer->timeline);
 
         // ...and a defined symbol annotates the value its slot produced.
-        $inspector = new \Superscript\Axiom\Tests\Fixtures\SpyInspector();
+        $observer = new \Superscript\Axiom\Tests\Fixtures\SpyObserver();
         $defined = (new TypeEnvironment(new Definitions(['base' => new StaticSource(7)])))
             ->nodeOfSymbol('base', null, $compiler)->unwrap();
 
-        ($defined->evaluate)(new Runtime(inspector: $inspector));
+        $defined->evaluate(new Runtime(observer: $observer));
 
-        $this->assertContains(['label', 'base'], $inspector->timeline);
-        $this->assertContains(['result', 7], $inspector->timeline);
+        $this->assertContains(['label', 'base'], $observer->timeline);
+        $this->assertContains(['result', 7], $observer->timeline);
     }
 
     #[Test]
@@ -156,7 +160,7 @@ final class TypeEnvironmentTest extends TestCase
         $result = $environment->nodeOfSymbol('derived', null, self::compiler());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
-        $this->assertSame(6, ($result->unwrap()->evaluate)(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(6, $result->unwrap()->evaluate(new Runtime())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -188,7 +192,7 @@ final class TypeEnvironmentTest extends TestCase
 
         $node = $environment->nodeOfSymbol('derived', null, self::compiler($dialect))->unwrap();
 
-        $this->assertSame(4, ($node->evaluate)(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(4, $node->evaluate(new Runtime())->unwrap()->unwrap());
         $this->assertSame(1, $counter->evaluations, 'both references read one memoized slot');
     }
 

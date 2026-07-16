@@ -65,8 +65,8 @@ final class TypeEnvironment
                 // admitted it — but its value is honestly absent.
                 $value = $runtime->bindings->get($name, $namespace)->andThen(fn(mixed $v) => Option::from($v));
 
-                $runtime->inspector?->annotate('label', $key);
-                $value->inspect(fn(mixed $v) => $runtime->inspector?->annotate('result', $v));
+                $runtime->annotate('label', $key);
+                $value->inspect(fn(mixed $v) => $runtime->annotate('result', $v));
 
                 return Ok($value);
             }));
@@ -99,10 +99,10 @@ final class TypeEnvironment
         return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(
             $node->returns,
             static function (Runtime $runtime) use ($node, $key) {
-                $result = $runtime->slot($key, fn() => ($node->evaluate)($runtime));
+                $result = $runtime->slot($key, fn() => $node->evaluate($runtime));
 
-                $runtime->inspector?->annotate('label', $key);
-                $result->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->inspector?->annotate('result', $value)));
+                $runtime->annotate('label', $key);
+                $result->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->annotate('result', $value)));
 
                 return $result;
             },

@@ -333,7 +333,7 @@ $program->returns;          // the inferred return type
 $program($bindings);        // boundary + evaluation; Result<Option<mixed>, Throwable>
 ```
 
-What remains at runtime is semantics, not dispatch: absence short-circuits, match arms try in order, division by zero errs, the admission bridges check what they exist to check. The per-invocation state (`Runtime`) carries the admitted bindings, lazily-memoized definition slots, and the optional inspector — no dialect, no resolver.
+What remains at runtime is semantics, not dispatch: absence short-circuits, match arms try in order, division by zero errs, the admission bridges check what they exist to check. The per-invocation state (`Runtime`) carries the admitted bindings, lazily-memoized definition slots, and an optional execution observer — no dialect, no resolver.
 
 ### Operators
 
@@ -348,20 +348,41 @@ The core dialect ships these rules:
 
 Every rule owns one symbol (`operator()`) and answers one question — `resolve(operand types)` — with a `ResolvedOperation`, `UnsupportedOperation`, or `DeadOperation`. A success carries the return type *and* evaluation, so rule selection and evaluation cannot drift apart. (That the evaluation honors its stated type is your certified obligation, tested by the totality harness — see the guide.) Resolvers index rules by symbol, so unrelated rules are never invoked. Most rules are declarative rows built with the operator rule builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (jointly admissible rows) or compile time (multiple resolutions), never absorbed. See [Extending Axiom](docs/extending-axiom.md) for writing your own.
 
-### Resolution Inspector
+### Execution observation
 
-The `ResolutionInspector` interface provides a zero-overhead observability primitive for evaluation. Compiled programs accept the inspector at construction (via the `Expression`'s `inspector` parameter or `withInspector()`) and annotate metadata as they evaluate. When no inspector is present, annotation is skipped entirely via null-safe calls.
+Pass an `Execution\Observer` to one `Program` invocation to observe the compiled evaluation as an ordered event stream. The observer is invocation-scoped: it is not stored on the serializable `Source` tree, the `Expression`, or the compiled `Program`, so it cannot leak state into a later run.
 
-**Interface:**
+Every compiled source node emits `Entered`, zero or more `Annotated`, then `Exited`; a host exception emits `Threw` instead. Each event carries a `Node` descriptor with the source class and certified return type. The nesting in the event order is enough for tracing packages to build trees and timings without teaching core about a particular trace representation.
 
 ```php
-interface ResolutionInspector
+use Superscript\Axiom\Execution\Annotated;
+use Superscript\Axiom\Execution\Event;
+use Superscript\Axiom\Execution\Observer;
+
+final class AnnotationLog implements Observer
 {
-    public function annotate(string $key, mixed $value): void;
+    public array $annotations = [];
+
+    public function observe(Event $event): void
+    {
+        if ($event instanceof Annotated) {
+            $this->annotations[] = [
+                'source' => $event->node->sourceType,
+                'key' => $event->key,
+                'value' => $event->value,
+            ];
+        }
+    }
 }
+
+$observer = new AnnotationLog();
+$program = $expression->compile()->unwrap();
+$result = $program->call(['radius' => 5], observer: $observer);
 ```
 
-**Built-in annotations from compiled nodes:**
+When no observer is passed, the same program follows the direct evaluation path and annotations are no-ops.
+
+**Built-in annotations:**
 
 | Node | Annotations |
 |------|-------------|
@@ -373,33 +394,6 @@ interface ResolutionInspector
 | Symbol | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"` for definitions; `result` |
 | Match | `label`: `"match"`; `subject`: resolved subject value; `matched_arm`: index of matched arm; `result`: final value |
 | Member access | `label`: `".property"`; `result` |
-
-**Usage:**
-
-```php
-use Superscript\Axiom\ResolutionInspector;
-
-final class ResolutionContext implements ResolutionInspector
-{
-    private array $annotations = [];
-
-    public function annotate(string $key, mixed $value): void
-    {
-        $this->annotations[$key] = $value;
-    }
-
-    public function get(string $key): mixed
-    {
-        return $this->annotations[$key] ?? null;
-    }
-}
-
-$inspector = new ResolutionContext();
-$program = $expression->withInspector($inspector)->compile()->unwrap();
-$program(['radius' => 5]);
-
-// Annotations are available via $inspector->get('label'), etc.
-```
 
 ## Extending Axiom
 

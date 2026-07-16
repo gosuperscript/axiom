@@ -14,7 +14,6 @@ use Superscript\Axiom\Program;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Tests\Fixtures\SpyInspector;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\UnboundSymbols;
@@ -232,17 +231,4 @@ final class ExpressionTest extends TestCase
         $this->assertTrue($expression->compile()->isErr(), 'original is unchanged');
     }
 
-    #[Test]
-    public function with_inspector_attaches_an_inspector_to_the_compiled_program(): void
-    {
-        $expression = new Expression(source: new StaticSource(42));
-
-        $inspector = new SpyInspector();
-        $inspected = $expression->withInspector($inspector);
-
-        $inspected->compile()->unwrap()->call();
-
-        $this->assertSame('static(int)', $inspector->annotations['label']);
-        $this->assertNull($expression->inspector, 'original is unchanged');
-    }
 }
