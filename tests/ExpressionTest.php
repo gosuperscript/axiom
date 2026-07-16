@@ -20,6 +20,10 @@ use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[UsesClass(UnboundSymbols::class)]

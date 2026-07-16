@@ -44,6 +44,13 @@ use Superscript\Axiom\Types\TypeMismatch;
  */
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Dialect::class)]
