@@ -434,7 +434,13 @@ final class GeocodeExtension extends Extension
 }
 ```
 
-The map key is the ownership declaration: matching is by exact class, and two extensions cannot own the same class. The callback needs no compiler bootstrapping — `SourceCompilation::compile()` recursively compiles one child in the current environment, while `compileAll()` does the same for a list (for example, a filter source containing several dynamic `SymbolSource` expressions).
+The map key is the ownership declaration: matching is by exact class, and two extensions cannot own the same class. The core language's own nodes — `StaticSource`, `InfixExpression`, `MatchExpression`, and the rest — are registered by `Dialect::core()` through this same map, so their compilers hold no capability yours lacks, and claiming one of their classes is the same loud configuration error as colliding with another extension.
+
+The callback needs no compiler bootstrapping — `SourceCompilation::compile()` recursively compiles one child in the current environment, while `compileAll()` does the same for a list (for example, a filter source containing several dynamic `SymbolSource` expressions). Three more faces cover what a source compiler cannot reach by delegating to a child:
+
+- `symbol($name, $namespace)` compiles a symbol reference in the current environment — the same node a `SymbolSource` compiles to, so a host source that names an input or a definition embeds exactly the language's symbol semantics (declared inputs read their admitted binding; definitions compile once and memoize per invocation).
+- `prefix($operator, $operandType)` binds one unary operation from the composed dialect, the same contract as `infix()` below.
+- `typeOfValue($value)` gives the literal-first type of a PHP value your source embeds — the judgment a `StaticSource` compiles with: scalars type as their literal, lists unify their elements with exact bounds, string-keyed arrays type as records, and objects resolve through the dialect's literal registry.
 
 ### Resolving Operations Inside a Source
 

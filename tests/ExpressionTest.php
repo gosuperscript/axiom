@@ -19,6 +19,8 @@ use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[UsesClass(UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]

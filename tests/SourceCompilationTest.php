@@ -58,7 +58,30 @@ final readonly class HostInfixSource implements Source
     ) {}
 }
 
+/** @internal Test fixture for a source compiler that binds a prefix operator. */
+final readonly class HostPrefixSource implements Source
+{
+    public function __construct(
+        public string $operator,
+        public Type $operandType,
+        public mixed $operand,
+    ) {}
+}
+
+/** @internal Test fixture for a source compiler that resolves a symbol by name. */
+final readonly class HostSymbolSource implements Source
+{
+    public function __construct(public string $name) {}
+}
+
+/** @internal Test fixture for a source compiler that types an embedded PHP value. */
+final readonly class HostLiteralSource implements Source
+{
+    public function __construct(public mixed $value) {}
+}
+
 #[CoversClass(SourceCompilation::class)]
+#[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
@@ -98,11 +121,19 @@ final readonly class HostInfixSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 final class SourceCompilationTest extends TestCase
 {
-    private static function compilation(Closure $compileNode): SourceCompilation
-    {
+    private static function compilation(
+        ?Closure $compileNode = null,
+        ?Closure $compileInfix = null,
+        ?Closure $compilePrefix = null,
+        ?Closure $compileSymbol = null,
+        ?Closure $typeOfValue = null,
+    ): SourceCompilation {
         return new SourceCompilation(
-            $compileNode,
-            fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
+            $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
+            $compileInfix ?? fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
+            $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
+            $compileSymbol ?? fn(string $name, ?string $namespace): Result => Err(new TypeMismatch('No symbol expected.')),
+            $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
         );
     }
 
@@ -162,9 +193,8 @@ final class SourceCompilationTest extends TestCase
         $right = new NumberType();
         $operation = new ResolvedOperation(new NumberType(), fn() => 1);
         $seen = null;
-        $compilation = new SourceCompilation(
-            fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
-            function (Type $actualLeft, string $operator, Type $actualRight) use (&$seen, $operation): Result {
+        $compilation = self::compilation(
+            compileInfix: function (Type $actualLeft, string $operator, Type $actualRight) use (&$seen, $operation): Result {
                 $seen = [$actualLeft, $operator, $actualRight];
 
                 return Ok($operation);
@@ -173,6 +203,59 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($operation, $compilation->infix($left, '<=>', $right)->unwrap());
         $this->assertSame([$left, '<=>', $right], $seen);
+    }
+
+    #[Test]
+    public function prefix_delegates_the_operator_and_operand_type(): void
+    {
+        $operand = new NumberType();
+        $operation = new ResolvedOperation(new NumberType(), fn() => 1);
+        $seen = null;
+        $compilation = self::compilation(
+            compilePrefix: function (string $operator, Type $actualOperand) use (&$seen, $operation): Result {
+                $seen = [$operator, $actualOperand];
+
+                return Ok($operation);
+            },
+        );
+
+        $this->assertSame($operation, $compilation->prefix('-', $operand)->unwrap());
+        $this->assertSame(['-', $operand], $seen);
+    }
+
+    #[Test]
+    public function symbol_delegates_the_name_and_defaults_the_namespace_to_null(): void
+    {
+        $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $seen = [];
+        $compilation = self::compilation(
+            compileSymbol: function (string $name, ?string $namespace) use (&$seen, $node): Result {
+                $seen[] = [$name, $namespace];
+
+                return Ok($node);
+            },
+        );
+
+        $this->assertSame($node, $compilation->symbol('amount')->unwrap());
+        $this->assertSame($node, $compilation->symbol('amount', 'billing')->unwrap());
+        $this->assertSame([['amount', null], ['amount', 'billing']], $seen);
+    }
+
+    #[Test]
+    public function type_of_value_delegates_the_value(): void
+    {
+        $type = new NumberType();
+        $seen = null;
+        $compilation = self::compilation(
+            typeOfValue: function (mixed $value) use (&$seen, $type): Result {
+                $seen = $value;
+
+                return Ok($type);
+            },
+        );
+
+        $this->assertSame($type, $compilation->typeOfValue(42)->unwrap());
+        $this->assertSame(42, $seen);
     }
 
     #[Test]
@@ -210,6 +293,82 @@ final class SourceCompilationTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertTrue($program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_host_compiler_binds_prefix_operations_from_the_composed_dialect(): void
+    {
+        $extension = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [
+                    HostPrefixSource::class => fn(HostPrefixSource $source, SourceCompilation $compilation): Result => $compilation
+                        ->prefix($source->operator, $source->operandType)
+                        ->map(fn(ResolvedOperation $operation) => new CompiledNode(
+                            $operation->returns,
+                            fn(Runtime $runtime): Result => $operation
+                                ->evaluate($source->operand)
+                                ->map(Some(...)),
+                        )),
+                ];
+            }
+        };
+
+        $program = (new Expression(
+            new HostPrefixSource('-', new NumberType(), 7),
+            dialect: Dialect::core()->with($extension),
+        ))->compile()->unwrap();
+
+        $this->assertSame(-7, $program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_host_compiler_resolves_symbols_in_the_current_environment(): void
+    {
+        $extension = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [
+                    HostSymbolSource::class => fn(HostSymbolSource $source, SourceCompilation $compilation): Result => $compilation
+                        ->symbol($source->name),
+                ];
+            }
+        };
+
+        $program = (new Expression(
+            new HostSymbolSource('amount'),
+            dialect: Dialect::core()->with($extension),
+            declarations: ['amount' => new NumberType()],
+        ))->compile()->unwrap();
+
+        $this->assertInstanceOf(NumberType::class, $program->returns);
+        $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_host_compiler_types_embedded_values_literal_first(): void
+    {
+        $extension = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [
+                    HostLiteralSource::class => fn(HostLiteralSource $source, SourceCompilation $compilation): Result => $compilation
+                        ->typeOfValue($source->value)
+                        ->map(fn(Type $type) => new CompiledNode(
+                            $type,
+                            fn(Runtime $runtime): Result => Ok(Some($source->value)),
+                        )),
+                ];
+            }
+        };
+
+        $program = (new Expression(
+            new HostLiteralSource(5),
+            dialect: Dialect::core()->with($extension),
+        ))->compile()->unwrap();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $program->returns);
+        $this->assertSame(5, $program()->unwrap()->unwrap());
     }
 
     #[Test]

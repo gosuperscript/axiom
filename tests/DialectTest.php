@@ -26,6 +26,7 @@ use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 
 #[CoversClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Extension::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
@@ -372,6 +373,27 @@ final class DialectTest extends TestCase
         $this->expectExceptionMessage(sprintf('Source class [%s] has two compilers', HostValueSource::class));
 
         $dialect->with(clone $registering);
+    }
+
+    #[Test]
+    public function the_core_language_owns_its_source_compilers_like_any_extension(): void
+    {
+        $this->assertArrayHasKey(
+            \Superscript\Axiom\Sources\InfixExpression::class,
+            Dialect::core()->sourceCompilers(),
+        );
+
+        $claiming = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [\Superscript\Axiom\Sources\InfixExpression::class => fn() => throw new \LogicException('not compiled')];
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('Source class [%s] has two compilers', \Superscript\Axiom\Sources\InfixExpression::class));
+
+        Dialect::core()->with($claiming);
     }
 
     #[Test]

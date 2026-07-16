@@ -49,6 +49,7 @@ use Superscript\Axiom\Types\UnionType;
  * host source whose evaluation breaks its own type claim.
  */
 #[CoversClass(TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]

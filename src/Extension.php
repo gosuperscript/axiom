@@ -64,6 +64,9 @@ abstract class Extension
      * the concrete Source accepted by the closure. The adapter returns its
      * type claim and evaluation together as one CompiledNode; selection
      * happens once during compilation and list order carries no precedence.
+     * The core language's source classes are already owned — Dialect::core()
+     * registers them through this same map — so claiming one is the ordinary
+     * duplicate-ownership error.
      *
      * A Closure is used deliberately: packages may point at a private method
      * for the common case, or capture a dedicated compiler module when the

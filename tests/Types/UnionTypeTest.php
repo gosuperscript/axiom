@@ -22,6 +22,8 @@ use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\UnionType;
 
 #[CoversClass(UnionType::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(TransformValueException::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]
@@ -92,5 +94,18 @@ final class UnionTypeTest extends TestCase
         $single = new UnionType(new NumberType());
 
         $this->assertInstanceOf(NumberShape::class, $single->shape());
+    }
+
+    #[Test]
+    public function join_deduplicates_by_equivalence_with_never_as_the_identity(): void
+    {
+        $agreeing = UnionType::join(new NumberType(), new NumberType());
+        $this->assertInstanceOf(NumberType::class, $agreeing);
+
+        $literals = UnionType::join(new LiteralType('a'), new LiteralType('b'), new LiteralType('a'));
+        $this->assertInstanceOf(UnionType::class, $literals);
+        $this->assertSame("'a' | 'b'", TypeDescriber::describe($literals));
+
+        $this->assertInstanceOf(\Superscript\Axiom\Types\NeverType::class, UnionType::join());
     }
 }

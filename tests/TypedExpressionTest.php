@@ -43,6 +43,8 @@ use Superscript\Axiom\Types\TypeMismatch;
  * citizens — all through compile() and the Program it returns.
  */
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]

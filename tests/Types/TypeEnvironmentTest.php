@@ -23,6 +23,7 @@ use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 
 #[CoversClass(TypeEnvironment::class)]
+#[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]

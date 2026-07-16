@@ -30,10 +30,13 @@ use function Superscript\Monads\Result\attempt;
 
 /**
  * The operator rules live in exactly one place. A Dialect composes the
- * binary rules, the unary rules, the literal registry, and exact-class host
- * source compilers. It is consumed at compile time only: the compiler binds
- * every selected evaluation into the Program, so there is nothing at
- * runtime to miscompose.
+ * binary rules, the unary rules, the literal registry, and exact-class
+ * source compilers — the core language's nodes are registered by core()
+ * through the same map host extensions contribute to, so an extension that
+ * claims a core source class meets the ordinary duplicate-ownership
+ * refusal. It is consumed at compile time only: the compiler binds every
+ * selected evaluation into the Program, so there is nothing at runtime to
+ * miscompose.
  *
  * Most core rules are dispatch-table rows (the operator rule builder's
  * output); equality and the set operators compute their answer from the
@@ -109,7 +112,7 @@ final readonly class Dialect
                     ->evaluatesWith(fn(int|float $operand) => -$operand),
             ],
             literalMappings: [],
-            sourceCompilers: [],
+            sourceCompilers: CoreSourceCompilers::compilers(),
         );
     }
 

@@ -33,6 +33,29 @@ final readonly class UnionType implements Type
         $this->members = $members;
     }
 
+    /**
+     * The union join, deduplicated by equivalence: agreeing alternatives
+     * collapse to the single type, so `join(Number, Number)` is Number and
+     * `join('a', 'b')` keeps its literal precision as 'a' | 'b'. The join
+     * of nothing is Never, the union identity.
+     */
+    public static function join(Type ...$types): Type
+    {
+        $unique = [];
+
+        foreach ($types as $type) {
+            if (!array_any($unique, fn(Type $existing) => TypeRelations::areEquivalent($existing, $type)->isOk())) {
+                $unique[] = $type;
+            }
+        }
+
+        return match (count($unique)) {
+            0 => new NeverType(),
+            1 => $unique[0],
+            default => new self(...$unique),
+        };
+    }
+
     public function assert(mixed $value): Result
     {
         return $this->firstMember(fn(Type $member) => $member->assert($value), $value);

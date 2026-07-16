@@ -47,6 +47,7 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(TypeEnvironment::class)]
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
@@ -838,6 +839,7 @@ final class TypeInferenceTest extends TestCase
             $dialect->operators(),
             new \Superscript\Axiom\Operators\UnaryOperatorResolver([$numericNot]),
             $dialect->literals(),
+            $dialect->sourceCompilers(),
         );
 
         $result = $inference->infer(new UnaryExpression('!', new StaticSource(5)), self::env());
