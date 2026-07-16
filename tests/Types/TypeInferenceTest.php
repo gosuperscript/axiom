@@ -154,12 +154,19 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function the_lower_level_compiler_includes_core_source_compilers_by_default(): void
+    public function the_lower_level_compiler_uses_exactly_the_source_compilers_it_is_given(): void
     {
         $dialect = Dialect::core();
-        $inference = new TypeInference($dialect->operators(), $dialect->unaryOperators());
+        $inference = new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $dialect->literals(),
+            [],
+        );
 
-        $this->assertSame("'core'", self::describe($inference->infer(new StaticSource('core'), self::env())));
+        $result = $inference->infer(new StaticSource('core'), self::env());
+
+        $this->assertStringContainsString('Cannot compile', $result->unwrapErr()->message);
     }
 
     #[Test]

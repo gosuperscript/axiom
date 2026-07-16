@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\CompiledNode;
-use Superscript\Axiom\CoreSourceCompilers;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
@@ -42,15 +41,10 @@ final readonly class TypeInference
     public function __construct(
         private BinaryOperatorResolver $operators,
         private UnaryOperatorResolver $unaryOperators,
-        private LiteralTypeRegistry $literals = new LiteralTypeRegistry(),
-        array $sourceCompilers = [],
+        private LiteralTypeRegistry $literals,
+        array $sourceCompilers,
     ) {
-        // The lower-level TypeInference API compiled core nodes before they
-        // moved into the registry. Preserve that contract when callers omit
-        // the map or pass only their host compilers. A direct attempt to
-        // replace a core compiler remains ineffective, as it was before;
-        // Dialect composition rejects the duplicate earlier and by name.
-        $this->sourceCompilers = CoreSourceCompilers::compilers() + $sourceCompilers;
+        $this->sourceCompilers = $sourceCompilers;
     }
 
     /**
