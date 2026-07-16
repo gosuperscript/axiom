@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Execution\Node;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -23,9 +24,39 @@ use Throwable;
  */
 final readonly class CompiledNode
 {
-    /** @param Closure(Runtime): Result<Option<mixed>, Throwable> $evaluate */
+    /** @var Closure(Runtime): Result<Option<mixed>, Throwable> */
+    private Closure $evaluation;
+
+    private string $sourceType;
+
+    /** @param Closure(Runtime): Result<Option<mixed>, Throwable> $evaluation */
     public function __construct(
         public Type $returns,
-        public Closure $evaluate,
-    ) {}
+        Closure $evaluation,
+        ?string $sourceType = null,
+    ) {
+        $this->evaluation = $evaluation;
+        $this->sourceType = $sourceType ?? self::class;
+    }
+
+    /**
+     * Attach the source identity known by the compiler. Source compilers only
+     * construct the node's type and evaluation; the outer compiler owns this
+     * description, so host nodes cannot forget to participate in observation.
+     *
+     * @internal
+     */
+    public function forSource(Source $source): self
+    {
+        return new self($this->returns, $this->evaluation, $source::class);
+    }
+
+    /** @return Result<Option<mixed>, Throwable> */
+    public function evaluate(Runtime $runtime): Result
+    {
+        return $runtime->evaluate(
+            fn(): Node => new Node($this->sourceType, $this->returns),
+            fn(): Result => ($this->evaluation)($runtime),
+        );
+    }
 }

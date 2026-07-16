@@ -251,8 +251,10 @@ final readonly class CompiledNode
 {
     public function __construct(
         public Type $returns,
-        public Closure $evaluate,   // (Runtime): Result<Option<mixed>, Throwable>
-    ) {}
+        Closure $evaluation,   // (Runtime): Result<Option<mixed>, Throwable>
+    );
+
+    public function evaluate(Runtime $runtime): Result;
 }
 
 final readonly class TypeInference   // the compiler
@@ -268,7 +270,7 @@ final readonly class TypeInference   // the compiler
 }
 ```
 
-The `Runtime` a compiled evaluation receives is small: the admitted bindings, the lazily-memoized definition slots, and the observability inspector. It carries no dialect and no resolver — there is nothing left to dispatch.
+The `Runtime` a compiled evaluation receives is small: the admitted bindings, the lazily-memoized definition slots, and the optional invocation-scoped execution observer. It carries no dialect and no resolver — there is nothing left to dispatch. Observation is passed to `Program::call()`, never persisted with the source tree or retained by the compiled program. Every compiled source node emits an ordered enter/annotation/exit (or throw) lifecycle, including nodes supplied by host source compilers.
 
 #### The environment walks the symbol graph
 

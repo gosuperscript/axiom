@@ -372,7 +372,7 @@ final class GeocodeExtension extends Extension
         return $compilation->compile($source->address)->map(
             fn(CompiledNode $address) => new CompiledNode(
                 new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
-                fn(Runtime $runtime) => ($address->evaluate)($runtime)
+                fn(Runtime $runtime) => $address->evaluate($runtime)
                     ->map(fn(Option $option) => $option->map($this->geocoder->locate(...))),
             ),
         );
@@ -405,7 +405,7 @@ Persist the `Source` tree, not the compiled `Program`: compilation deliberately 
 
 The one obligation mirrors the operator closure's: **your evaluation must deliver what your type claims.** The compiler certifies downstream operations against the claimed type, and nothing re-checks the values — a lying source meets named runtime errors at the structural reads (a missing field, an unmatched exhaustive match), not silent corruption, but the honest fix is an honest claim. Sources that cannot promise their payload declare `Unknown` and let the program's author place the `Ascription`, which *is* runtime-verified.
 
-Annotate through `$runtime->inspector?->annotate(...)` for observability; the null-safe call makes it free when no inspector is attached.
+Annotate through `$runtime->annotate(...)` for observability. It emits an `Annotated` event for the source node currently being evaluated, and is a no-op when that invocation has no observer.
 
 ## Testing your extension
 

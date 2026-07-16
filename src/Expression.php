@@ -53,7 +53,6 @@ final readonly class Expression
     public function __construct(
         public Source $source,
         public Definitions $definitions = new Definitions(),
-        public ?ResolutionInspector $inspector = null,
         ?Dialect $dialect = null,
         public array $declarations = [],
         public Boundary $boundary = Boundary::Coerce,
@@ -128,7 +127,7 @@ final readonly class Expression
         $environment = new TypeEnvironment($this->definitions, $this->declarations);
 
         return $this->inference()->compile($this->source, $environment)
-            ->map(fn(CompiledNode $node) => new Program($node, $this->declarations, $this->boundary, $this->inspector));
+            ->map(fn(CompiledNode $node) => new Program($node, $this->declarations, $this->boundary));
     }
 
     /**
@@ -165,11 +164,6 @@ final readonly class Expression
 
     public function withDefinitions(Definitions $definitions): self
     {
-        return new self($this->source, $definitions, $this->inspector, $this->dialect, $this->declarations, $this->boundary);
-    }
-
-    public function withInspector(ResolutionInspector $inspector): self
-    {
-        return new self($this->source, $this->definitions, $inspector, $this->dialect, $this->declarations, $this->boundary);
+        return new self($this->source, $definitions, $this->dialect, $this->declarations, $this->boundary);
     }
 }
