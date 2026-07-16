@@ -14,14 +14,14 @@ use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Operators\Signatures\InfixSignature;
-use Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder;
-use Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands;
-use Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn;
-use Superscript\Axiom\Operators\Signatures\PrefixSignature;
-use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
-use Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand;
-use Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn;
+use Superscript\Axiom\Operators\InfixOperatorRule;
+use Superscript\Axiom\Operators\InfixOperatorRuleBuilder;
+use Superscript\Axiom\Operators\InfixOperatorRuleWithOperands;
+use Superscript\Axiom\Operators\InfixOperatorRuleWithReturn;
+use Superscript\Axiom\Operators\PrefixOperatorRule;
+use Superscript\Axiom\Operators\PrefixOperatorRuleBuilder;
+use Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand;
+use Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
@@ -34,14 +34,14 @@ use Superscript\Axiom\Types\UnknownType;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(Operator::class)]
-#[CoversClass(InfixSignatureBuilder::class)]
-#[CoversClass(InfixSignatureWithOperands::class)]
-#[CoversClass(InfixSignatureWithReturn::class)]
-#[CoversClass(InfixSignature::class)]
-#[CoversClass(PrefixSignatureBuilder::class)]
-#[CoversClass(PrefixSignatureWithOperand::class)]
-#[CoversClass(PrefixSignatureWithReturn::class)]
-#[CoversClass(PrefixSignature::class)]
+#[CoversClass(InfixOperatorRuleBuilder::class)]
+#[CoversClass(InfixOperatorRuleWithOperands::class)]
+#[CoversClass(InfixOperatorRuleWithReturn::class)]
+#[CoversClass(InfixOperatorRule::class)]
+#[CoversClass(PrefixOperatorRuleBuilder::class)]
+#[CoversClass(PrefixOperatorRuleWithOperand::class)]
+#[CoversClass(PrefixOperatorRuleWithReturn::class)]
+#[CoversClass(PrefixOperatorRule::class)]
 #[CoversClass(ResolvedOperation::class)]
 #[UsesClass(UnsupportedOperation::class)]
 #[UsesClass(BinaryOperatorResolver::class)]
@@ -60,22 +60,22 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
-final class SignatureTest extends TestCase
+final class OperatorRuleBuilderTest extends TestCase
 {
-    private static function concat(): InfixSignature
+    private static function concat(): InfixOperatorRule
     {
         return Operator::infix('++')
-            ->signature(new StringType(), new StringType())
+            ->takes(new StringType(), new StringType())
             ->returns(new StringType())
-            ->evaluate(fn(string $a, string $b) => $a . $b);
+            ->evaluatesWith(fn(string $a, string $b) => $a . $b);
     }
 
-    private static function absolute(): PrefixSignature
+    private static function absolute(): PrefixOperatorRule
     {
         return Operator::prefix('abs')
-            ->signature(new NumberType())
+            ->takes(new NumberType())
             ->returns(new NumberType())
-            ->evaluate(fn(int|float $n) => abs($n));
+            ->evaluatesWith(fn(int|float $n) => abs($n));
     }
 
     #[Test]
@@ -91,9 +91,9 @@ final class SignatureTest extends TestCase
         $returns = new StringType();
 
         $rule = Operator::infix('++')
-            ->signature(new StringType(), new StringType())
+            ->takes(new StringType(), new StringType())
             ->returns($returns)
-            ->evaluate(fn(string $a, string $b) => $a . $b);
+            ->evaluatesWith(fn(string $a, string $b) => $a . $b);
 
         $resolved = $rule->resolve(new StringType(), new StringType());
         $this->assertInstanceOf(ResolvedOperation::class, $resolved);
@@ -175,20 +175,20 @@ final class SignatureTest extends TestCase
     }
 
     #[Test]
-    public function an_infix_signature_advertises_its_operator(): void
+    public function an_infix_rule_advertises_its_operator(): void
     {
         $this->assertSame('++', self::concat()->operator());
     }
 
     #[Test]
-    public function signature_families_compose_in_the_manager(): void
+    public function fixed_rule_families_compose_in_the_resolver(): void
     {
         $manager = new BinaryOperatorResolver([
             self::concat(),
             Operator::infix('++')
-                ->signature(new NumberType(), new NumberType())
+                ->takes(new NumberType(), new NumberType())
                 ->returns(new NumberType())
-                ->evaluate(fn(int|float $a, int|float $b) => $a + $b),
+                ->evaluatesWith(fn(int|float $a, int|float $b) => $a + $b),
         ]);
 
         // Each row resolves its own operand types; the rows are disjoint,
@@ -212,9 +212,9 @@ final class SignatureTest extends TestCase
         $returns = new NumberType();
 
         $rule = Operator::prefix('abs')
-            ->signature(new NumberType())
+            ->takes(new NumberType())
             ->returns($returns)
-            ->evaluate(fn(int|float $n) => abs($n));
+            ->evaluatesWith(fn(int|float $n) => abs($n));
 
         $number = $rule->resolve(new NumberType());
         $literal = $rule->resolve(new LiteralType(5));
@@ -230,9 +230,9 @@ final class SignatureTest extends TestCase
     {
         $partial = Ok(7);
         $rule = Operator::prefix('abs')
-            ->signature(new NumberType())
+            ->takes(new NumberType())
             ->returns(new NumberType())
-            ->evaluate(fn(int|float $n) => $partial);
+            ->evaluatesWith(fn(int|float $n) => $partial);
 
         $operation = $rule->resolve(new NumberType());
         $this->assertInstanceOf(ResolvedOperation::class, $operation);
@@ -259,17 +259,17 @@ final class SignatureTest extends TestCase
     }
 
     #[Test]
-    public function a_prefix_signature_advertises_its_operator(): void
+    public function a_prefix_rule_advertises_its_operator(): void
     {
         $this->assertSame('abs', self::absolute()->operator());
     }
 
     #[Test]
-    public function an_option_operand_on_a_prefix_signature_is_rejected_at_declaration(): void
+    public function an_option_operand_on_a_prefix_rule_is_rejected_at_declaration(): void
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('absence never reaches a unary rule');
 
-        Operator::prefix('abs')->signature(new OptionType(new NumberType()));
+        Operator::prefix('abs')->takes(new OptionType(new NumberType()));
     }
 }

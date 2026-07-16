@@ -27,7 +27,7 @@ final class OpaqueTypeTest extends TestCase
         $type = new OpaqueType('ClaimId');
 
         // A fail-open placeholder would claim every non-null value for any
-        // signature or boundary declared over it; the honest posture for an
+        // operator rule or boundary declared over it; the honest posture for an
         // unverifiable identity is to reject everything, loudly.
         $this->assertStringContainsString(
             'Core cannot verify membership of opaque identity [ClaimId]',

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\Type;
 
 /**
  * Stage two: operand types declared, the return type comes next.
  */
-final readonly class InfixSignatureWithOperands
+final readonly class InfixOperatorRuleWithOperands
 {
     public function __construct(
         private string $operator,
@@ -17,8 +17,8 @@ final readonly class InfixSignatureWithOperands
         private Type $right,
     ) {}
 
-    public function returns(Type $type): InfixSignatureWithReturn
+    public function returns(Type $returnType): InfixOperatorRuleWithReturn
     {
-        return new InfixSignatureWithReturn($this->operator, $this->left, $this->right, $type);
+        return new InfixOperatorRuleWithReturn($this->operator, $this->left, $this->right, $returnType);
     }
 }

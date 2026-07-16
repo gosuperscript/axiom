@@ -4,16 +4,13 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
-use Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder;
-use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
-
 /**
  * The front door for declaring operator rules:
  *
  *   Operator::infix('-')
- *       ->signature(new DateType(), new PeriodType())
+ *       ->takes(new DateType(), new PeriodType())
  *       ->returns(new DateType())
- *       ->evaluate(fn (Date $d, Period $p) => $d->minus($p))
+ *       ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p))
  *
  * The result is a dispatch-table row: it resolves when the operand types
  * fit the declared slots and answers with the declared return type and
@@ -25,13 +22,13 @@ use Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder;
  */
 final readonly class Operator
 {
-    public static function infix(string $operator): InfixSignatureBuilder
+    public static function infix(string $operator): InfixOperatorRuleBuilder
     {
-        return new InfixSignatureBuilder($operator);
+        return new InfixOperatorRuleBuilder($operator);
     }
 
-    public static function prefix(string $operator): PrefixSignatureBuilder
+    public static function prefix(string $operator): PrefixOperatorRuleBuilder
     {
-        return new PrefixSignatureBuilder($operator);
+        return new PrefixOperatorRuleBuilder($operator);
     }
 }

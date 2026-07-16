@@ -26,9 +26,9 @@ final class MoneyExtension extends Extension
                 ['!==', true],
             ] as [$operator, $negated]) {
                 $rules[] = Operator::infix($operator)
-                    ->signature(new MoneyType($currency), new MoneyType($currency))
+                    ->takes(new MoneyType($currency), new MoneyType($currency))
                     ->returns(new BooleanType())
-                    ->evaluate(fn(Money $left, Money $right) => $negated !== $left->isSameValueAs($right));
+                    ->evaluatesWith(fn(Money $left, Money $right) => $negated !== $left->isSameValueAs($right));
             }
         }
 

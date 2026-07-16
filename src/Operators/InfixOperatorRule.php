@@ -2,21 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Closure;
-use Superscript\Axiom\Operators\BinaryOperatorRule;
-use Superscript\Axiom\Operators\OperatorResolution;
-use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeRelations;
 
 /**
- * One binary operator rule, declared as data: "the operator [-], taking
- * (Date, Period), returns Date, computed by this closure". Built via the
- * Operator::infix() builder.
+ * One binary operator rule, declared as data: "the operator [-] takes
+ * (Date, Period), returns Date, and evaluates with this closure". Built via
+ * the Operator::infix() builder.
  *
  * resolve() answers with a resolution when both operand types fit the
  * declared slots; the answer carries the
@@ -28,13 +24,13 @@ use Superscript\Axiom\Types\TypeRelations;
  * reads them at construction to detect two rows that could both match
  * the same expression, which it refuses as ambiguous.
  */
-final readonly class InfixSignature implements BinaryOperatorRule
+final readonly class InfixOperatorRule implements BinaryOperatorRule
 {
     public function __construct(
         public string $operator,
         public Type $left,
         public Type $right,
-        public Type $returns,
+        public Type $returnType,
         private Closure $evaluation,
     ) {}
 
@@ -69,6 +65,6 @@ final readonly class InfixSignature implements BinaryOperatorRule
             );
         }
 
-        return new ResolvedOperation($this->returns, $this->evaluation);
+        return new ResolvedOperation($this->returnType, $this->evaluation);
     }
 }

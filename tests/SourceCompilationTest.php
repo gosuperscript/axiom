@@ -82,14 +82,14 @@ final readonly class HostInfixSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(ResolvedOperation::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
@@ -183,9 +183,9 @@ final class SourceCompilationTest extends TestCase
             {
                 return [
                     Operator::infix('at-most')
-                        ->signature(new NumberType(), new NumberType())
+                        ->takes(new NumberType(), new NumberType())
                         ->returns(new \Superscript\Axiom\Types\BooleanType())
-                        ->evaluate(fn(int|float $left, int|float $right): bool => $left <= $right),
+                        ->evaluatesWith(fn(int|float $left, int|float $right): bool => $left <= $right),
                 ];
             }
 

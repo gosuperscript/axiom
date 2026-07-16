@@ -2,29 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Closure;
-use Superscript\Axiom\Operators\OperatorResolution;
-use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Operators\UnaryOperatorRule;
-use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeRelations;
 
 /**
- * The unary twin of {@see InfixSignature}: this operator, over this
- * operand type, returns this type via this closure. The operand type is
- * public for the same reason — Dialect construction refuses two rows for
- * the same operator that admit a common operand type.
+ * The unary twin of {@see InfixOperatorRule}: this operator takes this
+ * operand type, returns this result type, and evaluates with this closure.
+ * The operand type is public for the same reason — Dialect construction
+ * refuses two rows for the same operator that admit a common operand type.
  */
-final readonly class PrefixSignature implements UnaryOperatorRule
+final readonly class PrefixOperatorRule implements UnaryOperatorRule
 {
     public function __construct(
         public string $operator,
         public Type $operand,
-        public Type $returns,
+        public Type $returnType,
         private Closure $evaluation,
     ) {}
 
@@ -46,6 +42,6 @@ final readonly class PrefixSignature implements UnaryOperatorRule
             ), [$admitted->unwrapErr()]);
         }
 
-        return new ResolvedOperation($this->returns, $this->evaluation);
+        return new ResolvedOperation($this->returnType, $this->evaluation);
     }
 }
