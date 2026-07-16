@@ -73,14 +73,14 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(Operator::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
@@ -384,16 +384,16 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function signature_built_rules_are_full_dialect_citizens(): void
+    public function builder_declared_rules_are_full_dialect_citizens(): void
     {
         $extension = new class extends Extension {
             public function operators(): array
             {
                 return [
                     Operator::infix('++')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
                 ];
             }
         };

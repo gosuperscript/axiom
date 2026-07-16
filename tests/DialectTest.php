@@ -32,14 +32,14 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithOperands::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\InfixSignatureWithReturn::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignature::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureBuilder::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithOperand::class)]
-#[UsesClass(\Superscript\Axiom\Operators\Signatures\PrefixSignatureWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
+#[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRule::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
+#[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Has::class)]
 #[UsesClass(\Superscript\Axiom\Operators\In::class)]
@@ -76,9 +76,9 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::infix('++')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
                 ];
             }
 
@@ -86,9 +86,9 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::prefix('abs')
-                        ->signature(new NumberType())
+                        ->takes(new NumberType())
                         ->returns(new NumberType())
-                        ->evaluate(fn(int|float $n) => abs($n)),
+                        ->evaluatesWith(fn(int|float $n) => abs($n)),
                 ];
             }
         });
@@ -137,9 +137,9 @@ final class DialectTest extends TestCase
                     // owners, and which evaluation runs must never depend on
                     // list order.
                     Operator::infix('+')
-                        ->signature(new OptionType(new NumberType()), new OptionType(new NumberType()))
+                        ->takes(new OptionType(new NumberType()), new OptionType(new NumberType()))
                         ->returns(new NumberType())
-                        ->evaluate(fn(?int $a, ?int $b) => ($a ?? 0) + ($b ?? 0)),
+                        ->evaluatesWith(fn(?int $a, ?int $b) => ($a ?? 0) + ($b ?? 0)),
                 ];
             }
         });
@@ -157,13 +157,13 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::infix('++')
-                        ->signature(new ListType(new NumberType()), new ListType(new NumberType()))
+                        ->takes(new ListType(new NumberType()), new ListType(new NumberType()))
                         ->returns(new ListType(new NumberType()))
-                        ->evaluate(fn(array $a, array $b) => [...$a, ...$b]),
+                        ->evaluatesWith(fn(array $a, array $b) => [...$a, ...$b]),
                     Operator::infix('++')
-                        ->signature(new DictType(new NumberType()), new DictType(new NumberType()))
+                        ->takes(new DictType(new NumberType()), new DictType(new NumberType()))
                         ->returns(new DictType(new NumberType()))
-                        ->evaluate(fn(array $a, array $b) => [...$a, ...$b]),
+                        ->evaluatesWith(fn(array $a, array $b) => [...$a, ...$b]),
                 ];
             }
         });
@@ -189,9 +189,9 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::infix('+')
-                        ->signature(new LiteralType(5), new LiteralType(5))
+                        ->takes(new LiteralType(5), new LiteralType(5))
                         ->returns(new NumberType())
-                        ->evaluate(fn(int $a, int $b) => 10),
+                        ->evaluatesWith(fn(int $a, int $b) => 10),
                 ];
             }
         });
@@ -228,13 +228,13 @@ final class DialectTest extends TestCase
                 return [
                     new \Superscript\Axiom\Operators\Equality('==', negated: false),
                     Operator::infix('++')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
                     Operator::infix('++')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $b . $a),
+                        ->evaluatesWith(fn(string $a, string $b) => $b . $a),
                 ];
             }
         });
@@ -251,13 +251,13 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::prefix('abs')
-                        ->signature(new NumberType())
+                        ->takes(new NumberType())
                         ->returns(new NumberType())
-                        ->evaluate(fn(int|float $n) => abs($n)),
+                        ->evaluatesWith(fn(int|float $n) => abs($n)),
                     Operator::prefix('abs')
-                        ->signature(new LiteralType(5))
+                        ->takes(new LiteralType(5))
                         ->returns(new NumberType())
-                        ->evaluate(fn(int $n) => 5),
+                        ->evaluatesWith(fn(int $n) => 5),
                 ];
             }
         });
@@ -289,13 +289,13 @@ final class DialectTest extends TestCase
                 return [
                     $this->nonRow,
                     Operator::prefix('abs')
-                        ->signature(new NumberType())
+                        ->takes(new NumberType())
                         ->returns(new NumberType())
-                        ->evaluate(fn(int|float $n) => abs($n)),
+                        ->evaluatesWith(fn(int|float $n) => abs($n)),
                     Operator::prefix('abs')
-                        ->signature(new NumberType())
+                        ->takes(new NumberType())
                         ->returns(new NumberType())
-                        ->evaluate(fn(int|float $n) => -abs($n)),
+                        ->evaluatesWith(fn(int|float $n) => -abs($n)),
                 ];
             }
         });
@@ -309,9 +309,9 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::infix('+')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
                 ];
             }
         });
@@ -331,9 +331,9 @@ final class DialectTest extends TestCase
             {
                 return [
                     Operator::prefix('-')
-                        ->signature(new LiteralType(5))
+                        ->takes(new LiteralType(5))
                         ->returns(new NumberType())
-                        ->evaluate(fn(int $n) => -$n),
+                        ->evaluatesWith(fn(int $n) => -$n),
                 ];
             }
         });

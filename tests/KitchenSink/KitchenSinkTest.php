@@ -315,7 +315,7 @@ class KitchenSinkTest extends TestCase
     #[Test]
     public function a_domain_operator_is_one_declaration_checked_and_run_alike(): void
     {
-        // A host teaches the language a domain operator with the signature
+        // A host teaches the language a domain operator with the rule
         // builder: one declaration is one verdict — the compiler certifies
         // the row and binds its evaluation into the program.
         $percentage = new class extends \Superscript\Axiom\Extension {
@@ -323,9 +323,9 @@ class KitchenSinkTest extends TestCase
             {
                 return [
                     \Superscript\Axiom\Operators\Operator::infix('%of')
-                        ->signature(new NumberType(), new NumberType())
+                        ->takes(new NumberType(), new NumberType())
                         ->returns(new NumberType())
-                        ->evaluate(fn(int|float $percent, int|float $total) => $total * $percent / 100),
+                        ->evaluatesWith(fn(int|float $percent, int|float $total) => $total * $percent / 100),
                 ];
             }
         };

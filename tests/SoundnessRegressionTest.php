@@ -136,9 +136,9 @@ final class SoundnessRegressionTest extends TestCase
             {
                 return [
                     Operator::infix('+')
-                        ->signature(new StringType(), new StringType())
+                        ->takes(new StringType(), new StringType())
                         ->returns(new StringType())
-                        ->evaluate(fn(string $a, string $b) => $a . $b),
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
                 ];
             }
         };

@@ -128,25 +128,25 @@ final class EmailType implements Type
 
 ## Custom operators
 
-Operators are the centerpiece seam, and the front door is one declaration per rule: a **signature** — a row in a dispatch table. Date arithmetic, complete:
+Operators are the centerpiece seam, and the front door is one declaration per fixed rule: a row in a dispatch table. Date arithmetic, complete:
 
 ```php
 use Superscript\Axiom\Operators\Operator;
 
 Operator::infix('-')
-    ->signature(new DateType(), new PeriodType())
+    ->takes(new DateType(), new PeriodType())
     ->returns(new DateType())
-    ->evaluate(fn (Date $d, Period $p) => $d->minus($p)),
+    ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p)),
 
 Operator::infix('-')
-    ->signature(new DateType(), new DateType())
+    ->takes(new DateType(), new DateType())
     ->returns(new PeriodType())
-    ->evaluate(fn (Date $a, Date $b) => $a->until($b)),
+    ->evaluatesWith(fn (Date $a, Date $b) => $a->until($b)),
 
 Operator::prefix('abs')
-    ->signature(new NumberType())
+    ->takes(new NumberType())
     ->returns(new NumberType())
-    ->evaluate(fn (int|float $n) => abs($n)),
+    ->evaluatesWith(fn (int|float $n) => abs($n)),
 ```
 
 A row resolves like this: when the compiler asks about your operator over some operand types, the row checks admissibility (`admits`) against its declared types — with generated mismatch messages that read uniformly with core's: `[-] expects Date and Period; got Date and String.` — and on success returns its declared return type together with your closure. The compiler binds that closure into the program; **no dispatch happens at runtime**, and your closure only ever sees values of the operand types you declared, because the compiler proved them and the boundary admitted them.
@@ -158,15 +158,15 @@ The closure's contract:
 - **Errors that depend on the values** — division by zero, an overflowing add, a date outside your calendar's range — are signaled by **returning an `Err`**. The type check cannot rule these out (the types were fine; the values weren't), so they are legitimate evaluation results the program reports to its caller. Core's division does exactly this:
 
   ```php
-  Operator::infix('/')->signature($number, $number)->returns($number)
-      ->evaluate(fn (int|float $l, int|float $r) => attempt(fn () => $l / $r)),
+  Operator::infix('/')->takes($number, $number)->returns($number)
+      ->evaluatesWith(fn (int|float $l, int|float $r) => attempt(fn () => $l / $r)),
       // attempt() catches DivisionByZeroError and returns it as Err
   ```
 
 - A **thrown exception propagates.** The compiler guarantees the closure only sees values of its declared types, so an uncaught throw is a defect in your extension, not a property of the input — it should crash in your stack trace, not masquerade as an evaluation error.
 - It must be **total** over its declared operand types: every value of them evaluates without escaping. This is the one obligation you carry, and the totality harness checks it generatively (§Testing).
 
-The chain is staged — `signature` → `returns` → `evaluate` — and the final `evaluate(...)` call *is* the compiled rule: there is no `build()` to forget, and a half-declared signature is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the compiled node short-circuits absent operands; optionality propagates structurally), so an Option signature would declare a claim that can never fire — declare the present type.
+The chain is staged — `takes` → `returns` → `evaluatesWith` — and the final `evaluatesWith(...)` call completes and returns the rule: there is no `build()` to forget, and a half-declared rule is unrepresentable. One asymmetry: `Operator::prefix` **rejects an `Option` operand type loudly**. Absence never reaches a unary rule (the compiled node short-circuits absent operands; optionality propagates structurally), so a prefix rule taking `Option` would declare a claim that can never fire — declare the present type.
 
 **Ambiguity is refused, never ranked.** Two rows for the same operator whose slots are **jointly admissible** — some operand type would resolve both — are a `Dialect` construction error, and which evaluation runs must never depend on registration order. The relation is about operand *types*, not values: a `List` row beside a `Dict` row is a legal pair (the empty array inhabits both types, but no compilable operand type reaches both rows), while a `Literal(5)` row beside a `Number` row is refused (a `5`-typed operand resolves both, and there is no precedence to pick a winner — specialization included). Declare disjoint rows (the money pattern below), or hand-write a type function that refuses what another rule owns.
 
@@ -184,13 +184,13 @@ final class TimeExtension extends Extension
     {
         return [
             Operator::infix('-')
-                ->signature(new DateType(), new PeriodType())
+                ->takes(new DateType(), new PeriodType())
                 ->returns(new DateType())
-                ->evaluate(fn (Date $d, Period $p) => $d->minus($p)),
+                ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p)),
             Operator::infix('-')
-                ->signature(new DateType(), new DateType())
+                ->takes(new DateType(), new DateType())
                 ->returns(new PeriodType())
-                ->evaluate(fn (Date $a, Date $b) => $a->until($b)),
+                ->evaluatesWith(fn (Date $a, Date $b) => $a->until($b)),
         ];
     }
 
@@ -225,7 +225,7 @@ There is no other wiring path: a compiled program embeds the resolutions of the 
 
 ### Parameterized families: enumerate
 
-A signature's return type is fixed. Rules whose typing is *parameterized* — money, where `Money<'GBP'> + Money<'GBP'> → Money<'GBP'>` but `Money<'GBP'> + Money<'USD'>` must be refused — are declared by **enumeration over the parameter space**, which is host-finite at composition time:
+A fixed rule's return type is fixed. Rules whose typing is *parameterized* — money, where `Money<'GBP'> + Money<'GBP'> → Money<'GBP'>` but `Money<'GBP'> + Money<'USD'>` must be refused — are declared by **enumeration over the parameter space**, which is host-finite at composition time:
 
 ```php
 final class MoneyExtension extends Extension
@@ -237,9 +237,9 @@ final class MoneyExtension extends Extension
     {
         return array_map(
             fn (string $c) => Operator::infix('+')
-                ->signature(new MoneyType($c), new MoneyType($c))
+                ->takes(new MoneyType($c), new MoneyType($c))
                 ->returns(new MoneyType($c))
-                ->evaluate(fn (Money $a, Money $b) => $a->plus($b)),
+                ->evaluatesWith(fn (Money $a, Money $b) => $a->plus($b)),
             $this->currencies,
         );
     }
@@ -252,16 +252,16 @@ The package owns value equality for its opaque values in exactly the same way. F
 
 ```php
 Operator::infix('==')
-    ->signature(new MoneyType($currency), new MoneyType($currency))
+    ->takes(new MoneyType($currency), new MoneyType($currency))
     ->returns(new BooleanType())
-    ->evaluate(fn (Money $left, Money $right) => $left->isSameValueAs($right));
+    ->evaluatesWith(fn (Money $left, Money $right) => $left->isSameValueAs($right));
 ```
 
 Core's equality rule refuses these opaque operands; the package row is therefore the lone successful resolution. Register the negated aliases as separate rows with the negation captured in their evaluation, just as core does for its own aliases.
 
 ### Advanced: writing a rule by hand
 
-A signature is a row; some rules are not rows. Implement `BinaryOperatorRule` (binary) or `UnaryOperatorRule` directly when you need:
+A fixed rule is a row; some rules are not rows. Implement `BinaryOperatorRule` (binary) or `UnaryOperatorRule` directly when you need:
 
 - **Verdicts that are relations, not slots** — core's equality first establishes that its value evaluator supports both operand domains, then asks whether they overlap; no fixed operand type expresses that pair of judgments.
 - **Dead findings** — returning `DeadOperation` for an operation that is *statically constant*, so hosts can render it as a probable author bug rather than an unsupported operation.
@@ -461,7 +461,7 @@ Be clear about what the harness quantifies over (RFC item 38). Its semantics com
 - **Generated** — the sweep over every certified pair of the family. Nobody hand-writes cases.
 - **Trusted** — everything outside the family. The harness is *evidence, not proof*: a certification test sampling the domain at its edges. Totality over the full domain is the obligation you certified when your rule answered `Ok`; the library trusts it and never re-checks results at runtime.
 
-Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the signature builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time. (The same obligation applies to a source compiler callback: its evaluation must land in the type it declares, and your suite should prove it on real fixtures.)
+Core's `tests/Operators/TotalityHarnessTest.php` is the reference implementation; point it at your dialect and your specimens. The one obligation the fixed-rule builder *cannot* discharge for you is your closure being total over the types it declared — and, for the admission law, your type's `coerce`/`assert` agreeing on the value domain. These two properties carry the entire runtime trust chain; everything else was proven at compile time. (The same obligation applies to a source compiler callback: its evaluation must land in the type it declares, and your suite should prove it on real fixtures.)
 
 ## What stays yours
 

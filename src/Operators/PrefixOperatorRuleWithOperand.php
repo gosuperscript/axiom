@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\Type;
 
 /**
  * Stage two: operand type declared, the return type comes next.
  */
-final readonly class PrefixSignatureWithOperand
+final readonly class PrefixOperatorRuleWithOperand
 {
     public function __construct(
         private string $operator,
         private Type $operand,
     ) {}
 
-    public function returns(Type $type): PrefixSignatureWithReturn
+    public function returns(Type $returnType): PrefixOperatorRuleWithReturn
     {
-        return new PrefixSignatureWithReturn($this->operator, $this->operand, $type);
+        return new PrefixOperatorRuleWithReturn($this->operator, $this->operand, $returnType);
     }
 }

@@ -68,7 +68,7 @@ class ListTypeTest extends TestCase
     public function assert_rejects_an_associative_array_instead_of_reindexing_it(): void
     {
         // Strict membership: asserting never converts. Reindexing an
-        // associative array is coercion, and signatures dispatch on assert —
+        // associative array is coercion, and fixed rules dispatch on assert —
         // a claim that converts would claim values outside the type.
         $type = new ListType(new NumberType());
 

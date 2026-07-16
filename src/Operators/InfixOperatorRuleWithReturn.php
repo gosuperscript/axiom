@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\Type;
 
 /**
- * Stage three: the final step compiles the row — there is no build() to
+ * Stage three: the final step completes the rule — there is no build() to
  * forget.
  */
-final readonly class InfixSignatureWithReturn
+final readonly class InfixOperatorRuleWithReturn
 {
     public function __construct(
         private string $operator,
         private Type $left,
         private Type $right,
-        private Type $returns,
+        private Type $returnType,
     ) {}
 
     /**
@@ -26,8 +26,8 @@ final readonly class InfixSignatureWithReturn
      * Result passes through (value-dependent partiality); a throw
      * propagates ({@see \Superscript\Axiom\Operators\ResolvedOperation}).
      */
-    public function evaluate(callable $evaluation): InfixSignature
+    public function evaluatesWith(callable $evaluation): InfixOperatorRule
     {
-        return new InfixSignature($this->operator, $this->left, $this->right, $this->returns, $evaluation(...));
+        return new InfixOperatorRule($this->operator, $this->left, $this->right, $this->returnType, $evaluation(...));
     }
 }

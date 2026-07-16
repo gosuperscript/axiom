@@ -12,9 +12,9 @@ use Superscript\Axiom\Operators\Equality;
 use Superscript\Axiom\Operators\Has;
 use Superscript\Axiom\Operators\In;
 use Superscript\Axiom\Operators\Intersects;
+use Superscript\Axiom\Operators\InfixOperatorRule;
 use Superscript\Axiom\Operators\Operator;
-use Superscript\Axiom\Operators\Signatures\InfixSignature;
-use Superscript\Axiom\Operators\Signatures\PrefixSignature;
+use Superscript\Axiom\Operators\PrefixOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\BooleanType;
@@ -35,7 +35,7 @@ use function Superscript\Monads\Result\attempt;
  * every selected evaluation into the Program, so there is nothing at
  * runtime to miscompose.
  *
- * Most core rules are dispatch-table rows (the signature builder's
+ * Most core rules are dispatch-table rows (the operator rule builder's
  * output); equality and the set operators compute their answer from the
  * operand types. Ambiguity is refused at the earliest moment it exists:
  * two rows for the same operator whose slots admit a common operand type
@@ -69,28 +69,28 @@ final readonly class Dialect
 
         return new self(
             binaryRules: [
-                Operator::infix('+')->signature($number, $number)->returns($number)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left + $right),
-                Operator::infix('-')->signature($number, $number)->returns($number)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left - $right),
-                Operator::infix('*')->signature($number, $number)->returns($number)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left * $right),
-                Operator::infix('/')->signature($number, $number)->returns($number)
-                    ->evaluate(fn(int|float $left, int|float $right) => attempt(fn() => $left / $right)),
-                Operator::infix('<')->signature($number, $number)->returns($boolean)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left < $right),
-                Operator::infix('<=')->signature($number, $number)->returns($boolean)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left <= $right),
-                Operator::infix('>')->signature($number, $number)->returns($boolean)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left > $right),
-                Operator::infix('>=')->signature($number, $number)->returns($boolean)
-                    ->evaluate(fn(int|float $left, int|float $right) => $left >= $right),
-                Operator::infix('&&')->signature($boolean, $boolean)->returns($boolean)
-                    ->evaluate(fn(bool $left, bool $right) => $left && $right),
-                Operator::infix('||')->signature($boolean, $boolean)->returns($boolean)
-                    ->evaluate(fn(bool $left, bool $right) => $left || $right),
-                Operator::infix('xor')->signature($boolean, $boolean)->returns($boolean)
-                    ->evaluate(fn(bool $left, bool $right) => $left xor $right),
+                Operator::infix('+')->takes($number, $number)->returns($number)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left + $right),
+                Operator::infix('-')->takes($number, $number)->returns($number)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left - $right),
+                Operator::infix('*')->takes($number, $number)->returns($number)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left * $right),
+                Operator::infix('/')->takes($number, $number)->returns($number)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => attempt(fn() => $left / $right)),
+                Operator::infix('<')->takes($number, $number)->returns($boolean)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left < $right),
+                Operator::infix('<=')->takes($number, $number)->returns($boolean)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left <= $right),
+                Operator::infix('>')->takes($number, $number)->returns($boolean)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left > $right),
+                Operator::infix('>=')->takes($number, $number)->returns($boolean)
+                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left >= $right),
+                Operator::infix('&&')->takes($boolean, $boolean)->returns($boolean)
+                    ->evaluatesWith(fn(bool $left, bool $right) => $left && $right),
+                Operator::infix('||')->takes($boolean, $boolean)->returns($boolean)
+                    ->evaluatesWith(fn(bool $left, bool $right) => $left || $right),
+                Operator::infix('xor')->takes($boolean, $boolean)->returns($boolean)
+                    ->evaluatesWith(fn(bool $left, bool $right) => $left xor $right),
                 new Equality('=', negated: false),
                 new Equality('==', negated: false),
                 new Equality('===', negated: false),
@@ -101,12 +101,12 @@ final readonly class Dialect
                 new Intersects(),
             ],
             unaryRules: [
-                Operator::prefix('!')->signature($boolean)->returns($boolean)
-                    ->evaluate(fn(bool $operand) => !$operand),
-                Operator::prefix('not')->signature($boolean)->returns($boolean)
-                    ->evaluate(fn(bool $operand) => !$operand),
-                Operator::prefix('-')->signature($number)->returns($number)
-                    ->evaluate(fn(int|float $operand) => -$operand),
+                Operator::prefix('!')->takes($boolean)->returns($boolean)
+                    ->evaluatesWith(fn(bool $operand) => !$operand),
+                Operator::prefix('not')->takes($boolean)->returns($boolean)
+                    ->evaluatesWith(fn(bool $operand) => !$operand),
+                Operator::prefix('-')->takes($number)->returns($number)
+                    ->evaluatesWith(fn(int|float $operand) => -$operand),
             ],
             literalMappings: [],
             sourceCompilers: [],
@@ -184,7 +184,7 @@ final readonly class Dialect
      */
     private static function assertUnambiguousRows(array $binaryRules, array $unaryRules): void
     {
-        $infixRows = array_values(array_filter($binaryRules, fn(BinaryOperatorRule $rule) => $rule instanceof InfixSignature));
+        $infixRows = array_values(array_filter($binaryRules, fn(BinaryOperatorRule $rule) => $rule instanceof InfixOperatorRule));
 
         foreach ($infixRows as $index => $row) {
             foreach (array_slice($infixRows, $index + 1) as $other) {
@@ -205,7 +205,7 @@ final readonly class Dialect
             }
         }
 
-        $prefixRows = array_values(array_filter($unaryRules, fn(UnaryOperatorRule $rule) => $rule instanceof PrefixSignature));
+        $prefixRows = array_values(array_filter($unaryRules, fn(UnaryOperatorRule $rule) => $rule instanceof PrefixOperatorRule));
 
         foreach ($prefixRows as $index => $row) {
             foreach (array_slice($prefixRows, $index + 1) as $other) {

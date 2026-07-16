@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Superscript\Axiom\Operators\Signatures;
+namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\Type;
 
 /**
- * Stage three: the final step compiles the row.
+ * Stage three: the final step completes the rule.
  */
-final readonly class PrefixSignatureWithReturn
+final readonly class PrefixOperatorRuleWithReturn
 {
     public function __construct(
         private string $operator,
         private Type $operand,
-        private Type $returns,
+        private Type $returnType,
     ) {}
 
     /**
@@ -23,8 +23,8 @@ final readonly class PrefixSignatureWithReturn
      * is wrapped in Ok; a returned Result passes through; a throw
      * propagates ({@see \Superscript\Axiom\Operators\ResolvedOperation}).
      */
-    public function evaluate(callable $evaluation): PrefixSignature
+    public function evaluatesWith(callable $evaluation): PrefixOperatorRule
     {
-        return new PrefixSignature($this->operator, $this->operand, $this->returns, $evaluation(...));
+        return new PrefixOperatorRule($this->operator, $this->operand, $this->returnType, $evaluation(...));
     }
 }
