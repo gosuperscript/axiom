@@ -101,7 +101,7 @@ final readonly class CoreSourceCompilers
      */
     private static function compileSymbol(SymbolSource $source, SourceCompilation $compilation): Result
     {
-        return $compilation->symbol($source->name, $source->namespace);
+        return $compilation->symbol($source);
     }
 
     /**

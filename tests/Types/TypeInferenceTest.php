@@ -48,6 +48,7 @@ use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(TypeInference::class)]
 #[CoversClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeEnvironment::class)]
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
@@ -150,6 +151,15 @@ final class TypeInferenceTest extends TestCase
         $this->assertSame('5', self::describe($inference->infer(new StaticSource(5), $env)));
         $this->assertSame('true', self::describe($inference->infer(new StaticSource(true), $env)));
         $this->assertSame('2.5', self::describe($inference->infer(new StaticSource(2.5), $env)));
+    }
+
+    #[Test]
+    public function the_lower_level_compiler_includes_core_source_compilers_by_default(): void
+    {
+        $dialect = Dialect::core();
+        $inference = new TypeInference($dialect->operators(), $dialect->unaryOperators());
+
+        $this->assertSame("'core'", self::describe($inference->infer(new StaticSource('core'), self::env())));
     }
 
     #[Test]

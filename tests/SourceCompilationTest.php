@@ -68,10 +68,19 @@ final readonly class HostPrefixSource implements Source
     ) {}
 }
 
-/** @internal Test fixture for a source compiler that resolves a symbol by name. */
+/** @internal Test fixture for a source compiler that owns a symbol reference. */
 final readonly class HostSymbolSource implements Source
 {
-    public function __construct(public string $name) {}
+    public function __construct(public SymbolSource $symbol) {}
+}
+
+/** @internal Test fixture for a source compiler that hides a symbol name. */
+final readonly class HiddenSymbolSource implements Source
+{
+    public function __construct(
+        public string $name,
+        public SymbolSource $visible,
+    ) {}
 }
 
 /** @internal Test fixture for a source compiler that types an embedded PHP value. */
@@ -81,6 +90,7 @@ final readonly class HostLiteralSource implements Source
 }
 
 #[CoversClass(SourceCompilation::class)]
+#[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(Dialect::class)]
@@ -93,7 +103,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeInference::class)]
+#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
@@ -132,7 +142,7 @@ final class SourceCompilationTest extends TestCase
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
             $compileInfix ?? fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
-            $compileSymbol ?? fn(string $name, ?string $namespace): Result => Err(new TypeMismatch('No symbol expected.')),
+            $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
         );
     }
@@ -224,21 +234,22 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
-    public function symbol_delegates_the_name_and_defaults_the_namespace_to_null(): void
+    public function symbol_delegates_the_owned_source(): void
     {
         $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $seen = [];
         $compilation = self::compilation(
-            compileSymbol: function (string $name, ?string $namespace) use (&$seen, $node): Result {
-                $seen[] = [$name, $namespace];
+            compileSymbol: function (SymbolSource $symbol) use (&$seen, $node): Result {
+                $seen[] = $symbol;
 
                 return Ok($node);
             },
         );
 
-        $this->assertSame($node, $compilation->symbol('amount')->unwrap());
-        $this->assertSame($node, $compilation->symbol('amount', 'billing')->unwrap());
-        $this->assertSame([['amount', null], ['amount', 'billing']], $seen);
+        $symbol = new SymbolSource('amount', 'billing');
+
+        $this->assertSame($node, $compilation->symbol($symbol)->unwrap());
+        $this->assertSame([$symbol], $seen);
     }
 
     #[Test]
@@ -330,19 +341,48 @@ final class SourceCompilationTest extends TestCase
             {
                 return [
                     HostSymbolSource::class => fn(HostSymbolSource $source, SourceCompilation $compilation): Result => $compilation
-                        ->symbol($source->name),
+                        ->symbol($source->symbol),
                 ];
             }
         };
 
-        $program = (new Expression(
-            new HostSymbolSource('amount'),
+        $expression = new Expression(
+            new HostSymbolSource(new SymbolSource('amount')),
             dialect: Dialect::core()->with($extension),
             declarations: ['amount' => new NumberType()],
-        ))->compile()->unwrap();
+        );
+        $program = $expression->compile()->unwrap();
 
+        $this->assertSame(['amount'], $expression->parameters());
         $this->assertInstanceOf(NumberType::class, $program->returns);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_host_compiler_cannot_hide_a_symbol_dependency_from_source_analysis(): void
+    {
+        $extension = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [
+                    HiddenSymbolSource::class => fn(HiddenSymbolSource $source, SourceCompilation $compilation): Result => $compilation
+                        ->symbol(new SymbolSource($source->name)),
+                ];
+            }
+        };
+
+        $expression = new Expression(
+            new HiddenSymbolSource('amount', new SymbolSource('amount', 'billing')),
+            dialect: Dialect::core()->with($extension),
+            declarations: ['amount' => new NumberType()],
+        );
+        $result = $expression->compile();
+
+        $this->assertSame(['billing.amount'], $expression->parameters());
+        $this->assertStringContainsString(
+            'symbol dependencies belong in the persisted source tree',
+            $result->unwrapErr()->message,
+        );
     }
 
     #[Test]

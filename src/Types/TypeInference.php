@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\CoreSourceCompilers;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
@@ -30,6 +33,9 @@ use function Superscript\Monads\Result\Ok;
  */
 final readonly class TypeInference
 {
+    /** @var array<class-string<Source>, \Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+    private array $sourceCompilers;
+
     /**
      * @param array<class-string<Source>, \Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
      */
@@ -37,8 +43,15 @@ final readonly class TypeInference
         private BinaryOperatorResolver $operators,
         private UnaryOperatorResolver $unaryOperators,
         private LiteralTypeRegistry $literals = new LiteralTypeRegistry(),
-        private array $sourceCompilers = [],
-    ) {}
+        array $sourceCompilers = [],
+    ) {
+        // The lower-level TypeInference API compiled core nodes before they
+        // moved into the registry. Preserve that contract when callers omit
+        // the map or pass only their host compilers. A direct attempt to
+        // replace a core compiler remains ineffective, as it was before;
+        // Dialect composition rejects the duplicate earlier and by name.
+        $this->sourceCompilers = CoreSourceCompilers::compilers() + $sourceCompilers;
+    }
 
     /**
      * @return Result<CompiledNode, TypeMismatch>
@@ -54,7 +67,7 @@ final readonly class TypeInference
             )));
         }
 
-        return $compiler($source, $this->compilation($environment))
+        return $compiler($source, $this->compilation($environment, $source))
             ->map(fn(CompiledNode $node) => $node->forSource($source));
     }
 
@@ -62,15 +75,39 @@ final readonly class TypeInference
      * The full compiler capability for one environment — what every source
      * compiler receives, first-party and host alike.
      */
-    private function compilation(TypeEnvironment $environment): SourceCompilation
+    private function compilation(TypeEnvironment $environment, Source $owner): SourceCompilation
     {
         return new SourceCompilation(
             fn(Source $child): Result => $this->compile($child, $environment),
             fn(Type $left, string $operator, Type $right): Result => $this->operators->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(string $name, ?string $namespace): Result => $environment->nodeOfSymbol($name, $namespace, $this),
+            fn(SymbolSource $symbol): Result => $this->compileOwnedSymbol($symbol, $owner, $environment),
             fn(mixed $value): Result => $this->inferValue($value),
         );
+    }
+
+    /**
+     * A symbol dependency must be part of the persisted source tree. That
+     * keeps parameter discovery and definition-cycle analysis complete;
+     * constructing a reference inside a compiler would hide an edge from
+     * both structural passes.
+     *
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment): Result
+    {
+        if (!array_any(
+            UnboundSymbols::in($owner),
+            fn(SymbolSource $candidate) => $candidate->name === $symbol->name && $candidate->namespace === $symbol->namespace,
+        )) {
+            return Err(new TypeMismatch(sprintf(
+                'Symbol [%s] is not represented by a SymbolSource in [%s]; symbol dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
+                SymbolSource::key($symbol->name, $symbol->namespace),
+                $owner::class,
+            )));
+        }
+
+        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this);
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Types;
 
 use SebastianBergmann\Exporter\Exporter;
 use Superscript\Axiom\Exceptions\TransformValueException;
+use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
 use Superscript\Monads\Result\Err;
@@ -44,6 +45,10 @@ final readonly class UnionType implements Type
         $unique = [];
 
         foreach ($types as $type) {
+            if ($type->shape() instanceof NeverShape) {
+                continue;
+            }
+
             if (!array_any($unique, fn(Type $existing) => TypeRelations::areEquivalent($existing, $type)->isOk())) {
                 $unique[] = $type;
             }

@@ -24,6 +24,7 @@ use Superscript\Axiom\Types\TypeInference;
 
 #[CoversClass(TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]

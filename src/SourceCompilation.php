@@ -6,6 +6,7 @@ namespace Superscript\Axiom;
 
 use Closure;
 use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
@@ -28,7 +29,7 @@ final readonly class SourceCompilation
      * @param Closure(Source): Result<CompiledNode, TypeMismatch> $compileNode
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
-     * @param Closure(string, ?string): Result<CompiledNode, TypeMismatch> $compileSymbol
+     * @param Closure(SymbolSource): Result<CompiledNode, TypeMismatch> $compileSymbol
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      */
     public function __construct(
@@ -92,17 +93,18 @@ final readonly class SourceCompilation
     }
 
     /**
-     * Compile a symbol reference in the current environment: a declared
-     * input reads its admitted binding, a defined symbol compiles its
-     * definition once and evaluates it memoized per invocation. This is the
-     * same node an ordinary SymbolSource compiles to, so a host source that
-     * names a symbol embeds exactly the language's symbol semantics.
+     * Compile a symbol reference owned by the current source in the current
+     * environment: a declared input reads its admitted binding, a defined
+     * symbol compiles its definition once and evaluates it memoized per
+     * invocation. The SymbolSource must be a persisted child of the owning
+     * source so parameter discovery and definition-cycle analysis see the
+     * same dependency the compiler follows.
      *
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function symbol(string $name, ?string $namespace = null): Result
+    public function symbol(SymbolSource $symbol): Result
     {
-        return ($this->compileSymbol)($name, $namespace);
+        return ($this->compileSymbol)($symbol);
     }
 
     /**

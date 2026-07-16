@@ -27,6 +27,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(TransformValueException::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(TypeDescriber::class)]
 #[UsesClass(LiteralShape::class)]
@@ -107,5 +108,9 @@ final class UnionTypeTest extends TestCase
         $this->assertSame("'a' | 'b'", TypeDescriber::describe($literals));
 
         $this->assertInstanceOf(\Superscript\Axiom\Types\NeverType::class, UnionType::join());
+        $this->assertInstanceOf(
+            NumberType::class,
+            UnionType::join(new \Superscript\Axiom\Types\NeverType(), new NumberType()),
+        );
     }
 }
