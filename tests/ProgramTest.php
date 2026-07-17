@@ -63,6 +63,11 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(Program::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\CompiledSource::class)]
+#[UsesClass(\Superscript\Axiom\BoundOperation::class)]
+#[UsesClass(\Superscript\Axiom\SourceEvaluation::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
@@ -451,6 +456,11 @@ final class ProgramTest extends TestCase
         $this->assertSame(0, $observer->annotations['matched_arm']);
         $this->assertContains(['memo', 'miss'], $observer->timeline);
         $this->assertContains(['memo', 'hit'], $observer->timeline);
+        $this->assertSame(
+            2,
+            count(array_filter($observer->timeline, fn(array $annotation): bool => $annotation === ['result', 10])),
+            'both the infix body and the enclosing match annotate their result',
+        );
     }
 
     #[Test]

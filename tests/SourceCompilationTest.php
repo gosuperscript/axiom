@@ -9,8 +9,13 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\BoundOperation;
 use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\CompiledSources;
 use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
@@ -18,12 +23,15 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
+use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -90,6 +98,12 @@ final readonly class HostLiteralSource implements Source
 }
 
 #[CoversClass(SourceCompilation::class)]
+#[CoversClass(CompiledSource::class)]
+#[CoversClass(CompiledSources::class)]
+#[CoversClass(SourceEvaluation::class)]
+#[CoversClass(BoundOperation::class)]
+#[CoversClass(CompilationAborted::class)]
+#[CoversClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
@@ -100,6 +114,10 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(Expression::class)]
 #[UsesClass(Extension::class)]
 #[UsesClass(Runtime::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
@@ -127,10 +145,16 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(OptionType::class)]
+#[UsesClass(StringType::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 final class SourceCompilationTest extends TestCase
 {
@@ -162,7 +186,7 @@ final class SourceCompilationTest extends TestCase
             return Ok($node);
         });
 
-        $this->assertSame($node, $compilation->compile($source)->unwrap());
+        $this->assertSame($node, $compilation->child($source)->node());
         $this->assertSame($source, $seen);
     }
 
@@ -173,11 +197,17 @@ final class SourceCompilationTest extends TestCase
             new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
         ));
 
-        $compiled = $compilation->compileAll([new StaticSource(1), new StaticSource(2)])->unwrap();
+        $compiled = $compilation->children([
+            'first' => new StaticSource(1),
+            'second' => new StaticSource(2),
+        ])->mapPresent(new NumberType(), fn(int $first, int $second) => $first + $second);
 
-        $this->assertSame(1, $compiled[0]->evaluate(new Runtime())->unwrap()->unwrap());
-        $this->assertSame(2, $compiled[1]->evaluate(new Runtime())->unwrap()->unwrap());
-        $this->assertSame([], $compilation->compileAll([])->unwrap());
+        $this->assertSame(3, $compiled->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertNull(
+            $compilation->children([])
+                ->mapPresent(new NumberType(), fn() => null)
+                ->node()->evaluate(new Runtime())->unwrap()->unwrapOr(null),
+        );
     }
 
     #[Test]
@@ -193,9 +223,16 @@ final class SourceCompilationTest extends TestCase
                 : Ok(new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))));
         });
 
-        $result = $compilation->compileAll([new StaticSource(1), new StaticSource(2), new StaticSource(3)]);
-
-        $this->assertSame($refusal, $result->unwrapErr());
+        try {
+            $compilation->children([
+                'first' => new StaticSource(1),
+                'second' => new StaticSource(2),
+                'third' => new StaticSource(3),
+            ]);
+            $this->fail('The second child should abort compilation.');
+        } catch (CompilationAborted $aborted) {
+            $this->assertSame($refusal, $aborted->mismatch);
+        }
         $this->assertSame(2, $calls);
     }
 
@@ -214,7 +251,11 @@ final class SourceCompilationTest extends TestCase
             },
         );
 
-        $this->assertSame($operation, $compilation->infix($left, '<=>', $right)->unwrap());
+        $bound = $compilation->infix($left, '<=>', $right);
+
+        $this->assertInstanceOf(BoundOperation::class, $bound);
+        $this->assertSame($operation->returns, $bound->returns);
+        $this->assertSame(1, $bound());
         $this->assertSame([$left, '<=>', $right], $seen);
     }
 
@@ -232,7 +273,7 @@ final class SourceCompilationTest extends TestCase
             },
         );
 
-        $this->assertSame($operation, $compilation->prefix('-', $operand)->unwrap());
+        $this->assertSame(1, ($compilation->prefix('-', $operand))());
         $this->assertSame(['-', $operand], $seen);
     }
 
@@ -251,7 +292,7 @@ final class SourceCompilationTest extends TestCase
 
         $symbol = new SymbolSource('amount', 'billing');
 
-        $this->assertSame($node, $compilation->symbol($symbol)->unwrap());
+        $this->assertSame($node, $compilation->symbol($symbol)->node());
         $this->assertSame([$symbol], $seen);
     }
 
@@ -268,8 +309,153 @@ final class SourceCompilationTest extends TestCase
             },
         );
 
-        $this->assertSame($type, $compilation->typeOfValue(42)->unwrap());
+        $this->assertSame($type, $compilation->typeOfValue(42));
         $this->assertSame(42, $seen);
+    }
+
+    #[Test]
+    public function compiled_sources_compose_present_and_absent_values_without_runtime_plumbing(): void
+    {
+        $type = new NumberType();
+        $calls = 0;
+
+        $present = CompiledSource::constant($type, 2)
+            ->expectPresent($type)
+            ->mapPresent($type, fn(int $value): Result => Ok($value * 2));
+
+        $this->assertSame(4, $present->node()->evaluate(new Runtime())->unwrap()->unwrap());
+
+        $absent = CompiledSource::constant(new OptionType($type), null)
+            ->expectPresent($type)
+            ->mapPresent($type, function () use (&$calls) {
+                $calls++;
+
+                return 1;
+            });
+
+        $this->assertTrue($absent->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertSame(0, $calls);
+
+        $includingAbsent = CompiledSource::constant(new OptionType($type), null)
+            ->mapIncludingAbsent($type, fn(mixed $value) => $value ?? 7);
+
+        $this->assertSame(7, $includingAbsent->node()->evaluate(new Runtime())->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_present_value_can_be_certified_before_a_native_callback_receives_it(): void
+    {
+        $source = CompiledSource::constant(new StringType(), 'not a number');
+
+        try {
+            $source->expectPresent(new NumberType());
+            $this->fail('The incompatible present value should refuse compilation.');
+        } catch (CompilationAborted $aborted) {
+            $this->assertStringContainsString('must provide Number when present', $aborted->mismatch->message);
+            $this->assertCount(1, $aborted->mismatch->causes);
+        }
+    }
+
+    #[Test]
+    public function compiled_children_combine_by_name_with_explicit_absence_semantics(): void
+    {
+        $type = new NumberType();
+        $compilation = self::compilation();
+        $rightCalls = 0;
+        $left = CompiledSource::constant(new OptionType($type), null);
+        $right = CompiledSource::custom($type, function () use (&$rightCalls) {
+            $rightCalls++;
+
+            return 2;
+        });
+
+        $present = $compilation->combine(['left' => $left, 'right' => $right])
+            ->mapPresent($type, fn(int $left, int $right) => $left + $right);
+
+        $this->assertTrue($present->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertSame(0, $rightCalls, 'the first absence short-circuits later present-only children');
+
+        $includingAbsent = $compilation->combine(['left' => $left, 'right' => $right])
+            ->mapIncludingAbsent($type, fn(?int $left, int $right) => ($left ?? 0) + $right);
+
+        $this->assertSame(2, $includingAbsent->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(1, $rightCalls);
+    }
+
+    #[Test]
+    public function compiled_sources_apply_bound_operations_without_exposing_operation_results(): void
+    {
+        $type = new NumberType();
+        $double = new BoundOperation(new ResolvedOperation($type, fn(int $value) => $value * 2));
+        $sumAbsentAsZero = new BoundOperation(new ResolvedOperation(
+            $type,
+            fn(?int $left, ?int $right) => ($left ?? 0) + ($right ?? 0),
+        ));
+
+        $unary = CompiledSource::constant($type, 3)->apply($double);
+        $this->assertSame(6, $unary->node()->evaluate(new Runtime())->unwrap()->unwrap());
+
+        $overriddenReturns = new StringType();
+        $overridden = CompiledSource::constant($type, 3)->apply($double, $overriddenReturns);
+        $this->assertSame($overriddenReturns, $overridden->returns);
+
+        $binary = new CompiledSources([
+            'left' => CompiledSource::constant(new OptionType($type), null),
+            'right' => CompiledSource::constant($type, 4),
+        ]);
+        $this->assertSame(
+            4,
+            $binary->applyIncludingAbsent($sumAbsentAsZero)->node()->evaluate(new Runtime())->unwrap()->unwrap(),
+        );
+    }
+
+    #[Test]
+    public function expected_child_and_operation_failures_exit_normally_but_defects_throw(): void
+    {
+        $failure = new \RuntimeException('expected failure');
+        $aborted = new EvaluationAborted($failure);
+        $this->assertSame('expected failure', $aborted->getMessage());
+        $this->assertSame($failure, $aborted->getPrevious());
+
+        $type = new NumberType();
+        $child = CompiledSource::custom($type, fn() => Err($failure));
+        $parent = CompiledSource::custom($type, fn(SourceEvaluation $evaluation) => $evaluation->value($child));
+
+        $this->assertSame($failure, $parent->node()->evaluate(new Runtime())->unwrapErr());
+
+        $operation = new BoundOperation(new ResolvedOperation($type, fn() => Err($failure)));
+        $applied = CompiledSource::custom($type, fn() => $operation());
+        $this->assertSame($failure, $applied->node()->evaluate(new Runtime())->unwrapErr());
+
+        $defect = new \LogicException('compiler defect');
+        $throwing = CompiledSource::custom($type, fn() => throw $defect);
+
+        $this->expectExceptionObject($defect);
+        $throwing->node()->evaluate(new Runtime());
+    }
+
+    #[Test]
+    public function source_compilation_can_frame_and_explicitly_reject_a_source(): void
+    {
+        $compilation = self::compilation();
+
+        try {
+            $compilation->within('The host source cannot compile.', fn() => $compilation->reject('The child is invalid.'));
+            $this->fail('The explicit refusal should abort compilation.');
+        } catch (CompilationAborted $aborted) {
+            $this->assertSame('The host source cannot compile.', $aborted->getMessage());
+            $this->assertSame('The host source cannot compile.', $aborted->mismatch->message);
+            $this->assertSame('The child is invalid.', $aborted->mismatch->causes[0]->message);
+        }
+
+        $observer = new SpyObserver();
+        $custom = $compilation->custom(new NumberType(), function (SourceEvaluation $evaluation) {
+            $evaluation->annotate('host', 'custom');
+
+            return 9;
+        });
+        $this->assertSame(9, $custom->node()->evaluate(new Runtime(observer: $observer))->unwrap()->unwrap());
+        $this->assertSame('custom', $observer->annotations['host']);
     }
 
     #[Test]
@@ -289,14 +475,14 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    HostInfixSource::class => fn(HostInfixSource $source, SourceCompilation $compilation): Result => $compilation
-                        ->infix($source->leftType, $source->operator, $source->rightType)
-                        ->map(fn(ResolvedOperation $operation) => new CompiledNode(
+                    HostInfixSource::class => function (HostInfixSource $source, SourceCompilation $compilation): CompiledSource {
+                        $operation = $compilation->infix($source->leftType, $source->operator, $source->rightType);
+
+                        return $compilation->produces(
                             $operation->returns,
-                            fn(Runtime $runtime): Result => $operation
-                                ->evaluate($source->left, $source->right)
-                                ->map(Some(...)),
-                        )),
+                            fn() => $operation($source->left, $source->right),
+                        );
+                    },
                 ];
             }
         };
@@ -316,14 +502,11 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    HostPrefixSource::class => fn(HostPrefixSource $source, SourceCompilation $compilation): Result => $compilation
-                        ->prefix($source->operator, $source->operandType)
-                        ->map(fn(ResolvedOperation $operation) => new CompiledNode(
-                            $operation->returns,
-                            fn(Runtime $runtime): Result => $operation
-                                ->evaluate($source->operand)
-                                ->map(Some(...)),
-                        )),
+                    HostPrefixSource::class => function (HostPrefixSource $source, SourceCompilation $compilation): CompiledSource {
+                        $operation = $compilation->prefix($source->operator, $source->operandType);
+
+                        return $compilation->produces($operation->returns, fn() => $operation($source->operand));
+                    },
                 ];
             }
         };
@@ -343,7 +526,7 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    HostSymbolSource::class => fn(HostSymbolSource $source, SourceCompilation $compilation): Result => $compilation
+                    HostSymbolSource::class => fn(HostSymbolSource $source, SourceCompilation $compilation): CompiledSource => $compilation
                         ->symbol($source->symbol),
                 ];
             }
@@ -368,7 +551,7 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    HiddenSymbolSource::class => fn(HiddenSymbolSource $source, SourceCompilation $compilation): Result => $compilation
+                    HiddenSymbolSource::class => fn(HiddenSymbolSource $source, SourceCompilation $compilation): CompiledSource => $compilation
                         ->symbol(new SymbolSource($source->name)),
                 ];
             }
@@ -395,12 +578,8 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    HostLiteralSource::class => fn(HostLiteralSource $source, SourceCompilation $compilation): Result => $compilation
-                        ->typeOfValue($source->value)
-                        ->map(fn(Type $type) => new CompiledNode(
-                            $type,
-                            fn(Runtime $runtime): Result => Ok(Some($source->value)),
-                        )),
+                    HostLiteralSource::class => fn(HostLiteralSource $source, SourceCompilation $compilation): CompiledSource => $compilation
+                        ->constant($compilation->typeOfValue($source->value), $source->value),
                 ];
             }
         };
@@ -421,19 +600,11 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    FirstSource::class => function (FirstSource $source, SourceCompilation $compilation): Result {
-                        $children = $compilation->compileAll($source->filters);
-
-                        if ($children->isErr()) {
-                            return $children;
-                        }
-
-                        $first = $children->unwrap()[0];
-
-                        return Ok(new CompiledNode(
-                            $first->returns,
-                            fn(Runtime $runtime): Result => $first->evaluate($runtime),
-                        ));
+                    FirstSource::class => function (FirstSource $source, SourceCompilation $compilation): CompiledSource {
+                        return $compilation->children([
+                            'first' => $source->filters[0],
+                            'fallback' => $source->filters[1],
+                        ])->mapPresent(new NumberType(), fn(int|float $first, int|float $fallback) => $first);
                     },
                 ];
             }
@@ -472,9 +643,8 @@ final class SourceCompilationTest extends TestCase
             public function sourceCompilers(): array
             {
                 return [
-                    ParentHostSource::class => fn(ParentHostSource $source, SourceCompilation $compilation): Result => Ok(
-                        new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))),
-                    ),
+                    ParentHostSource::class => fn(ParentHostSource $source, SourceCompilation $compilation): CompiledSource => $compilation
+                        ->constant(new NumberType(), 1),
                 ];
             }
         };

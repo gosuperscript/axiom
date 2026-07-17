@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Superscript\Axiom\SourceCompilers;
 
 use RuntimeException;
-use Superscript\Axiom\CompiledNode;
-use Superscript\Axiom\Runtime;
+use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes;
@@ -21,7 +21,6 @@ use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
-use function Superscript\Monads\Option\None;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
@@ -32,23 +31,34 @@ final readonly class MemberAccessSourceCompiler
      * Member access is shape-driven, so extension types whose verified
      * projection is record-like receive the same structural field access.
      *
-     * @return Result<CompiledNode, TypeMismatch>
      */
-    public static function compile(MemberAccessSource $source, SourceCompilation $compilation): Result
+    public static function compile(MemberAccessSource $source, SourceCompilation $compilation): CompiledSource
     {
-        return $compilation->compile($source->object)->andThen(
-            fn(CompiledNode $object) => self::accessField($object->returns->shape(), $source->property)
-                ->map(fn(Type $field) => new CompiledNode($field, static function (Runtime $runtime) use ($object, $source) {
-                    $result = $object->evaluate($runtime)
-                        ->andThen(fn(Option $option) => $option
-                            ->mapOr(Ok(None()), fn(mixed $value) => self::accessValue($value, $source->property)))
-                        ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->annotate('result', $value)));
+        $object = $compilation->child($source->object);
+        $field = self::accessField($object->returns->shape(), $source->property);
 
-                    $runtime->annotate('label', ".{$source->property}");
+        if ($field->isErr()) {
+            $compilation->reject($field->unwrapErr());
+        }
 
-                    return $result;
-                })),
-        );
+        return $compilation->custom($field->unwrap(), static function (SourceEvaluation $evaluation) use ($object, $source) {
+            try {
+                $value = $evaluation->value($object);
+
+                if ($value === null) {
+                    return null;
+                }
+
+                return self::accessValue($value, $source->property)
+                    ->map(function (Option $option) use ($evaluation) {
+                        $option->inspect(fn(mixed $result) => $evaluation->annotate('result', $result));
+
+                        return $option->unwrapOr(null);
+                    });
+            } finally {
+                $evaluation->annotate('label', ".{$source->property}");
+            }
+        });
     }
 
     /**

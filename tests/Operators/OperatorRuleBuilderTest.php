@@ -11,9 +11,13 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Superscript\Axiom\Operators\Operator;
+use Superscript\Axiom\Operators\Operation;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\Operators\ResolvedOperationBuilder;
+use Superscript\Axiom\Operators\InfixOperatorRuleWithMatchingTypes;
+use Superscript\Axiom\Operators\MatchingInfixOperatorRule;
 use Superscript\Axiom\Operators\InfixOperatorRule;
 use Superscript\Axiom\Operators\InfixOperatorRuleBuilder;
 use Superscript\Axiom\Operators\InfixOperatorRuleWithOperands;
@@ -22,6 +26,8 @@ use Superscript\Axiom\Operators\PrefixOperatorRule;
 use Superscript\Axiom\Operators\PrefixOperatorRuleBuilder;
 use Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand;
 use Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn;
+use Superscript\Axiom\Operators\PrefixOperatorRuleWithMatchingType;
+use Superscript\Axiom\Operators\MatchingPrefixOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
@@ -43,7 +49,14 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(PrefixOperatorRuleWithReturn::class)]
 #[CoversClass(PrefixOperatorRule::class)]
 #[CoversClass(ResolvedOperation::class)]
+#[CoversClass(ResolvedOperationBuilder::class)]
+#[CoversClass(Operation::class)]
+#[CoversClass(InfixOperatorRuleWithMatchingTypes::class)]
+#[CoversClass(MatchingInfixOperatorRule::class)]
+#[CoversClass(PrefixOperatorRuleWithMatchingType::class)]
+#[CoversClass(MatchingPrefixOperatorRule::class)]
 #[UsesClass(UnsupportedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Operators\DeadOperation::class)]
 #[UsesClass(BinaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(LiteralType::class)]
@@ -271,5 +284,69 @@ final class OperatorRuleBuilderTest extends TestCase
         $this->expectExceptionMessage('absence never reaches a unary rule');
 
         Operator::prefix('abs')->takes(new OptionType(new NumberType()));
+    }
+
+    #[Test]
+    public function a_computed_infix_rule_only_invokes_its_resolver_for_matching_type_classes(): void
+    {
+        $calls = 0;
+        $rule = Operator::infix('same-literal')
+            ->matching(LiteralType::class, LiteralType::class)
+            ->resolvesWith(function (LiteralType $left, LiteralType $right) use (&$calls) {
+                $calls++;
+
+                if ($left->value !== $right->value) {
+                    return Operation::dead('Distinct literals can never be equal.');
+                }
+
+                return Operation::returns(new BooleanType())
+                    ->evaluatesWith(fn(mixed $a, mixed $b): bool => $a === $b);
+            });
+
+        $this->assertSame('same-literal', $rule->operator());
+
+        $unsupported = $rule->resolve(new NumberType(), new LiteralType(1));
+        $this->assertInstanceOf(UnsupportedOperation::class, $unsupported);
+        $this->assertStringContainsString(LiteralType::class, $unsupported->message);
+        $this->assertSame(0, $calls);
+
+        $unsupportedRight = $rule->resolve(new LiteralType(1), new NumberType());
+        $this->assertInstanceOf(UnsupportedOperation::class, $unsupportedRight);
+        $this->assertStringContainsString(LiteralType::class, $unsupportedRight->message);
+        $this->assertSame(0, $calls);
+
+        $dead = $rule->resolve(new LiteralType(1), new LiteralType(2));
+        $this->assertInstanceOf(\Superscript\Axiom\Operators\DeadOperation::class, $dead);
+        $this->assertSame(1, $calls);
+
+        $resolved = $rule->resolve(new LiteralType(1), new LiteralType(1));
+        $this->assertInstanceOf(ResolvedOperation::class, $resolved);
+        $this->assertTrue($resolved->evaluate(1, 1)->unwrap());
+        $this->assertSame(2, $calls);
+    }
+
+    #[Test]
+    public function a_computed_prefix_rule_only_invokes_its_resolver_for_the_matching_type_class(): void
+    {
+        $cause = new \Superscript\Axiom\Types\TypeMismatch('not numeric');
+        $rule = Operator::prefix('literal-value')
+            ->matching(LiteralType::class)
+            ->resolvesWith(fn(LiteralType $operand) => is_string($operand->value)
+                ? Operation::unsupported('Strings are not numeric.', [$cause])
+                : Operation::returns(new NumberType())->evaluatesWith(fn(int|float $value) => $value));
+
+        $this->assertSame('literal-value', $rule->operator());
+
+        $nonLiteral = $rule->resolve(new NumberType());
+        $this->assertInstanceOf(UnsupportedOperation::class, $nonLiteral);
+        $this->assertStringContainsString(LiteralType::class, $nonLiteral->message);
+
+        $string = $rule->resolve(new LiteralType('one'));
+        $this->assertInstanceOf(UnsupportedOperation::class, $string);
+        $this->assertSame([$cause], $string->causes);
+
+        $resolved = $rule->resolve(new LiteralType(7));
+        $this->assertInstanceOf(ResolvedOperation::class, $resolved);
+        $this->assertSame(7, $resolved->evaluate(7)->unwrap());
     }
 }

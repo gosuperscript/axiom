@@ -402,9 +402,9 @@ The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the sh
 | You want to… | Implement / use | Guide section |
 | --- | --- | --- |
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
-| Give operators new semantics | `Operator::infix()` / `Operator::prefix()` fixed rules — or `BinaryOperatorRule` / `UnaryOperatorRule` by hand for verdicts computed from operand types | Custom operators |
+| Give operators new semantics | fixed rows, typed computed rules, or `BinaryOperatorRule` / `UnaryOperatorRule` for fully custom judgments | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
-| Add a data source | `Extension::sourceCompilers()` — exact source class to compile-time callback; sources stay data-only | Host sources |
+| Add a data source | `Extension::sourceCompilers()` plus composable `CompiledSource` values; sources stay data-only | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |
 | Prove your rules honest | the totality harness + admission-honesty law patterns | Testing your extension |
 

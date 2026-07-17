@@ -4,46 +4,35 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\SourceCompilers;
 
-use Superscript\Axiom\CompiledNode;
-use Superscript\Axiom\Operators\ResolvedOperation;
-use Superscript\Axiom\Runtime;
+use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\InfixExpression;
-use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Monads\Option\Option;
-use Superscript\Monads\Result\Result;
 
 /** @internal Compiler for the core infix-expression source. */
 final readonly class InfixExpressionCompiler
 {
-    /** @return Result<CompiledNode, TypeMismatch> */
-    public static function compile(InfixExpression $source, SourceCompilation $compilation): Result
+    public static function compile(InfixExpression $source, SourceCompilation $compilation): CompiledSource
     {
-        return $compilation->compile($source->left)->andThen(
-            fn(CompiledNode $left) => $compilation->compile($source->right)->andThen(
-                fn(CompiledNode $right) => $compilation->infix($left->returns, $source->operator, $right->returns)
-                    ->map(fn(ResolvedOperation $operation) => new CompiledNode(
-                        $operation->returns,
-                        static function (Runtime $runtime) use ($left, $right, $operation, $source) {
-                            $result = $left->evaluate($runtime)
-                                ->andThen(fn(Option $l) => $right->evaluate($runtime)->map(fn(Option $r) => [$l, $r]))
-                                ->andThen(/** @param array{Option<mixed>, Option<mixed>} $operands */ function (array $operands) use ($operation, $runtime) {
-                                    [$leftValue, $rightValue] = $operands;
+        $left = $compilation->child($source->left);
+        $right = $compilation->child($source->right);
+        $operation = $compilation->infix($left->returns, $source->operator, $right->returns);
 
-                                    $runtime->annotate('left', $leftValue->unwrapOr(null));
-                                    $runtime->annotate('right', $rightValue->unwrapOr(null));
+        return $compilation->custom($operation->returns, static function (SourceEvaluation $evaluation) use ($left, $right, $operation, $source) {
+            try {
+                $leftValue = $evaluation->value($left);
+                $rightValue = $evaluation->value($right);
 
-                                    return $operation->evaluate($leftValue->unwrapOr(null), $rightValue->unwrapOr(null))
-                                        ->inspect(fn(mixed $value) => $runtime->annotate('result', $value))
-                                        ->map(fn(mixed $value) => Option::from($value));
-                                });
+                $evaluation->annotate('left', $leftValue);
+                $evaluation->annotate('right', $rightValue);
 
-                            $runtime->annotate('label', $source->operator);
+                $result = $operation($leftValue, $rightValue);
+                $evaluation->annotate('result', $result);
 
-                            return $result;
-                        },
-                    )),
-            ),
-        );
+                return $result;
+            } finally {
+                $evaluation->annotate('label', $source->operator);
+            }
+        });
     }
 }

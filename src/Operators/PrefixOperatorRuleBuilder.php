@@ -33,4 +33,14 @@ final readonly class PrefixOperatorRuleBuilder
 
         return new PrefixOperatorRuleWithOperand($this->operator, $operand);
     }
+
+    /**
+     * @template TOperand of Type
+     * @param class-string<TOperand> $operand
+     * @return PrefixOperatorRuleWithMatchingType<TOperand>
+     */
+    public function matching(string $operand): PrefixOperatorRuleWithMatchingType
+    {
+        return new PrefixOperatorRuleWithMatchingType($this->operator, $operand);
+    }
 }

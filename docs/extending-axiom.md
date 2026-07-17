@@ -15,6 +15,7 @@
     - [The Evaluation Closure](#the-evaluation-closure)
     - [Ambiguity Is Refused](#ambiguity-is-refused)
     - [Parameterized Families](#parameterized-families)
+    - [Computed Rules](#computed-rules)
     - [Writing a Rule by Hand](#writing-a-rule-by-hand)
 - [Host Sources](#host-sources)
     - [Resolving Operations Inside a Source](#resolving-operations-inside-a-source)
@@ -328,6 +329,25 @@ Operator::infix('==')
 
 Core's equality rule refuses these opaque operands, so your row is the lone successful resolution. Register the negated aliases as separate rows with the negation captured in their evaluation, just as core does for its own aliases.
 
+### Computed Rules
+
+When the operand `Type` classes are known but the verdict depends on their data, use `matching()->resolvesWith()`. Axiom supplies the class guard and the ordinary unsupported verdict, so the callback receives the concrete types it owns:
+
+```php
+Operator::infix('+')
+    ->matching(MoneyType::class, MoneyType::class)
+    ->resolvesWith(function (MoneyType $left, MoneyType $right) {
+        if ($left->currency !== $right->currency) {
+            return Operation::unsupported('Money currencies must match.');
+        }
+
+        return Operation::returns($left)
+            ->evaluatesWith(fn (Money $a, Money $b) => $a->plus($b));
+    });
+```
+
+Use `Operation::dead()` for a statically meaningless pair. `Operator::prefix(...)->matching(...)->resolvesWith(...)` is the unary equivalent.
+
 ### Writing a Rule by Hand
 
 A fixed rule is a row; some rules are not rows. Implement `BinaryOperatorRule` (or `UnaryOperatorRule`) directly when you need:
@@ -398,14 +418,10 @@ Core's rules (`src/Operators/`) are the reference implementations. `Equality` se
 Your host may contribute its own `Source` kinds — a lookup-table cell, a geocoding call. Keep them as data-only descriptions and register their exact classes through `Extension::sourceCompilers()`. Services belong to the extension, not to the source: source trees can then be serialized, stored, and compiled later, after the host reconstructs its dialect.
 
 ```php
-use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Extension;
-use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
-use Superscript\Monads\Option\Option;
-use Superscript\Monads\Result\Result;
-use function Superscript\Monads\Result\Ok;
 
 final readonly class GeocodeSource implements Source
 {
@@ -421,14 +437,15 @@ final class GeocodeExtension extends Extension
         return [GeocodeSource::class => $this->compileGeocode(...)];
     }
 
-    private function compileGeocode(GeocodeSource $source, SourceCompilation $compilation): Result
+    private function compileGeocode(GeocodeSource $source, SourceCompilation $compilation): CompiledSource
     {
-        return $compilation->compile($source->address)->map(
-            fn(CompiledNode $address) => new CompiledNode(
-                new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
-                fn(Runtime $runtime) => $address->evaluate($runtime)
-                    ->map(fn(Option $option) => $option->map($this->geocoder->locate(...))),
-            ),
+        $address = $compilation
+            ->child($source->address)
+            ->expectPresent(new StringType());
+
+        return $address->mapPresent(
+            returns: new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
+            evaluate: $this->geocoder->locate(...),
         );
     }
 }
@@ -436,8 +453,12 @@ final class GeocodeExtension extends Extension
 
 The map key is the ownership declaration: matching is by exact class, and two extensions cannot own the same class. The core language's own nodes — `StaticSource`, `InfixExpression`, `MatchExpression`, and the rest — are registered by `Dialect::core()` through this same map, so their compilers hold no capability yours lacks, and claiming one of their classes is the same loud configuration error as colliding with another extension.
 
-The callback needs no compiler bootstrapping — `SourceCompilation::compile()` recursively compiles one child in the current environment, while `compileAll()` does the same for a list (for example, a filter source containing several dynamic `SymbolSource` expressions). Three more faces cover what a source compiler cannot reach by delegating to a child:
+The callback is straight-line PHP. A nested refusal automatically aborts this source compiler and reappears as the same `TypeMismatch` from `Expression::compile()`; there is no compilation `Result` plumbing to write.
 
+- `child(Source $source)` compiles one persisted child in the current environment. Returning it directly delegates both its type and evaluation.
+- `children([...])` compiles named children left-to-right; `combine([...])` combines children already compiled and checked with `expectPresent()`.
+- `CompiledSource::mapPresent()` propagates absence without calling the evaluation. `mapIncludingAbsent()` calls it with `null`. Both accept a plain value or a `Result`; a throw remains an implementation defect.
+- `constant()` and `produces()` cover sources without children. `custom()` is the advanced escape hatch for lazy control flow; its restricted `SourceEvaluation` can evaluate compiled children and annotate the current source without exposing Axiom's runtime channel.
 - `symbol(SymbolSource $symbol)` compiles a symbol reference owned by the source in the current environment — the same node an ordinary `SymbolSource` compiles to, so a host source embeds exactly the language's symbol semantics (declared inputs read their admitted binding; definitions compile once and memoize per invocation). Keep that `SymbolSource` as a public, persisted child of the host source: parameter discovery and definition-cycle analysis walk the source tree, and compilation refuses a reference constructed inside the compiler because it would hide that dependency.
 - `prefix($operator, $operandType)` binds one unary operation from the composed dialect, the same contract as `infix()` below.
 - `typeOfValue($value)` gives the literal-first type of a PHP value your source embeds — the judgment a `StaticSource` compiles with: scalars type as their literal, lists unify their elements with exact bounds, string-keyed arrays type as records, and objects resolve through the dialect's literal registry.
@@ -447,26 +468,35 @@ The callback needs no compiler bootstrapping — `SourceCompilation::compile()` 
 When a source owns a typed operation over values it supplies at runtime — such as a lookup source comparing a typed row cell with a compiled filter value — bind it once through the same composed dialect as ordinary expressions:
 
 ```php
-/** @return Result<array{CompiledNode, ResolvedOperation}, TypeMismatch> */
-private function compileComparison(FilterSource $source, SourceCompilation $compilation): Result
+private function compileFilter(FilterSource $source, SourceCompilation $compilation): CompiledSource
 {
-    return $compilation->compile($source->value)
-        ->andThen(fn(CompiledNode $value) => $compilation
-            ->infix($source->cellType, $source->operator, $value->returns)
-            ->map(fn(ResolvedOperation $comparison) => [$value, $comparison]));
+    $value = $compilation->child($source->value);
+    $comparison = $compilation->infix(
+        $source->cellType,
+        $source->operator,
+        $value->returns,
+    );
+
+    return $value->mapPresent(
+        returns: $source->resultType,
+        evaluate: fn (mixed $expected) => $this->lookup->find(
+            $source->table,
+            fn (mixed $cell) => $comparison($cell, $expected),
+        ),
+    );
 }
 ```
 
-The source compiler stores both objects in its `CompiledNode`: it evaluates the value node once per invocation, admits each runtime cell through `cellType`, and calls `$comparison->evaluate($cell, $resolvedValue)` for each row.
+The filter value evaluates once per invocation. The bound operation is an ordinary callable inside that evaluation; an expected operation `Err` automatically becomes the enclosing source's `Err`.
 
-`infix()` returns the dialect's `ResolvedOperation` — the return type and evaluation together, including extension-owned rules and the normal ambiguity and refusal diagnostics. The caller must provide honest operand types and admit its runtime values into them. It does not infer types from runtime values or restore value-directed dispatch.
+`infix()` returns a `BoundOperation` — the selected return type and evaluation together, including extension-owned rules and the normal ambiguity and refusal diagnostics. The caller must provide honest operand types and admit its runtime values into them. It does not infer types from runtime values or restore value-directed dispatch.
 
 ### Claiming a Type Honestly
 
 Every source compiler takes one of three honest postures:
 
 - **Declare** the type beside the lookup that produces it, as the geocode example does.
-- **Delegate** through `$compilation->compile($source->inner)` when your source wraps another source.
+- **Delegate** by returning `$compilation->child($source->inner)` when your source wraps another source.
 - **Return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`.
 
 What you may not do is nothing: a `Source` whose exact class has no compiler is a compile error, so "any expression edge starts here" stays a kept promise.
@@ -477,7 +507,7 @@ What you may not do is nothing: a `Source` whose exact class has no compiler is 
 Two practical notes:
 
 - **Persist the `Source` tree, not the compiled `Program`.** Compilation deliberately captures the extension's live collaborators in evaluation closures. Reconstruct the extension (normally through your container), compose the dialect, and compile after loading the source.
-- **Annotate through `$runtime->annotate(...)` for observability.** It emits an `Annotated` event for the source node currently being evaluated, and is a no-op when that invocation has no observer.
+- **Annotate only inside `custom()` through `SourceEvaluation::annotate()`.** Ordinary composition participates in the node lifecycle automatically.
 
 ## Testing Your Extension
 
