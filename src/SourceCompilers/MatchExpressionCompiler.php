@@ -6,10 +6,10 @@ namespace Superscript\Axiom\SourceCompilers;
 
 use Closure;
 use RuntimeException;
-use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Operators\ValueEquality;
-use Superscript\Axiom\Runtime;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchExpression;
@@ -24,12 +24,8 @@ use Superscript\Axiom\Types\Shapes\UnionShape;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\UnionType;
-use Superscript\Monads\Option\Option;
-use Superscript\Monads\Result\Result;
-use Throwable;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /** @internal Compiler for the core match-expression source. */
 final readonly class MatchExpressionCompiler
@@ -38,15 +34,13 @@ final readonly class MatchExpressionCompiler
      * The type of a match is the union of its arm types. Exhaustiveness is
      * mandatory: unprovable coverage is a compile error.
      *
-     * @return Result<CompiledNode, TypeMismatch>
      */
-    public static function compile(MatchExpression $source, SourceCompilation $compilation): Result
+    public static function compile(MatchExpression $source, SourceCompilation $compilation): CompiledSource
     {
-        $subject = $compilation->compile($source->subject);
-
-        if ($subject->isErr()) {
-            return Err(new TypeMismatch('The match subject cannot be typed.', [$subject->unwrapErr()]));
-        }
+        $subject = $compilation->within(
+            'The match subject cannot be typed.',
+            fn() => $compilation->child($source->subject),
+        );
 
         $armTypes = [];
         $arms = [];
@@ -62,89 +56,78 @@ final readonly class MatchExpressionCompiler
                 $literals[] = $arm->pattern->value;
             }
 
-            $pattern = self::compilePattern($arm->pattern, $compilation);
+            $pattern = $compilation->within(
+                sprintf('The pattern of match arm %d cannot be compiled.', $index),
+                fn() => self::compilePattern($arm->pattern, $compilation),
+            );
+            $body = $compilation->within(
+                sprintf('Match arm %d cannot be typed.', $index),
+                fn() => $compilation->child($arm->expression),
+            );
 
-            if ($pattern->isErr()) {
-                return Err(new TypeMismatch(sprintf('The pattern of match arm %d cannot be compiled.', $index), [$pattern->unwrapErr()]));
-            }
-
-            $body = $compilation->compile($arm->expression);
-
-            if ($body->isErr()) {
-                return Err(new TypeMismatch(sprintf('Match arm %d cannot be typed.', $index), [$body->unwrapErr()]));
-            }
-
-            $armTypes[] = $body->unwrap()->returns;
-            $arms[] = [$pattern->unwrap(), $body->unwrap()];
+            $armTypes[] = $body->returns;
+            $arms[] = [$pattern, $body];
         }
 
-        $subjectNode = $subject->unwrap();
-
-        if (!$wildcard && !self::covers($subjectNode->returns->shape(), $literals)) {
-            return Err(new TypeMismatch(sprintf(
+        if (!$wildcard && !self::covers($subject->returns->shape(), $literals)) {
+            $compilation->reject(new TypeMismatch(sprintf(
                 'This match over %s may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.',
-                TypeDescriber::describe($subjectNode->returns),
+                TypeDescriber::describe($subject->returns),
             )));
         }
 
         // Exhaustiveness implies at least one arm: a wildcard is an arm, and
         // zero literals cover no shape.
-        return Ok(new CompiledNode(UnionType::join(...$armTypes), static function (Runtime $runtime) use ($subjectNode, $arms) {
-            $result = $subjectNode->evaluate($runtime)->andThen(function (Option $subjectOption) use ($runtime, $arms) {
-                $subjectValue = $subjectOption->unwrapOr(null);
-
-                $runtime->annotate('subject', $subjectValue);
+        return $compilation->custom(UnionType::join(...$armTypes), static function (SourceEvaluation $evaluation) use ($subject, $arms) {
+            try {
+                $subjectValue = $evaluation->value($subject);
+                $evaluation->annotate('subject', $subjectValue);
 
                 foreach ($arms as $index => [$matches, $body]) {
-                    $matched = $matches($subjectValue, $runtime);
-
-                    if ($matched->isErr()) {
-                        return $matched;
-                    }
-
-                    if (!$matched->unwrap()) {
+                    if (!$matches($subjectValue, $evaluation)) {
                         continue;
                     }
 
-                    $runtime->annotate('matched_arm', $index);
+                    $evaluation->annotate('matched_arm', $index);
+                    $result = $evaluation->value($body);
 
-                    return $body->evaluate($runtime)
-                        ->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->annotate('result', $value)));
+                    if ($result !== null) {
+                        $evaluation->annotate('result', $result);
+                    }
+
+                    return $result;
                 }
 
                 return Err(new RuntimeException('No match arm matched the subject; add a wildcard arm to handle unmatched values.'));
-            });
-
-            $runtime->annotate('label', 'match');
-
-            return $result;
-        }));
+            } finally {
+                $evaluation->annotate('label', 'match');
+            }
+        });
     }
 
     /**
      * A pattern compiles to a predicate over the subject value. Matching and
      * coverage analysis consume the same value-equality definition.
      *
-     * @return Result<Closure(mixed, Runtime): Result<bool, Throwable>, TypeMismatch>
+     * @return Closure(mixed, SourceEvaluation): bool
      */
-    private static function compilePattern(MatchPattern $pattern, SourceCompilation $compilation): Result
+    private static function compilePattern(MatchPattern $pattern, SourceCompilation $compilation): Closure
     {
         if ($pattern instanceof WildcardPattern) {
-            return Ok(static fn(mixed $subject, Runtime $runtime) => Ok(true));
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => true;
         }
 
         if ($pattern instanceof LiteralPattern) {
-            return Ok(static fn(mixed $subject, Runtime $runtime) => Ok(ValueEquality::equals($pattern->value, $subject)));
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => ValueEquality::equals($pattern->value, $subject);
         }
 
         if ($pattern instanceof ExpressionPattern) {
-            return $compilation->compile($pattern->source)->map(
-                fn(CompiledNode $node) => static fn(mixed $subject, Runtime $runtime) => $node->evaluate($runtime)
-                    ->map(fn(Option $option) => $option->unwrapOr(null) === $subject),
-            );
+            $compiled = $compilation->child($pattern->source);
+
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $evaluation->value($compiled) === $subject;
         }
 
-        return Err(new TypeMismatch(sprintf('No pattern rule exists for [%s].', get_class($pattern))));
+        $compilation->reject(new TypeMismatch(sprintf('No pattern rule exists for [%s].', get_class($pattern))));
     }
 
     /** @param list<mixed> $literals */

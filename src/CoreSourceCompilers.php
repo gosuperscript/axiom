@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Closure;
 use Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler;
 use Superscript\Axiom\SourceCompilers\CoerceSourceCompiler;
 use Superscript\Axiom\SourceCompilers\InfixExpressionCompiler;
@@ -21,8 +20,6 @@ use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
-use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Monads\Result\Result;
 
 /**
  * The language's source compiler registry. Each compiler owns one exact
@@ -32,11 +29,11 @@ use Superscript\Monads\Result\Result;
 final readonly class CoreSourceCompilers
 {
     /**
-     * @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>>
+     * @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource>
      */
     public static function compilers(): array
     {
-        /** @var array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+        /** @var array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
         return [
             StaticSource::class => StaticSourceCompiler::compile(...),
             SymbolSource::class => SymbolSourceCompiler::compile(...),

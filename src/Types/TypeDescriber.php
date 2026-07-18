@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
+use ReflectionClass;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
@@ -26,6 +27,12 @@ use function Psl\Vec\map;
  */
 final class TypeDescriber
 {
+    /** @param class-string<Type> $type */
+    public static function describeClass(string $type): string
+    {
+        return (new ReflectionClass($type))->getShortName();
+    }
+
     public static function describe(Type $type): string
     {
         return self::describeShape($type->shape());

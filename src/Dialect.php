@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Closure;
 use InvalidArgumentException;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
@@ -22,9 +21,7 @@ use Superscript\Axiom\Types\LiteralTypeRegistry;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
-use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
-use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\attempt;
 
@@ -54,7 +51,7 @@ final readonly class Dialect
      * @param list<BinaryOperatorRule> $binaryRules
      * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
-     * @param array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
+     * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
      */
     private function __construct(
         private array $binaryRules,
@@ -168,7 +165,7 @@ final readonly class Dialect
         return new LiteralTypeRegistry($this->literalMappings);
     }
 
-    /** @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+    /** @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
     public function sourceCompilers(): array
     {
         return $this->sourceCompilers;

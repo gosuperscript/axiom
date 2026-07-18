@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
@@ -21,8 +23,8 @@ use function Superscript\Monads\Result\Ok;
  * Every node — the core language's ({@see \Superscript\Axiom\CoreSourceCompilers})
  * and a host's alike — compiles through the same registered rule, which
  * receives the source and a {@see SourceCompilation} carrying this
- * environment, and returns the node's type and evaluation together as one
- * {@see CompiledNode} — inference and evaluation are one walk, so a
+ * environment, and returns the source's type and evaluation together as one
+ * {@see CompiledSource} — inference and evaluation are one walk, so a
  * certified type and the code that runs cannot belong to different
  * programs.
  *
@@ -32,11 +34,11 @@ use function Superscript\Monads\Result\Ok;
  */
 final readonly class TypeInference
 {
-    /** @var array<class-string<Source>, \Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+    /** @var array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
     private array $sourceCompilers;
 
     /**
-     * @param array<class-string<Source>, \Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
+     * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
      */
     public function __construct(
         private BinaryOperatorResolver $operators,
@@ -61,8 +63,13 @@ final readonly class TypeInference
             )));
         }
 
-        return $compiler($source, $this->compilation($environment, $source))
-            ->map(fn(CompiledNode $node) => $node->forSource($source));
+        try {
+            $compiled = $compiler($source, $this->compilation($environment, $source));
+        } catch (CompilationAborted $aborted) {
+            return Err($aborted->mismatch);
+        }
+
+        return Ok($compiled->node()->forSource($source));
     }
 
     /**

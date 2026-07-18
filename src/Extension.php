@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Closure;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\Type;
-use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Monads\Result\Result;
 
 /**
  * The package-sized contributor to a {@see Dialect}: what a companion
@@ -61,18 +58,14 @@ abstract class Extension
 
     /**
      * Exact host Source class → compile-time adapter. The map key must match
-     * the concrete Source accepted by the closure. The adapter returns its
-     * type claim and evaluation together as one CompiledNode; selection
+     * the concrete Source accepted by the callable. The adapter returns its
+     * type claim and evaluation together as one CompiledSource; selection
      * happens once during compilation and list order carries no precedence.
      * The core language's source classes are already owned — Dialect::core()
      * registers them through this same map — so claiming one is the ordinary
      * duplicate-ownership error.
      *
-     * A Closure is used deliberately: packages may point at a private method
-     * for the common case, or capture a dedicated compiler module when the
-     * implementation merits one, without Axiom requiring either shape.
-     *
-     * @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>>
+     * @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource>
      */
     public function sourceCompilers(): array
     {
