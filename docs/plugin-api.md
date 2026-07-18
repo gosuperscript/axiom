@@ -167,13 +167,13 @@ $compiled->returns; // Type
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
 | `expectPresent(Type $expected): CompiledSource` | Checks the present member of an optional type; absence remains allowed and propagates later. | None; this is a compile-time certification. |
-| `mapPresent(Type $returns, callable $evaluate): CompiledSource` | An absent input stays absent and the callback is not invoked. | The present value. |
+| `mapPresent(Type $returns, callable $evaluate): CompiledSource` | An absent input stays absent and the callback is not invoked. If this source is optional, the result type is automatically `Option<$returns>`. | The present value. |
 | `mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource` | The callback is always invoked. | Present value or `null`. |
 | `apply(BoundOperation $operation, ?Type $returns = null): CompiledSource` | Same as `mapPresent()`. | The present value is passed to the unary operation. |
 | `CompiledSource::constant(Type $returns, mixed $value): CompiledSource` | `null` is absence. | No callback; low-level equivalent of `SourceCompilation::constant()`. |
 | `CompiledSource::custom(Type $returns, callable $evaluate): CompiledSource` | The callback decides. | Receives `SourceEvaluation`; low-level equivalent of `SourceCompilation::custom()`. |
 
-The `$returns` argument is a claim that the callback's successful values inhabit that type. It is not a runtime conversion or assertion. Use an honest type and test the callback over representative values.
+For `mapPresent()`, `$returns` describes the callback's successful present value. Optionality is derived from the input and never needs to be reconstructed by the plugin. For the other methods, `$returns` describes the whole result. In every case it is a type claim, not a runtime conversion or assertion. Use an honest type and test the callback over representative values.
 
 Prefer construction through `SourceCompilation::constant()`, `produces()`, or `custom()` so compiler code consistently uses its supplied capability. `CompiledSource`'s constructor and `node()` are internal and are not plugin APIs.
 
@@ -183,7 +183,7 @@ An ordered collection of named or positional compiled children.
 
 | Method | Behavior |
 | --- | --- |
-| `mapPresent(Type $returns, callable $evaluate): CompiledSource` | Evaluates left-to-right. The first absence short-circuits later children. Invokes the callback only when every child is present. |
+| `mapPresent(Type $returns, callable $evaluate): CompiledSource` | Evaluates left-to-right. The first absence short-circuits later children. Invokes the callback only when every child is present; if any child is optional, the result type is automatically `Option<$returns>`. |
 | `mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource` | Evaluates every child left-to-right and passes each absence as `null`. |
 | `applyIncludingAbsent(BoundOperation $operation): CompiledSource` | Evaluates every operand, including absence, and invokes the operation bound against those operand types. |
 
@@ -212,6 +212,8 @@ $operation($left, $right); // mixed; ordinary callable syntax
 
 The operation is resolved once against the supplied operand types. Invoking it performs no routing or value-directed overload selection. A plain successful value is returned directly. An expected `Err` from the rule becomes the enclosing source evaluation's `Err` automatically; an uncaught exception remains a defect and propagates.
 
+Operands are always forwarded positionally. Names used to organize compiled children belong to the source compiler and are discarded before the dialect-owned evaluation closure is invoked.
+
 The runtime values passed to the operation must inhabit the operand types used to bind it. A source compiler that supplies values itself owns that admission guarantee.
 
 ### `SourceEvaluation`
@@ -224,6 +226,8 @@ Available only inside `SourceCompilation::custom()`:
 | `annotate(string $key, mixed $value): void` | Attach domain-specific metadata to the current source's observation node. No-op when the invocation has no observer. |
 
 Use `custom()` only when ordinary mapping cannot express the source, such as lazy fallback, conditional child evaluation, or source-specific annotations. It is not a way to recover `Runtime` or perform dynamic compilation.
+
+Do not broadly catch `RuntimeException` around `value()`. Expected child failures use a private exception channel to leave the callback and become the enclosing program's `Err`; swallowing that channel changes program semantics. Catch only the concrete domain exceptions your callback owns.
 
 ### Callback results and failures
 
@@ -332,7 +336,7 @@ All relation methods return `Ok(true)` or `Err(TypeMismatch)`, never a boolean f
 
 Helpers:
 
-- `TypeDescriber::describe(Type $type): string` and `describeShape(Shape $shape): string` are the single diagnostic rendering authority.
+- `TypeDescriber::describe(Type $type): string`, `describeShape(Shape $shape): string`, and `describeClass(class-string<Type> $type): string` are the single diagnostic rendering authority.
 - `TypeReifier::reify(Shape $shape): Type` constructs the canonical core type for a shape. Reifying `OpaqueShape` produces an internal non-admitting stand-in; retain your domain type when runtime membership matters.
 
 ## Literal registration
@@ -404,7 +408,7 @@ Unary form:
 Operator::prefix(symbol) → matching(TypeClass::class) → resolvesWith(callable)
 ```
 
-Non-matching type classes are refused automatically and never invoke the callback.
+Non-matching type classes are refused automatically and never invoke the callback. Matching uses `instanceof`, so subclasses of the named `Type` class are included; use a final type class or an explicit early refusal when a hierarchy needs narrower ownership.
 
 `Operation` provides concise constructors:
 

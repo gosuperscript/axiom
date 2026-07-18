@@ -307,12 +307,18 @@ final class OperatorRuleBuilderTest extends TestCase
 
         $unsupported = $rule->resolve(new NumberType(), new LiteralType(1));
         $this->assertInstanceOf(UnsupportedOperation::class, $unsupported);
-        $this->assertStringContainsString(LiteralType::class, $unsupported->message);
+        $this->assertSame(
+            '[same-literal] does not match this rule for LiteralType and LiteralType; got Number and 1.',
+            $unsupported->message,
+        );
         $this->assertSame(0, $calls);
 
         $unsupportedRight = $rule->resolve(new LiteralType(1), new NumberType());
         $this->assertInstanceOf(UnsupportedOperation::class, $unsupportedRight);
-        $this->assertStringContainsString(LiteralType::class, $unsupportedRight->message);
+        $this->assertSame(
+            '[same-literal] does not match this rule for LiteralType and LiteralType; got 1 and Number.',
+            $unsupportedRight->message,
+        );
         $this->assertSame(0, $calls);
 
         $dead = $rule->resolve(new LiteralType(1), new LiteralType(2));
@@ -339,7 +345,10 @@ final class OperatorRuleBuilderTest extends TestCase
 
         $nonLiteral = $rule->resolve(new NumberType());
         $this->assertInstanceOf(UnsupportedOperation::class, $nonLiteral);
-        $this->assertStringContainsString(LiteralType::class, $nonLiteral->message);
+        $this->assertSame(
+            '[literal-value] does not match this rule for LiteralType; got Number.',
+            $nonLiteral->message,
+        );
 
         $string = $rule->resolve(new LiteralType('one'));
         $this->assertInstanceOf(UnsupportedOperation::class, $string);
@@ -348,5 +357,20 @@ final class OperatorRuleBuilderTest extends TestCase
         $resolved = $rule->resolve(new LiteralType(7));
         $this->assertInstanceOf(ResolvedOperation::class, $resolved);
         $this->assertSame(7, $resolved->evaluate(7)->unwrap());
+    }
+
+    #[Test]
+    public function computed_rule_class_guards_accept_subclasses(): void
+    {
+        $rule = Operator::prefix('identity')
+            ->matching(NumberType::class)
+            ->resolvesWith(fn(NumberType $operand) => Operation::returns($operand)
+                ->evaluatesWith(fn(int|float $value) => $value));
+
+        $specializedNumber = new class extends NumberType {};
+        $resolved = $rule->resolve($specializedNumber);
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolved);
+        $this->assertSame($specializedNumber, $resolved->returns);
     }
 }

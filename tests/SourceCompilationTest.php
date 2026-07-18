@@ -35,6 +35,7 @@ use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Option\Some;
@@ -323,6 +324,7 @@ final class SourceCompilationTest extends TestCase
             ->expectPresent($type)
             ->mapPresent($type, fn(int $value): Result => Ok($value * 2));
 
+        $this->assertSame($type, $present->returns);
         $this->assertSame(4, $present->node()->evaluate(new Runtime())->unwrap()->unwrap());
 
         $absent = CompiledSource::constant(new OptionType($type), null)
@@ -334,7 +336,15 @@ final class SourceCompilationTest extends TestCase
             });
 
         $this->assertTrue($absent->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertInstanceOf(OptionType::class, $absent->returns);
+        $this->assertSame($type, $absent->returns->inner);
+        $this->assertTrue(TypeRelations::admits($absent->returns, $type)->isErr());
         $this->assertSame(0, $calls);
+
+        $optionalReturns = new OptionType($type);
+        $alreadyOptional = CompiledSource::constant(new OptionType($type), null)
+            ->mapPresent($optionalReturns, fn(int $value) => $value);
+        $this->assertSame($optionalReturns, $alreadyOptional->returns);
 
         $includingAbsent = CompiledSource::constant(new OptionType($type), null)
             ->mapIncludingAbsent($type, fn(mixed $value) => $value ?? 7);
@@ -362,6 +372,13 @@ final class SourceCompilationTest extends TestCase
         $type = new NumberType();
         $compilation = self::compilation();
         $rightCalls = 0;
+        $allPresent = $compilation->combine([
+            'left' => CompiledSource::constant($type, 1),
+            'right' => CompiledSource::constant($type, 2),
+        ])->mapPresent($type, fn(int $left, int $right) => $left + $right);
+
+        $this->assertSame($type, $allPresent->returns);
+
         $left = CompiledSource::constant(new OptionType($type), null);
         $right = CompiledSource::custom($type, function () use (&$rightCalls) {
             $rightCalls++;
@@ -373,7 +390,14 @@ final class SourceCompilationTest extends TestCase
             ->mapPresent($type, fn(int $left, int $right) => $left + $right);
 
         $this->assertTrue($present->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertInstanceOf(OptionType::class, $present->returns);
+        $this->assertSame($type, $present->returns->inner);
         $this->assertSame(0, $rightCalls, 'the first absence short-circuits later present-only children');
+
+        $optionalReturns = new OptionType($type);
+        $alreadyOptional = $compilation->combine(['left' => $left, 'right' => $right])
+            ->mapPresent($optionalReturns, fn(int $left, int $right) => $left + $right);
+        $this->assertSame($optionalReturns, $alreadyOptional->returns);
 
         $includingAbsent = $compilation->combine(['left' => $left, 'right' => $right])
             ->mapIncludingAbsent($type, fn(?int $left, int $right) => ($left ?? 0) + $right);
@@ -389,7 +413,7 @@ final class SourceCompilationTest extends TestCase
         $double = new BoundOperation(new ResolvedOperation($type, fn(int $value) => $value * 2));
         $sumAbsentAsZero = new BoundOperation(new ResolvedOperation(
             $type,
-            fn(?int $left, ?int $right) => ($left ?? 0) + ($right ?? 0),
+            fn(?int $a, ?int $b) => ($a ?? 0) + ($b ?? 0),
         ));
 
         $unary = CompiledSource::constant($type, 3)->apply($double);
@@ -407,6 +431,7 @@ final class SourceCompilationTest extends TestCase
             4,
             $binary->applyIncludingAbsent($sumAbsentAsZero)->node()->evaluate(new Runtime())->unwrap()->unwrap(),
         );
+        $this->assertSame(3, $sumAbsentAsZero(...['left' => 1, 'right' => 2]));
     }
 
     #[Test]

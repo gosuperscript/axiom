@@ -532,7 +532,7 @@ This step introduces three ideas:
 
 - `child()` recursively compiles the persisted child in the same dialect and type environment.
 - `expectPresent()` certifies the value your native callback will receive. A numeric literal and `NumberType` both pass; a string refuses compilation. If the child is optional, its present member is checked and absence remains structural.
-- `mapPresent()` transforms only present values. An absent child stays absent and the callback is not invoked.
+- `mapPresent()` transforms only present values. An absent child stays absent and the callback is not invoked. When the child is optional, the compiled result is automatically `Option<Number>`; the plugin supplies the callback's present return type and Axiom preserves optionality.
 
 The `returns` argument is a type claim, not a conversion. Nothing re-checks the callback's value after compilation, so the callback must really return a number.
 
@@ -571,7 +571,7 @@ private function compileProduct(
 }
 ```
 
-`combine()` groups children that you have already compiled or certified individually. `CompiledSources::mapPresent()` evaluates them left-to-right and invokes the callback only if every child is present. The first absence short-circuits later children.
+`combine()` groups children that you have already compiled or certified individually. `CompiledSources::mapPresent()` evaluates them left-to-right and invokes the callback only if every child is present. The first absence short-circuits later children, and any optional child automatically makes the result optional.
 
 String keys become named callback arguments, which is why `left` and `right` match the closure's parameter names. Use numeric keys for positional arguments.
 
@@ -613,7 +613,7 @@ private function compileProduct(
 
 This version supports any types for which the dialect owns `*`, not just core numbers. `applyIncludingAbsent()` evaluates both operands and invokes the bound operation. It therefore inherits the ordinary binary absence policy: an optional operand compiles only if the dialect contains a rule that resolves those optional operand types and handles `null`.
 
-`prefix($operator, $operandType)` is the unary equivalent. For a present-only unary child, `CompiledSource::apply($operation)` is the concise form. Unary optionality is structural: resolve against the present type, propagate absence, and wrap the return type in `OptionType`, as core's `UnaryExpression` does.
+`prefix($operator, $operandType)` is the unary equivalent. Resolve an optional child's operation against its present type; `CompiledSource::apply($operation)` then propagates absence and automatically preserves optionality in the result type.
 
 ### Step 5: Inject a Live Service
 
@@ -695,9 +695,9 @@ During evaluation, return `Err($exception)` for an expected value-dependent fail
 
 | Combinator | On absence |
 | --- | --- |
-| `CompiledSource::mapPresent()` | Propagate absence; do not call the callback. |
+| `CompiledSource::mapPresent()` | Propagate absence; do not call the callback; make the result type optional. |
 | `CompiledSource::mapIncludingAbsent()` | Call the callback with `null`. |
-| `CompiledSources::mapPresent()` | Stop at the first absent child; do not call the callback. |
+| `CompiledSources::mapPresent()` | Stop at the first absent child; do not call the callback; make the result type optional if any child is optional. |
 | `CompiledSources::mapIncludingAbsent()` | Evaluate every child and pass absent children as `null`. |
 
 A defaulting source intentionally consumes absence:
@@ -777,6 +777,8 @@ private function compileFirstAvailable(
 ```
 
 `SourceEvaluation::value()` evaluates an already-compiled child in the current invocation and propagates its expected failure. `annotate()` adds domain metadata to the current source when an execution observer is present.
+
+Catch only domain exceptions your callback owns. A broad `catch (RuntimeException)` around `value()` can swallow Axiom's private expected-failure channel and replace the child's failure with an unrelated value.
 
 `custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
 

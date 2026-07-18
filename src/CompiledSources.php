@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 
 /** Named compiled children that can be evaluated as one computation. */
@@ -14,12 +16,20 @@ final readonly class CompiledSources
 
     /**
      * Evaluate left-to-right and invoke the callback only when every child is
-     * present. The first absence short-circuits the remaining children.
+     * present. The first absence short-circuits the remaining children and
+     * any optional child makes the result type optional.
      */
     public function mapPresent(Type $returns, callable $evaluate): CompiledSource
     {
         $sources = $this->sources;
         $evaluate = $evaluate(...);
+
+        if (
+            array_any($sources, fn(CompiledSource $source) => $source->returns->shape() instanceof OptionShape)
+            && !$returns->shape() instanceof OptionShape
+        ) {
+            $returns = new OptionType($returns);
+        }
 
         return CompiledSource::custom($returns, function (SourceEvaluation $runtime) use ($sources, $evaluate) {
             $values = [];

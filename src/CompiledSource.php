@@ -8,6 +8,7 @@ use Closure;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Types\Shapes\OptionShape;
+use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -37,11 +38,13 @@ final readonly class CompiledSource
 
     /**
      * Transform a present value. Absence propagates without invoking the
-     * callback. Plain values succeed; returned Results pass through.
+     * callback and makes the result type optional. $returns describes the
+     * callback's present result. Plain values succeed; Results pass through.
      */
     public function mapPresent(Type $returns, callable $evaluate): self
     {
         $evaluate = $evaluate(...);
+        $returns = $this->propagateAbsence($returns);
 
         return new self(new CompiledNode($returns, function (Runtime $runtime) use ($evaluate) {
             return $this->node->evaluate($runtime)->andThen(function ($option) use ($evaluate) {
@@ -125,6 +128,15 @@ final readonly class CompiledSource
     public function node(): CompiledNode
     {
         return $this->node;
+    }
+
+    /** Mapping a present value preserves optionality without nesting it. */
+    private function propagateAbsence(Type $returns): Type
+    {
+        return $this->returns->shape() instanceof OptionShape
+            && !$returns->shape() instanceof OptionShape
+                ? new OptionType($returns)
+                : $returns;
     }
 
     /** @return Result<\Superscript\Monads\Option\Option<mixed>, \Throwable> */

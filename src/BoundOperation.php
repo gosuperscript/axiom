@@ -25,7 +25,9 @@ final readonly class BoundOperation
 
     public function __invoke(mixed ...$operands): mixed
     {
-        $result = $this->operation->evaluate(...$operands);
+        // Operations are positional. A source compiler may name children for
+        // its own callback, but those names never belong to the rule author.
+        $result = $this->operation->evaluate(...array_values($operands));
 
         if ($result->isErr()) {
             throw new EvaluationAborted($result->unwrapErr());

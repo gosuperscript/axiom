@@ -33,8 +33,8 @@ final readonly class MatchingInfixOperatorRule implements BinaryOperatorRule
             return new UnsupportedOperation(sprintf(
                 '[%s] does not match this rule for %s and %s; got %s and %s.',
                 $this->operator,
-                $this->left,
-                $this->right,
+                TypeDescriber::describeClass($this->left),
+                TypeDescriber::describeClass($this->right),
                 TypeDescriber::describe($left),
                 TypeDescriber::describe($right),
             ));

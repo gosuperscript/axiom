@@ -31,7 +31,7 @@ final readonly class MatchingPrefixOperatorRule implements UnaryOperatorRule
             return new UnsupportedOperation(sprintf(
                 '[%s] does not match this rule for %s; got %s.',
                 $this->operator,
-                $this->operand,
+                TypeDescriber::describeClass($this->operand),
                 TypeDescriber::describe($operand),
             ));
         }
