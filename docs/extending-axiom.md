@@ -18,7 +18,17 @@
     - [Computed Rules](#computed-rules)
     - [Writing a Rule by Hand](#writing-a-rule-by-hand)
 - [Host Sources](#host-sources)
-    - [Resolving Operations Inside a Source](#resolving-operations-inside-a-source)
+    - [The Source Compiler Contract](#the-source-compiler-contract)
+    - [Step 1: Return a Stored Value](#step-1-return-a-stored-value)
+    - [Step 2: Compile and Check One Child](#step-2-compile-and-check-one-child)
+    - [Step 3: Combine Two Children](#step-3-combine-two-children)
+    - [Step 4: Use the Dialect's Operation](#step-4-use-the-dialects-operation)
+    - [Step 5: Inject a Live Service](#step-5-inject-a-live-service)
+    - [Step 6: Report Failures at the Right Boundary](#step-6-report-failures-at-the-right-boundary)
+    - [Step 7: Choose Absence Semantics](#step-7-choose-absence-semantics)
+    - [Step 8: Add Lazy Control Flow](#step-8-add-lazy-control-flow)
+    - [Symbols Must Stay Visible](#symbols-must-stay-visible)
+    - [Resolving Operations Over Host Values](#resolving-operations-over-host-values)
     - [Claiming a Type Honestly](#claiming-a-type-honestly)
 - [Testing Your Extension](#testing-your-extension)
     - [The Shape Census](#the-shape-census)
@@ -32,7 +42,7 @@ Axiom's core is small on purpose. Everything domain-specific — money, dates, l
 
 One principle drives every seam in this guide: **a rule's typing and its evaluation are one statement.** When you declare an operator, the same declaration carries the return type and the closure that computes it. When you compile a source, the same result carries the type it claims and the evaluation that delivers it. The compiler binds these resolutions directly into the `Program`, and a compiled program performs no runtime dispatch. There are never two faces to keep in agreement, so the static and runtime semantics cannot drift.
 
-If you want the full background on this design, read [RFC 0001: Typesafe Axiom](rfc/0001-typesafe-axiom.md).
+If you want the full background on this design, read [RFC 0001: Typesafe Axiom](rfc/0001-typesafe-axiom.md). For exact signatures and behavior after working through the examples, use the [Plugin API Reference](plugin-api.md).
 
 ## Extensions and Dialects
 
@@ -415,55 +425,400 @@ Core's rules (`src/Operators/`) are the reference implementations. `Equality` se
 
 ## Host Sources
 
-Your host may contribute its own `Source` kinds — a lookup-table cell, a geocoding call. Keep them as data-only descriptions and register their exact classes through `Extension::sourceCompilers()`. Services belong to the extension, not to the source: source trees can then be serialized, stored, and compiled later, after the host reconstructs its dialect.
+Your host may contribute its own `Source` kinds — a stored value, a lookup-table filter, a geocoding call. This section builds a source compiler one concept at a time. The examples start deliberately small and grow into the same composition tools used by Axiom's core compilers.
+
+### The Source Compiler Contract
+
+A source is persisted description data. A source compiler turns that description into a `CompiledSource`: a certified return type coupled to the evaluation that will produce it.
 
 ```php
 use Superscript\Axiom\CompiledSource;
-use Superscript\Axiom\Extension;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 
-final readonly class GeocodeSource implements Source
+private function compileExample(
+    ExampleSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    // Compile-time composition happens here.
+}
+```
+
+The compiler runs once per source node when `Expression::compile()` is called. Its evaluation callbacks run later, once per program invocation. That separation is why live dependencies belong to the extension and never to the source.
+
+Register each compiler by the exact source class it owns:
+
+```php
+public function sourceCompilers(): array
 {
-    public function __construct(public Source $address) {}
+    return [
+        ExampleSource::class => $this->compileExample(...),
+    ];
+}
+```
+
+The map key is both routing and ownership. Parent-class registrations do not claim subclasses, two extensions cannot claim the same class, and core source classes are already owned by `Dialect::core()`.
+
+### Step 1: Return a Stored Value
+
+Start with a source that contains one embedded value and no children:
+
+```php
+use Superscript\Axiom\Extension;
+use Superscript\Axiom\Source;
+
+final readonly class ValueSource implements Source
+{
+    public function __construct(public mixed $value) {}
 }
 
-final class GeocodeExtension extends Extension
+final class ArithmeticExtension extends Extension
 {
-    public function __construct(private Geocoder $geocoder) {}
+    public function sourceCompilers(): array
+    {
+        return [
+            ValueSource::class => $this->compileValue(...),
+        ];
+    }
+
+    private function compileValue(
+        ValueSource $source,
+        SourceCompilation $compilation,
+    ): CompiledSource {
+        $type = $compilation->typeOfValue($source->value);
+
+        return $compilation->constant($type, $source->value);
+    }
+}
+```
+
+This introduces two methods:
+
+- `typeOfValue()` applies Axiom's literal-first inference. `5` becomes `LiteralType(5)`, arrays are typed structurally, and objects use the dialect's literal registry.
+- `constant()` promises a type and returns the same value on every invocation. `null` represents absence.
+
+If an object has no literal registration, `typeOfValue()` refuses compilation automatically. There is no `Result` to unwrap or forward inside the compiler.
+
+### Step 2: Compile and Check One Child
+
+Now add a source that wraps another source and doubles its result:
+
+```php
+use Superscript\Axiom\Types\NumberType;
+
+final readonly class DoubleSource implements Source
+{
+    public function __construct(public Source $value) {}
+}
+
+private function compileDouble(
+    DoubleSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $value = $compilation
+        ->child($source->value)
+        ->expectPresent(new NumberType());
+
+    return $value->mapPresent(
+        returns: new NumberType(),
+        evaluate: fn (int|float $value) => $value * 2,
+    );
+}
+```
+
+Add `DoubleSource::class => $this->compileDouble(...)` to `sourceCompilers()`.
+
+This step introduces three ideas:
+
+- `child()` recursively compiles the persisted child in the same dialect and type environment.
+- `expectPresent()` certifies the value your native callback will receive. A numeric literal and `NumberType` both pass; a string refuses compilation. If the child is optional, its present member is checked and absence remains structural.
+- `mapPresent()` transforms only present values. An absent child stays absent and the callback is not invoked.
+
+The `returns` argument is a type claim, not a conversion. Nothing re-checks the callback's value after compilation, so the callback must really return a number.
+
+### Step 3: Combine Two Children
+
+A product source owns two independent child expressions:
+
+```php
+final readonly class ProductSource implements Source
+{
+    public function __construct(
+        public Source $left,
+        public Source $right,
+    ) {}
+}
+
+private function compileProduct(
+    ProductSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $left = $compilation
+        ->child($source->left)
+        ->expectPresent(new NumberType());
+
+    $right = $compilation
+        ->child($source->right)
+        ->expectPresent(new NumberType());
+
+    return $compilation->combine([
+        'left' => $left,
+        'right' => $right,
+    ])->mapPresent(
+        returns: new NumberType(),
+        evaluate: fn (int|float $left, int|float $right) => $left * $right,
+    );
+}
+```
+
+`combine()` groups children that you have already compiled or certified individually. `CompiledSources::mapPresent()` evaluates them left-to-right and invokes the callback only if every child is present. The first absence short-circuits later children.
+
+String keys become named callback arguments, which is why `left` and `right` match the closure's parameter names. Use numeric keys for positional arguments.
+
+When children need no individual checks, `children([...])` is shorthand for compiling and grouping them in one call:
+
+```php
+$compiled = $compilation->children([
+    'left' => $source->left,
+    'right' => $source->right,
+]);
+```
+
+### Step 4: Use the Dialect's Operation
+
+The previous compiler hard-codes PHP multiplication. That is appropriate only if `ProductSource` explicitly means native numeric multiplication. If it means Axiom's `*`, bind the operation from the composed dialect instead:
+
+```php
+private function compileProduct(
+    ProductSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $left = $compilation->child($source->left);
+    $right = $compilation->child($source->right);
+
+    $multiply = $compilation->infix(
+        $left->returns,
+        '*',
+        $right->returns,
+    );
+
+    return $compilation->combine([
+        'left' => $left,
+        'right' => $right,
+    ])->applyIncludingAbsent($multiply);
+}
+```
+
+`infix()` resolves once, during compilation, through the same core and extension rules as an ordinary `InfixExpression`. A refusal or ambiguity automatically refuses the enclosing source. The returned `BoundOperation` exposes its certified `$returns` type and is an ordinary callable during evaluation.
+
+This version supports any types for which the dialect owns `*`, not just core numbers. `applyIncludingAbsent()` evaluates both operands and invokes the bound operation. It therefore inherits the ordinary binary absence policy: an optional operand compiles only if the dialect contains a rule that resolves those optional operand types and handles `null`.
+
+`prefix($operator, $operandType)` is the unary equivalent. For a present-only unary child, `CompiledSource::apply($operation)` is the concise form. Unary optionality is structural: resolve against the present type, propagate absence, and wrap the return type in `OptionType`, as core's `UnaryExpression` does.
+
+### Step 5: Inject a Live Service
+
+Sources may be serialized and stored for later. Keep live services in the extension, then capture them only in the compiled evaluation:
+
+```php
+final readonly class ExchangeRateSource implements Source
+{
+    public function __construct(
+        public string $base,
+        public string $quote,
+    ) {}
+}
+
+final class RatesExtension extends Extension
+{
+    public function __construct(private RateProvider $rates) {}
 
     public function sourceCompilers(): array
     {
-        return [GeocodeSource::class => $this->compileGeocode(...)];
+        return [
+            ExchangeRateSource::class => $this->compileRate(...),
+        ];
     }
 
-    private function compileGeocode(GeocodeSource $source, SourceCompilation $compilation): CompiledSource
-    {
-        $address = $compilation
-            ->child($source->address)
-            ->expectPresent(new StringType());
-
-        return $address->mapPresent(
-            returns: new RecordType(['lat' => new NumberType(), 'lng' => new NumberType()]),
-            evaluate: $this->geocoder->locate(...),
+    private function compileRate(
+        ExchangeRateSource $source,
+        SourceCompilation $compilation,
+    ): CompiledSource {
+        return $compilation->produces(
+            returns: new NumberType(),
+            evaluate: fn () => $this->rates->rate($source->base, $source->quote),
         );
     }
 }
 ```
 
-The map key is the ownership declaration: matching is by exact class, and two extensions cannot own the same class. The core language's own nodes — `StaticSource`, `InfixExpression`, `MatchExpression`, and the rest — are registered by `Dialect::core()` through this same map, so their compilers hold no capability yours lacks, and claiming one of their classes is the same loud configuration error as colliding with another extension.
+`produces()` is for a source with no compiled children whose value is calculated per invocation. Compilation captures the provider in the `Program`; the persisted `ExchangeRateSource` remains plain data.
 
-The callback is straight-line PHP. A nested refusal automatically aborts this source compiler and reappears as the same `TypeMismatch` from `Expression::compile()`; there is no compilation `Result` plumbing to write.
+If the provider returns a `Result`, it passes through. That lets a missing rate become an expected program `Err` without exposing Axiom's runtime plumbing to the compiler.
 
-- `child(Source $source)` compiles one persisted child in the current environment. Returning it directly delegates both its type and evaluation.
-- `children([...])` compiles named children left-to-right; `combine([...])` combines children already compiled and checked with `expectPresent()`.
-- `CompiledSource::mapPresent()` propagates absence without calling the evaluation. `mapIncludingAbsent()` calls it with `null`. Both accept a plain value or a `Result`; a throw remains an implementation defect.
-- `constant()` and `produces()` cover sources without children. `custom()` is the advanced escape hatch for lazy control flow; its restricted `SourceEvaluation` can evaluate compiled children and annotate the current source without exposing Axiom's runtime channel.
-- `symbol(SymbolSource $symbol)` compiles a symbol reference owned by the source in the current environment — the same node an ordinary `SymbolSource` compiles to, so a host source embeds exactly the language's symbol semantics (declared inputs read their admitted binding; definitions compile once and memoize per invocation). Keep that `SymbolSource` as a public, persisted child of the host source: parameter discovery and definition-cycle analysis walk the source tree, and compilation refuses a reference constructed inside the compiler because it would hide that dependency.
-- `prefix($operator, $operandType)` binds one unary operation from the composed dialect, the same contract as `infix()` below.
-- `typeOfValue($value)` gives the literal-first type of a PHP value your source embeds — the judgment a `StaticSource` compiles with: scalars type as their literal, lists unify their elements with exact bounds, string-keyed arrays type as records, and objects resolve through the dialect's literal registry.
+### Step 6: Report Failures at the Right Boundary
 
-### Resolving Operations Inside a Source
+There are three distinct failure categories.
+
+For a source-specific compile-time refusal, call `reject()`:
+
+```php
+if ($source->base === $source->quote) {
+    $compilation->reject('An exchange-rate source requires two different currencies.');
+}
+```
+
+To add context around a child or operation refusal, use `within()`:
+
+```php
+return $compilation->within(
+    'DoubleSource requires a numeric child.',
+    function () use ($source, $compilation): CompiledSource {
+        $value = $compilation
+            ->child($source->value)
+            ->expectPresent(new NumberType());
+
+        return $value->mapPresent(
+            new NumberType(),
+            fn (int|float $value) => $value * 2,
+        );
+    },
+);
+```
+
+The outer message becomes a `TypeMismatch` whose cause is the original diagnostic.
+
+During evaluation, return `Err($exception)` for an expected value-dependent failure that static types cannot rule out. Return a plain value for success. Let unexpected exceptions propagate: a thrown `TypeError`, service misconfiguration, or impossible branch is a defect, not a normal program result.
+
+### Step 7: Choose Absence Semantics
+
+`null` is Axiom's runtime representation of structural absence. Pick the combinator that states what your source means:
+
+| Combinator | On absence |
+| --- | --- |
+| `CompiledSource::mapPresent()` | Propagate absence; do not call the callback. |
+| `CompiledSource::mapIncludingAbsent()` | Call the callback with `null`. |
+| `CompiledSources::mapPresent()` | Stop at the first absent child; do not call the callback. |
+| `CompiledSources::mapIncludingAbsent()` | Evaluate every child and pass absent children as `null`. |
+
+A defaulting source intentionally consumes absence:
+
+```php
+final readonly class DefaultNumberSource implements Source
+{
+    public function __construct(
+        public Source $value,
+        public int|float $default,
+    ) {}
+}
+
+private function compileDefaultNumber(
+    DefaultNumberSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $value = $compilation
+        ->child($source->value)
+        ->expectPresent(new NumberType());
+
+    return $value->mapIncludingAbsent(
+        returns: new NumberType(),
+        evaluate: fn (int|float|null $value) => $value ?? $source->default,
+    );
+}
+```
+
+Choose this explicitly. Do not turn absence into a domain value accidentally by accepting nullable callback parameters everywhere.
+
+### Step 8: Add Lazy Control Flow
+
+Ordinary `map...()` methods cover eager composition. Use `custom()` when the source decides which child to evaluate. This first-available source stops after the first present candidate:
+
+```php
+use Superscript\Axiom\SourceEvaluation;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\Type;
+
+final readonly class FirstAvailableSource implements Source
+{
+    /** @param non-empty-list<Source> $candidates */
+    public function __construct(
+        public Type $type,
+        public array $candidates,
+    ) {}
+}
+
+private function compileFirstAvailable(
+    FirstAvailableSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $candidates = array_map(
+        fn (Source $candidate) => $compilation
+            ->child($candidate)
+            ->expectPresent($source->type),
+        $source->candidates,
+    );
+
+    return $compilation->custom(
+        returns: new OptionType($source->type),
+        evaluate: function (SourceEvaluation $evaluation) use ($candidates) {
+            foreach ($candidates as $index => $candidate) {
+                $value = $evaluation->value($candidate);
+
+                if ($value !== null) {
+                    $evaluation->annotate('selected_candidate', $index);
+
+                    return $value;
+                }
+            }
+
+            return null;
+        },
+    );
+}
+```
+
+`SourceEvaluation::value()` evaluates an already-compiled child in the current invocation and propagates its expected failure. `annotate()` adds domain metadata to the current source when an execution observer is present.
+
+`custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
+
+### Symbols Must Stay Visible
+
+When a host source owns a symbol reference, store the actual `SymbolSource` as a public persisted child and compile it through `symbol()`:
+
+```php
+use Superscript\Axiom\Sources\SymbolSource;
+
+final readonly class NamedValueSource implements Source
+{
+    public function __construct(public SymbolSource $symbol) {}
+}
+
+private function compileNamedValue(
+    NamedValueSource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    return $compilation->symbol($source->symbol);
+}
+```
+
+This preserves ordinary declared-input, definition, and per-invocation memoization semantics. More importantly, parameter discovery and definition-cycle analysis can see the dependency. Constructing a new `SymbolSource` from a hidden string inside the compiler is refused because the stored source tree would no longer describe the program's real dependencies.
+
+The extension map simply grows as the package gains source kinds:
+
+```php
+public function sourceCompilers(): array
+{
+    return [
+        ValueSource::class => $this->compileValue(...),
+        DoubleSource::class => $this->compileDouble(...),
+        ProductSource::class => $this->compileProduct(...),
+        DefaultNumberSource::class => $this->compileDefaultNumber(...),
+        FirstAvailableSource::class => $this->compileFirstAvailable(...),
+        NamedValueSource::class => $this->compileNamedValue(...),
+    ];
+}
+```
+
+### Resolving Operations Over Host Values
 
 When a source owns a typed operation over values it supplies at runtime — such as a lookup source comparing a typed row cell with a compiled filter value — bind it once through the same composed dialect as ordinary expressions:
 
@@ -495,7 +850,7 @@ The filter value evaluates once per invocation. The bound operation is an ordina
 
 Every source compiler takes one of three honest postures:
 
-- **Declare** the type beside the lookup that produces it, as the geocode example does.
+- **Declare** the type beside the lookup that produces it, as the exchange-rate example does.
 - **Delegate** by returning `$compilation->child($source->inner)` when your source wraps another source.
 - **Return `Unknown`** when you genuinely cannot know (a raw lookup cell) — knowing that an `Unknown` value is inert until the program bridges it with an explicit `Coerce` or `Ascription`.
 
@@ -508,6 +863,8 @@ Two practical notes:
 
 - **Persist the `Source` tree, not the compiled `Program`.** Compilation deliberately captures the extension's live collaborators in evaluation closures. Reconstruct the extension (normally through your container), compose the dialect, and compile after loading the source.
 - **Annotate only inside `custom()` through `SourceEvaluation::annotate()`.** Ordinary composition participates in the node lifecycle automatically.
+
+The complete method-by-method contract is in the [Plugin API Reference](plugin-api.md#sources-and-source-compilers).
 
 ## Testing Your Extension
 
@@ -577,7 +934,7 @@ The one obligation the fixed-rule builder *cannot* discharge for you is your clo
 
 Axiom deliberately does not own:
 
-- **Dialect composition** — which rules run, in which order.
+- **Dialect composition** — which rules and extensions are included.
 - **Enforcement policy** — whether a `dead` finding blocks a save or just renders a warning.
 - **Domain relations** built downstream on the registry — for example, partial-agreement conformance between a supply and an interface.
 

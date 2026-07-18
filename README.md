@@ -397,7 +397,7 @@ Operator::infix('-')
     ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p));
 ```
 
-The full guide is **[docs/extending-axiom.md](docs/extending-axiom.md)**; the short version:
+Use **[the extension guide](docs/extending-axiom.md)** for a progressive tutorial and the **[Plugin API Reference](docs/plugin-api.md)** for exact signatures and behavior. The short version:
 
 | You want to… | Implement / use | Guide section |
 | --- | --- | --- |
