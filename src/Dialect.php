@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Closure;
 use InvalidArgumentException;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
@@ -22,18 +21,19 @@ use Superscript\Axiom\Types\LiteralTypeRegistry;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
-use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
-use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\attempt;
 
 /**
  * The operator rules live in exactly one place. A Dialect composes the
- * binary rules, the unary rules, the literal registry, and exact-class host
- * source compilers. It is consumed at compile time only: the compiler binds
- * every selected evaluation into the Program, so there is nothing at
- * runtime to miscompose.
+ * binary rules, the unary rules, the literal registry, and exact-class
+ * source compilers — the core language's nodes are registered by core()
+ * through the same map host extensions contribute to, so an extension that
+ * claims a core source class meets the ordinary duplicate-ownership
+ * refusal. It is consumed at compile time only: the compiler binds every
+ * selected evaluation into the Program, so there is nothing at runtime to
+ * miscompose.
  *
  * Most core rules are dispatch-table rows (the operator rule builder's
  * output); equality and the set operators compute their answer from the
@@ -51,7 +51,7 @@ final readonly class Dialect
      * @param list<BinaryOperatorRule> $binaryRules
      * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
-     * @param array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> $sourceCompilers
+     * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
      */
     private function __construct(
         private array $binaryRules,
@@ -109,7 +109,7 @@ final readonly class Dialect
                     ->evaluatesWith(fn(int|float $operand) => -$operand),
             ],
             literalMappings: [],
-            sourceCompilers: [],
+            sourceCompilers: CoreSourceCompilers::compilers(),
         );
     }
 
@@ -165,7 +165,7 @@ final readonly class Dialect
         return new LiteralTypeRegistry($this->literalMappings);
     }
 
-    /** @return array<class-string<Source>, Closure(Source, SourceCompilation): Result<CompiledNode, TypeMismatch>> */
+    /** @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
     public function sourceCompilers(): array
     {
         return $this->sourceCompilers;

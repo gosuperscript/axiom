@@ -47,8 +47,25 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\CoerceSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
+#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeEnvironment::class)]
 #[UsesClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\CompiledSource::class)]
+#[UsesClass(\Superscript\Axiom\BoundOperation::class)]
+#[UsesClass(\Superscript\Axiom\SourceEvaluation::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
@@ -149,6 +166,22 @@ final class TypeInferenceTest extends TestCase
         $this->assertSame('5', self::describe($inference->infer(new StaticSource(5), $env)));
         $this->assertSame('true', self::describe($inference->infer(new StaticSource(true), $env)));
         $this->assertSame('2.5', self::describe($inference->infer(new StaticSource(2.5), $env)));
+    }
+
+    #[Test]
+    public function the_lower_level_compiler_uses_exactly_the_source_compilers_it_is_given(): void
+    {
+        $dialect = Dialect::core();
+        $inference = new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $dialect->literals(),
+            [],
+        );
+
+        $result = $inference->infer(new StaticSource('core'), self::env());
+
+        $this->assertStringContainsString('Cannot compile', $result->unwrapErr()->message);
     }
 
     #[Test]
@@ -838,6 +871,7 @@ final class TypeInferenceTest extends TestCase
             $dialect->operators(),
             new \Superscript\Axiom\Operators\UnaryOperatorResolver([$numericNot]),
             $dialect->literals(),
+            $dialect->sourceCompilers(),
         );
 
         $result = $inference->infer(new UnaryExpression('!', new StaticSource(5)), self::env());

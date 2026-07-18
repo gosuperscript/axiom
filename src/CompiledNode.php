@@ -21,6 +21,8 @@ use Throwable;
  * short-circuits, match arms, value-dependent errors like division by
  * zero — and the explicit admission nodes (Coerce, Ascription), which
  * check values because checking values is their job.
+ *
+ * @internal Source compilers compose CompiledSource instead.
  */
 final readonly class CompiledNode
 {

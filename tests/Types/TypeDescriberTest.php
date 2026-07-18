@@ -45,6 +45,12 @@ use Superscript\Axiom\Types\TypeDescriber;
 final class TypeDescriberTest extends TestCase
 {
     #[Test]
+    public function it_renders_a_type_class_without_its_namespace(): void
+    {
+        $this->assertSame('NumberType', TypeDescriber::describeClass(NumberType::class));
+    }
+
+    #[Test]
     #[DataProvider('shapes')]
     public function it_renders_shapes(Shape $shape, string $expected): void
     {

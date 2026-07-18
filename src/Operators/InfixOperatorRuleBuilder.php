@@ -19,4 +19,16 @@ final readonly class InfixOperatorRuleBuilder
     {
         return new InfixOperatorRuleWithOperands($this->operator, $left, $right);
     }
+
+    /**
+     * @template TLeft of Type
+     * @template TRight of Type
+     * @param class-string<TLeft> $left
+     * @param class-string<TRight> $right
+     * @return InfixOperatorRuleWithMatchingTypes<TLeft, TRight>
+     */
+    public function matching(string $left, string $right): InfixOperatorRuleWithMatchingTypes
+    {
+        return new InfixOperatorRuleWithMatchingTypes($this->operator, $left, $right);
+    }
 }

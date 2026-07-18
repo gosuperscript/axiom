@@ -16,9 +16,10 @@ namespace Superscript\Axiom\Operators;
  * fit the declared slots and answers with the declared return type and
  * closure.
  *
- * Rules a fixed row cannot express — answers computed from the operand
- * types, dead-comparison findings, absence-tolerant rules — implement
- * {@see BinaryOperatorRule}/{@see UnaryOperatorRule} directly.
+ * When a verdict is computed from concrete Type objects, matching() adds a
+ * typed class prefilter before resolvesWith(). Fully structural judgments
+ * and absence-tolerant rules implement {@see BinaryOperatorRule} or
+ * {@see UnaryOperatorRule} directly.
  */
 final readonly class Operator
 {

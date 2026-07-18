@@ -49,9 +49,25 @@ use Superscript\Axiom\Types\UnionType;
  * host source whose evaluation breaks its own type claim.
  */
 #[CoversClass(TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\CoreSourceCompilers::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\CoerceSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\CompiledSource::class)]
+#[UsesClass(\Superscript\Axiom\BoundOperation::class)]
+#[UsesClass(\Superscript\Axiom\SourceEvaluation::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
@@ -440,6 +456,11 @@ final class ProgramTest extends TestCase
         $this->assertSame(0, $observer->annotations['matched_arm']);
         $this->assertContains(['memo', 'miss'], $observer->timeline);
         $this->assertContains(['memo', 'hit'], $observer->timeline);
+        $this->assertSame(
+            2,
+            count(array_filter($observer->timeline, fn(array $annotation): bool => $annotation === ['result', 10])),
+            'both the infix body and the enclosing match annotate their result',
+        );
     }
 
     #[Test]
