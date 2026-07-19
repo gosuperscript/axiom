@@ -16,6 +16,8 @@ use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Tests\Fixtures\ProjectedNumberOptionType;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
@@ -70,6 +72,19 @@ final class DefaultValueTest extends TestCase
         $this->assertEquals(new ListType(new StringType()), $program->returns);
         $this->assertSame([], $program([])->unwrap()->unwrap());
         $this->assertSame(['one'], $program(['items' => ['one']])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function it_preserves_a_host_type_inside_a_core_option_instead_of_reifying_its_shape(): void
+    {
+        $default = new Money(1250, 'GBP');
+        $program = (new Expression(
+            new DefaultValue(new SymbolSource('premium'), $default),
+            declarations: ['premium' => new OptionType(new MoneyType('GBP'))],
+        ))->compile()->unwrap();
+
+        $this->assertEquals(new MoneyType('GBP'), $program->returns);
+        $this->assertSame($default, $program([])->unwrap()->unwrap());
     }
 
     #[Test]
