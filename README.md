@@ -232,6 +232,7 @@ Sources are the nodes a program is described with:
 - **`SymbolSource`** — named references: a declared parameter (read from bindings) or a defined derived value (compiled once, memoized per invocation)
 - **`Coerce`** — the conversion bridge: converts a resolved value into the declared type via coercion (statically opaque by design)
 - **`Ascription`** — the author's checked type claim: verified by `assert()` at runtime, checked for overlap at compile time
+- **`DefaultValue`** — replaces absence with a fallback coerced at compile time to the source's present type
 - **`InfixExpression`** / **`UnaryExpression`** — operator applications
 - **`MatchExpression`** — conditional matching with ordered arms
 - **`MemberAccessSource`** — chained property/array-key access
@@ -248,6 +249,13 @@ new Coerce(new NumberType(), $rawLookupCell)   // '42 ' → 42; the compiler tak
 
 ```php
 new Ascription(new NumberType(), $unknownHostSource)  // "trust me, this is a number" — and it's checked twice
+```
+
+**`DefaultValue` makes absence policy explicit.** Its fallback is data rather than a separately typed source: when the wrapped source is optional, the compiler coerces the fallback to its present type. That lets `0` become the correct domain zero and `[]` become the correctly typed empty collection while the expression itself becomes non-optional. A fallback that cannot inhabit that present type is a compilation error. A total source is already non-optional, so defaulting it is statically the identity and the unreachable fallback is ignored.
+
+```php
+new DefaultValue($optionalPremium, 0)
+new DefaultValue($optionalTags, [])
 ```
 
 > [!TIP]
@@ -398,6 +406,7 @@ When no observer is passed, the same program follows the direct evaluation path 
 | Static value | `label`: `"static(int)"`, `"static(string)"`, etc. |
 | `Coerce` | `label`: the declared type (e.g. `"Number"`); `coercion`: type change (e.g. `"string -> int"`) |
 | `Ascription` | `label`: the claim (e.g. `"is Number"`) |
+| `DefaultValue` | `label`: `"default"`; `source`, `used_default`, `result` |
 | Infix operator | `label`: operator (e.g. `"+"`, `"&&"`); `left`, `right`, `result` |
 | Unary operator | `label`: operator (e.g. `"!"`, `"-"`); `result` |
 | Symbol | `label`: symbol name (e.g. `"A"`, `"math.pi"`); `memo`: `"hit"`/`"miss"` for definitions; `result` |
