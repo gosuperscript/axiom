@@ -17,6 +17,7 @@ use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\DefaultValue;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Tests\Sources\Fixtures\UndescribablePattern;
@@ -29,6 +30,7 @@ use Superscript\Axiom\Types\StringType;
 #[CoversClass(StaticSource::class)]
 #[CoversClass(SymbolSource::class)]
 #[CoversClass(Coerce::class)]
+#[CoversClass(DefaultValue::class)]
 #[CoversClass(\Superscript\Axiom\Sources\Ascription::class)]
 #[CoversClass(InfixExpression::class)]
 #[CoversClass(UnaryExpression::class)]
@@ -127,6 +129,13 @@ class DescribableTest extends TestCase
         $source = new Coerce(new NumberType(), new UndescribableSource());
 
         $this->assertSame('UndescribableSource (as number)', $source->describe());
+    }
+
+    #[Test]
+    public function default_value_describes_the_source_and_fallback(): void
+    {
+        $this->assertSame('price ?? 0', (new DefaultValue(new SymbolSource('price'), 0))->describe());
+        $this->assertSame('UndescribableSource ?? []', (new DefaultValue(new UndescribableSource(), []))->describe());
     }
 
     #[Test]
