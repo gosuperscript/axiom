@@ -73,6 +73,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class OperatorRuleBuilderTest extends TestCase
 {
     private static function concat(): InfixOperatorRule
@@ -278,6 +279,39 @@ final class OperatorRuleBuilderTest extends TestCase
     }
 
     #[Test]
+    public function fixed_rules_have_explicit_or_structural_analysis_identities(): void
+    {
+        $infix = Operator::infix('++')
+            ->identifiedBy('example.string.concat')
+            ->takes(new StringType(), new StringType())
+            ->returns(new StringType())
+            ->evaluatesWith(fn(string $left, string $right): string => $left . $right);
+        $prefix = Operator::prefix('abs')
+            ->identifiedBy('example.number.absolute')
+            ->takes(new NumberType())
+            ->returns(new NumberType())
+            ->evaluatesWith(fn(int|float $operand): int|float => abs($operand));
+
+        $this->assertSame('example.string.concat', $infix->identifier());
+        $this->assertSame('example.number.absolute', $prefix->identifier());
+        $this->assertMatchesRegularExpression('/:\+\+:[a-f0-9]{12}$/', self::concat()->identifier());
+        $this->assertMatchesRegularExpression('/:abs:[a-f0-9]{12}$/', self::absolute()->identifier());
+    }
+
+    #[Test]
+    public function explicit_rule_identifiers_cannot_be_empty(): void
+    {
+        foreach ([Operator::infix('+'), Operator::prefix('!')] as $builder) {
+            try {
+                $builder->identifiedBy('');
+                $this->fail('An empty identity should be refused.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertSame('An operator rule identifier cannot be empty.', $exception->getMessage());
+            }
+        }
+    }
+
+    #[Test]
     public function an_option_operand_on_a_prefix_rule_is_rejected_at_declaration(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -304,6 +338,7 @@ final class OperatorRuleBuilderTest extends TestCase
             });
 
         $this->assertSame('same-literal', $rule->operator());
+        $this->assertStringContainsString(':same-literal(', $rule->identifier());
 
         $unsupported = $rule->resolve(new NumberType(), new LiteralType(1));
         $this->assertInstanceOf(UnsupportedOperation::class, $unsupported);
@@ -342,6 +377,7 @@ final class OperatorRuleBuilderTest extends TestCase
                 : Operation::returns(new NumberType())->evaluatesWith(fn(int|float $value) => $value));
 
         $this->assertSame('literal-value', $rule->operator());
+        $this->assertStringContainsString(':literal-value(', $rule->identifier());
 
         $nonLiteral = $rule->resolve(new NumberType());
         $this->assertInstanceOf(UnsupportedOperation::class, $nonLiteral);

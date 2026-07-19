@@ -23,6 +23,7 @@ final readonly class InfixOperatorRuleWithMatchingTypes
         private string $operator,
         private string $left,
         private string $right,
+        private ?string $identifier = null,
     ) {}
 
     /** @param callable(TLeft, TRight): OperatorResolution $resolve */
@@ -33,6 +34,7 @@ final readonly class InfixOperatorRuleWithMatchingTypes
             $this->left,
             $this->right,
             $resolve(...),
+            $this->identifier,
         );
     }
 }

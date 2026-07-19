@@ -13,6 +13,7 @@ final readonly class PrefixOperatorRuleWithMatchingType
     public function __construct(
         private string $operator,
         private string $operand,
+        private ?string $identifier = null,
     ) {}
 
     /** @param callable(TOperand): OperatorResolution $resolve */
@@ -22,6 +23,7 @@ final readonly class PrefixOperatorRuleWithMatchingType
             $this->operator,
             $this->operand,
             $resolve(...),
+            $this->identifier,
         );
     }
 }

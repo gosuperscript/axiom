@@ -9,7 +9,7 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 
 /** A computed binary rule guarded by concrete operand Type classes. */
-final readonly class MatchingInfixOperatorRule implements BinaryOperatorRule
+final readonly class MatchingInfixOperatorRule implements BinaryOperatorRule, IdentifiedOperatorRule
 {
     /**
      * @param class-string<Type> $left
@@ -20,11 +20,17 @@ final readonly class MatchingInfixOperatorRule implements BinaryOperatorRule
         private string $left,
         private string $right,
         private Closure $resolve,
+        private ?string $identifier = null,
     ) {}
 
     public function operator(): string
     {
         return $this->operator;
+    }
+
+    public function identifier(): string
+    {
+        return $this->identifier ?? sprintf('%s:%s(%s,%s)', self::class, $this->operator, $this->left, $this->right);
     }
 
     public function resolve(Type $left, Type $right): OperatorResolution

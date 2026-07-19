@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use InvalidArgumentException;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -16,16 +18,29 @@ use function Superscript\Monads\Result\Ok;
 /** Compiler-facing collection of binary operator rules, indexed by symbol. */
 final class BinaryOperatorResolver
 {
-    /** @var array<string, list<BinaryOperatorRule>> */
+    /** @var array<string, list<array{rule: BinaryOperatorRule, extension: ?string}>> */
     private array $rules = [];
 
-    /** @param list<BinaryOperatorRule> $rules */
-    public function __construct(array $rules)
+    private bool $attributesResolutions;
+
+    /**
+     * @param list<BinaryOperatorRule> $rules
+     * @param list<?string> $extensions
+     */
+    public function __construct(array $rules, array $extensions = [])
     {
         Assert::allIsInstanceOf($rules, BinaryOperatorRule::class);
+        $this->attributesResolutions = $extensions !== [];
 
-        foreach ($rules as $rule) {
-            $this->rules[$rule->operator()][] = $rule;
+        if ($extensions !== [] && count($extensions) !== count($rules)) {
+            throw new InvalidArgumentException('Binary operator extension provenance must align one-for-one with its rules.');
+        }
+
+        foreach ($rules as $index => $rule) {
+            $this->rules[$rule->operator()][] = [
+                'rule' => $rule,
+                'extension' => $extensions[$index] ?? null,
+            ];
         }
     }
 
@@ -41,11 +56,13 @@ final class BinaryOperatorResolver
         $resolved = [];
         $refused = [];
 
-        foreach ($rules as $rule) {
+        foreach ($rules as ['rule' => $rule, 'extension' => $extension]) {
             $resolution = $rule->resolve($left, $right);
 
             if ($resolution instanceof ResolvedOperation) {
-                $resolved[] = [$rule::class, $resolution];
+                $resolved[] = [$rule::class, $this->attributesResolutions
+                    ? $resolution->attributedTo(OperatorRuleProvenance::of($rule, $extension))
+                    : $resolution];
             } else {
                 $refused[] = self::mismatch($resolution);
             }

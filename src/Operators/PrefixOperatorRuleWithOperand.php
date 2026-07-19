@@ -14,10 +14,11 @@ final readonly class PrefixOperatorRuleWithOperand
     public function __construct(
         private string $operator,
         private Type $operand,
+        private ?string $identifier = null,
     ) {}
 
     public function returns(Type $returnType): PrefixOperatorRuleWithReturn
     {
-        return new PrefixOperatorRuleWithReturn($this->operator, $this->operand, $returnType);
+        return new PrefixOperatorRuleWithReturn($this->operator, $this->operand, $returnType, $this->identifier);
     }
 }

@@ -39,7 +39,7 @@ final readonly class MatchExpressionCompiler
     {
         $subject = $compilation->within(
             'The match subject cannot be typed.',
-            fn() => $compilation->child($source->subject),
+            fn() => $compilation->child($source->subject, 'subject'),
         );
 
         $armTypes = [];
@@ -62,7 +62,7 @@ final readonly class MatchExpressionCompiler
             );
             $body = $compilation->within(
                 sprintf('Match arm %d cannot be typed.', $index),
-                fn() => $compilation->child($arm->expression),
+                fn() => $compilation->child($arm->expression, "arm.{$index}.expression"),
             );
 
             $armTypes[] = $body->returns;
@@ -122,7 +122,7 @@ final readonly class MatchExpressionCompiler
         }
 
         if ($pattern instanceof ExpressionPattern) {
-            $compiled = $compilation->child($pattern->source);
+            $compiled = $compilation->child($pattern->source, 'pattern.expression');
 
             return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $evaluation->value($compiled) === $subject;
         }

@@ -67,6 +67,7 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class DialectTest extends TestCase
 {
     #[Test]
@@ -409,5 +410,21 @@ final class DialectTest extends TestCase
         $resolved = $dialect->literals()->resolve(new \DateTimeImmutable());
 
         $this->assertInstanceOf(StringType::class, $resolved->unwrap());
+    }
+
+    #[Test]
+    public function an_extension_identity_cannot_be_empty(): void
+    {
+        $extension = new class extends Extension {
+            public function identifier(): string
+            {
+                return '';
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('returned an empty identifier');
+
+        Dialect::core()->with($extension);
     }
 }

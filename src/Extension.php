@@ -22,6 +22,15 @@ use Superscript\Axiom\Types\Type;
 abstract class Extension
 {
     /**
+     * Stable owner identity emitted in compilation analysis. Override this
+     * when a PHP class name is not a suitable long-lived package identity.
+     */
+    public function identifier(): string
+    {
+        return static::class;
+    }
+
+    /**
      * Binary operator rules, joined to the dialect's existing rules. Order
      * carries no meaning: no tie is ever resolvable — two rules for one
      * operator with jointly admissible slots are refused at construction,

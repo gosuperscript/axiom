@@ -38,6 +38,7 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(Threw::class)]
 #[UsesClass(Program::class)]
 #[UsesClass(Bindings::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class ExecutionTest extends TestCase
 {
     #[Test]

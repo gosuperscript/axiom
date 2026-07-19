@@ -34,7 +34,7 @@ final readonly class MemberAccessSourceCompiler
      */
     public static function compile(MemberAccessSource $source, SourceCompilation $compilation): CompiledSource
     {
-        $object = $compilation->child($source->object);
+        $object = $compilation->child($source->object, 'object');
         $field = self::accessField($object->returns->shape(), $source->property);
 
         if ($field->isErr()) {

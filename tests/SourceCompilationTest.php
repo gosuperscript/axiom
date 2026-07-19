@@ -157,6 +157,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class SourceCompilationTest extends TestCase
 {
     private static function compilation(
@@ -165,6 +166,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compilePrefix = null,
         ?Closure $compileSymbol = null,
         ?Closure $typeOfValue = null,
+        ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
     ): SourceCompilation {
         return new SourceCompilation(
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
@@ -172,6 +174,7 @@ final class SourceCompilationTest extends TestCase
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
+            $recorder,
         );
     }
 
@@ -295,6 +298,33 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($node, $compilation->symbol($symbol)->node());
         $this->assertSame([$symbol], $seen);
+    }
+
+    #[Test]
+    public function analyzed_children_and_definitions_are_recorded_with_their_roles(): void
+    {
+        $source = new StaticSource(1);
+        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+            StaticSource::class,
+            new NumberType(),
+            'axiom.core',
+        );
+        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
+            ->forSource($source, $analysis);
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileNode: fn(Source $candidate): Result => Ok($node),
+            compileSymbol: fn(SymbolSource $symbol): Result => Ok($node),
+            recorder: $recorder,
+        );
+
+        $compilation->child($source, 'operand');
+        $compilation->symbol(new SymbolSource('defined'));
+
+        $this->assertSame(['operand', 'definition'], array_map(
+            fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
+            $recorder->children(),
+        ));
     }
 
     #[Test]

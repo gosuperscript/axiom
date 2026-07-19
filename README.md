@@ -8,6 +8,7 @@ The design principle is **compile, then trust**: `Expression::compile()` type-ch
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
     - [Expressions Compile to Programs](#expressions-compile-to-programs)
+    - [Compilation Analysis](#compilation-analysis)
     - [Compile, Then Trust](#compile-then-trust)
     - [Types](#types)
     - [Assert vs Coerce](#assert-vs-coerce)
@@ -113,6 +114,25 @@ $gate->check(new BooleanType()); // certified
 ```
 
 Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), and `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. The lower-level `TypeInference`/`TypeEnvironment` API remains available for corpus sweeps over stored programs.
+
+### Compilation Analysis
+
+Every successful compilation also produces a data-only explanation of the decisions that certify the program. It is available on the compiled program, or directly through `Expression::analyze()`:
+
+```php
+$program = $expression->compile()->unwrap();
+$analysis = $program->analysis;
+
+$analysis->root;        // typed CompilationNode tree
+$analysis->operators(); // selected rules with deterministic source paths
+$analysis->toArray();   // serializable export
+
+$sameAnalysis = $expression->analyze()->unwrap();
+```
+
+Each source node records its source class, owning extension, inferred return type, named compiled children, and any operator selections made by its compiler. Each operator selection records its symbol, operand and return types, and the stable identity, implementation class, and extension of the rule that won. This makes implicit overload usage visible for audits and compatibility-debt retirement without changing runtime evaluation.
+
+The export is an explanation of the compiled program, not a second persisted source format. It contains no closures or captured collaborators. Literal values inside inferred types are redacted by default because analyses often become logs or build artifacts; use `toArray(revealLiterals: true)` only in a trusted context.
 
 ### Compile, Then Trust
 
@@ -392,10 +412,13 @@ Axiom is designed to be extended from the outside — domain types, operator rul
 use Superscript\Axiom\Operators\Operator;
 
 Operator::infix('-')
+    ->identifiedBy('time.date.minus-period')
     ->takes(new DateType(), new PeriodType())
     ->returns(new DateType())
     ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p));
 ```
+
+Use `identifiedBy()` for a stable semantic rule identity in compilation analysis. Rules without one receive a deterministic fallback, while hand-written rules use their implementation class. Override `Extension::identifier()` when the extension class name is not a suitable long-lived package identity.
 
 Use **[the extension guide](docs/extending-axiom.md)** for a progressive tutorial and the **[Plugin API Reference](docs/plugin-api.md)** for exact signatures and behavior. The short version:
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeEnvironment;
@@ -141,6 +142,16 @@ final readonly class Expression
     }
 
     /**
+     * Explain the exact typed decisions made by successful compilation.
+     *
+     * @return Result<CompilationAnalysis, TypeMismatch>
+     */
+    public function analyze(): Result
+    {
+        return $this->compile()->map(fn(Program $program) => $program->analysis);
+    }
+
+    /**
      * Does this expression produce the expected type? compile + assignability.
      *
      * @return Result<Type, TypeMismatch>
@@ -159,6 +170,7 @@ final readonly class Expression
             $this->dialect->unaryOperators(),
             $this->dialect->literals(),
             $this->dialect->sourceCompilers(),
+            $this->dialect->sourceCompilerExtensions(),
         );
     }
 

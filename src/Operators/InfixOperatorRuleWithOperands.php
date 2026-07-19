@@ -15,10 +15,11 @@ final readonly class InfixOperatorRuleWithOperands
         private string $operator,
         private Type $left,
         private Type $right,
+        private ?string $identifier = null,
     ) {}
 
     public function returns(Type $returnType): InfixOperatorRuleWithReturn
     {
-        return new InfixOperatorRuleWithReturn($this->operator, $this->left, $this->right, $returnType);
+        return new InfixOperatorRuleWithReturn($this->operator, $this->left, $this->right, $returnType, $this->identifier);
     }
 }

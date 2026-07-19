@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Analysis\CompilationAnalysis;
+use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -41,6 +43,8 @@ final readonly class Program
 {
     public Type $returns;
 
+    public CompilationAnalysis $analysis;
+
     /**
      * Required-ness per declaration, fixed at compile time. It is a
      * property of the projection, not the concrete class:
@@ -61,6 +65,13 @@ final readonly class Program
     ) {
         $this->returns = $node->returns;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
+        $compilation = $node->compilation() ?? new CompilationNode(
+            CompiledNode::class,
+            $node->returns,
+            'unattributed',
+        );
+
+        $this->analysis = new CompilationAnalysis($compilation, $this->declarations, $this->boundary);
     }
 
     /**

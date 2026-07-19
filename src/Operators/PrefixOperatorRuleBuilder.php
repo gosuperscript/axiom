@@ -14,7 +14,19 @@ use Superscript\Axiom\Types\TypeDescriber;
  */
 final readonly class PrefixOperatorRuleBuilder
 {
-    public function __construct(private string $operator) {}
+    public function __construct(
+        private string $operator,
+        private ?string $identifier = null,
+    ) {}
+
+    public function identifiedBy(string $identifier): self
+    {
+        if ($identifier === '') {
+            throw new InvalidArgumentException('An operator rule identifier cannot be empty.');
+        }
+
+        return new self($this->operator, $identifier);
+    }
 
     /**
      * An Option operand is refused loudly: absence never reaches a unary
@@ -31,7 +43,7 @@ final readonly class PrefixOperatorRuleBuilder
             ));
         }
 
-        return new PrefixOperatorRuleWithOperand($this->operator, $operand);
+        return new PrefixOperatorRuleWithOperand($this->operator, $operand, $this->identifier);
     }
 
     /**
@@ -41,6 +53,6 @@ final readonly class PrefixOperatorRuleBuilder
      */
     public function matching(string $operand): PrefixOperatorRuleWithMatchingType
     {
-        return new PrefixOperatorRuleWithMatchingType($this->operator, $operand);
+        return new PrefixOperatorRuleWithMatchingType($this->operator, $operand, $this->identifier);
     }
 }

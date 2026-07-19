@@ -9,7 +9,7 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 
 /** A computed unary rule guarded by a concrete operand Type class. */
-final readonly class MatchingPrefixOperatorRule implements UnaryOperatorRule
+final readonly class MatchingPrefixOperatorRule implements UnaryOperatorRule, IdentifiedOperatorRule
 {
     /**
      * @param class-string<Type> $operand
@@ -18,11 +18,17 @@ final readonly class MatchingPrefixOperatorRule implements UnaryOperatorRule
         private string $operator,
         private string $operand,
         private Closure $resolve,
+        private ?string $identifier = null,
     ) {}
 
     public function operator(): string
     {
         return $this->operator;
+    }
+
+    public function identifier(): string
+    {
+        return $this->identifier ?? sprintf('%s:%s(%s)', self::class, $this->operator, $this->operand);
     }
 
     public function resolve(Type $operand): OperatorResolution

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use InvalidArgumentException;
 use Superscript\Axiom\Types\Type;
 
 /**
@@ -13,11 +14,23 @@ use Superscript\Axiom\Types\Type;
  */
 final readonly class InfixOperatorRuleBuilder
 {
-    public function __construct(private string $operator) {}
+    public function __construct(
+        private string $operator,
+        private ?string $identifier = null,
+    ) {}
+
+    public function identifiedBy(string $identifier): self
+    {
+        if ($identifier === '') {
+            throw new InvalidArgumentException('An operator rule identifier cannot be empty.');
+        }
+
+        return new self($this->operator, $identifier);
+    }
 
     public function takes(Type $left, Type $right): InfixOperatorRuleWithOperands
     {
-        return new InfixOperatorRuleWithOperands($this->operator, $left, $right);
+        return new InfixOperatorRuleWithOperands($this->operator, $left, $right, $this->identifier);
     }
 
     /**
@@ -29,6 +42,6 @@ final readonly class InfixOperatorRuleBuilder
      */
     public function matching(string $left, string $right): InfixOperatorRuleWithMatchingTypes
     {
-        return new InfixOperatorRuleWithMatchingTypes($this->operator, $left, $right);
+        return new InfixOperatorRuleWithMatchingTypes($this->operator, $left, $right, $this->identifier);
     }
 }

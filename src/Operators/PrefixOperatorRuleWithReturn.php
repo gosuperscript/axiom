@@ -15,6 +15,7 @@ final readonly class PrefixOperatorRuleWithReturn
         private string $operator,
         private Type $operand,
         private Type $returnType,
+        private ?string $identifier = null,
     ) {}
 
     /**
@@ -25,6 +26,6 @@ final readonly class PrefixOperatorRuleWithReturn
      */
     public function evaluatesWith(callable $evaluation): PrefixOperatorRule
     {
-        return new PrefixOperatorRule($this->operator, $this->operand, $this->returnType, $evaluation(...));
+        return new PrefixOperatorRule($this->operator, $this->operand, $this->returnType, $evaluation(...), $this->identifier);
     }
 }

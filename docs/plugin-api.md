@@ -25,6 +25,7 @@ This reference covers the supported API for packages and applications that exten
     - [Rules implemented by hand](#rules-implemented-by-hand)
     - [Resolution variants](#resolution-variants)
 - [Diagnostics](#diagnostics)
+- [Compilation analysis](#compilation-analysis)
 - [Execution observation](#execution-observation)
 - [Supported boundary](#supported-boundary)
 
@@ -35,6 +36,8 @@ Every plugin contributes through one subclass of `Superscript\Axiom\Extension`. 
 ```php
 abstract class Extension
 {
+    public function identifier(): string;
+
     /** @return list<BinaryOperatorRule> */
     public function operators(): array;
 
@@ -60,6 +63,8 @@ abstract class Extension
 | `unaryOperators()` | Unary operator rules | Same semantics; absence propagates before a unary rule is invoked. |
 | `literals()` | Object class to `Type` factory | Duplicate class keys are refused. Avoid overlapping parent/subclass registrations because lookup uses `instanceof`. |
 | `sourceCompilers()` | Exact `Source` class to compiler callable | Ownership is exact-class. Duplicate keys and attempts to claim a core source are refused. |
+
+`identifier()` defaults to the concrete extension class. Override it with a stable package-level identity when class names may change; compilation analysis attributes every contributed source compiler and operator selection to it. Empty identities are refused.
 
 The extension object is the dependency-injection boundary. Put live services in its constructor and capture them in compiler or operator closures. Keep `Source` objects as persistable data.
 
@@ -141,7 +146,7 @@ The compiler capability passed to every source compiler.
 
 | Method | Meaning |
 | --- | --- |
-| `child(Source $source): CompiledSource` | Compile one persisted child in the current dialect, definitions, and type environment. |
+| `child(Source $source, ?string $role = null): CompiledSource` | Compile one persisted child in the current dialect, definitions, and type environment. Give structural children a stable role for analysis output. |
 | `children(array $sources): CompiledSources` | Compile named or positional children in array order. Use when no per-child work is needed before composition. |
 | `combine(array $sources): CompiledSources` | Combine `CompiledSource` values already compiled or certified individually. |
 | `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. |
@@ -366,11 +371,13 @@ Use a fixed row when operand and return types are known at extension composition
 
 ```php
 Operator::infix('+')
+    ->identifiedBy('money.eur.add')
     ->takes(new MoneyType('EUR'), new MoneyType('EUR'))
     ->returns(new MoneyType('EUR'))
     ->evaluatesWith(fn (Money $left, Money $right) => $left->plus($right));
 
 Operator::prefix('negate')
+    ->identifiedBy('money.eur.negate')
     ->takes(new MoneyType('EUR'))
     ->returns(new MoneyType('EUR'))
     ->evaluatesWith(fn (Money $money) => $money->negated());
@@ -379,11 +386,11 @@ Operator::prefix('negate')
 The staged chains are:
 
 ```text
-Operator::infix(symbol)  → takes(left, right) → returns(type) → evaluatesWith(callable)
-Operator::prefix(symbol) → takes(operand)     → returns(type) → evaluatesWith(callable)
+Operator::infix(symbol)  → identifiedBy(id) → takes(left, right) → returns(type) → evaluatesWith(callable)
+Operator::prefix(symbol) → identifiedBy(id) → takes(operand)     → returns(type) → evaluatesWith(callable)
 ```
 
-The last call returns `BinaryOperatorRule` or `UnaryOperatorRule`. A prefix row cannot take an `OptionType`: unary absence propagates structurally before rule evaluation.
+`identifiedBy()` is optional but recommended for public rules: it gives the selected rule a stable semantic identity in compilation analysis. Without it, fixed and computed builders derive a deterministic fallback. The last call returns `BinaryOperatorRule` or `UnaryOperatorRule`. A prefix row cannot take an `OptionType`: unary absence propagates structurally before rule evaluation.
 
 ### Computed rules
 
@@ -391,6 +398,7 @@ Use a typed computed rule when the concrete `Type` classes identify ownership bu
 
 ```php
 Operator::infix('+')
+    ->identifiedBy('money.add')
     ->matching(MoneyType::class, MoneyType::class)
     ->resolvesWith(function (MoneyType $left, MoneyType $right): OperatorResolution {
         if ($left->currency !== $right->currency) {
@@ -438,6 +446,8 @@ interface UnaryOperatorRule
 }
 ```
 
+A hand-written rule may also implement `IdentifiedOperatorRule::identifier()`. Otherwise its concrete implementation class is its analysis identity.
+
 `resolve()` judges types only. It must not inspect runtime values or route aliases. Register aliases as separate rule instances, each returning its own symbol from `operator()`.
 
 ### Resolution variants
@@ -474,6 +484,19 @@ new TypeMismatch(
 | `describe(): string` | Render the complete indented cause tree. |
 
 Use `SourceCompilation::reject()` for a compiler-owned refusal and `within()` to add context. Use `UnsupportedOperation` or `DeadOperation` at an operator-rule boundary. Do not throw `TypeMismatch`; it is a value, not an exception.
+
+## Compilation analysis
+
+Successful compilation exposes its data-only explanation as `Program::$analysis`; `Expression::analyze()` returns the same kind of artifact without requiring the caller to keep the program.
+
+| API | Result |
+| --- | --- |
+| `$analysis->root` | The typed `CompilationNode` graph, including source classes, source-compiler extension identities, named children, and local operator selections. |
+| `$analysis->operators()` | A flat list of `LocatedOperatorSelection` values with deterministic source and selection paths. |
+| `$analysis->toArray(bool $revealLiterals = false)` | Versioned serializable representation. Literal values inside inferred types are redacted by default. |
+| `json_encode($analysis)` | The default redacted representation through `JsonSerializable`. |
+
+An operator selection retains its typed operands and return type plus `OperatorRuleProvenance`: stable identifier, implementation class, and owning extension. The artifact never contains evaluation closures or collaborators captured by source compilers. Treat it as an explanation and audit format, not as an alternative serialization of the authoring `Source` tree.
 
 ## Execution observation
 

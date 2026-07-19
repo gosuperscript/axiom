@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Analysis\CompilationRecorder;
+use Superscript\Axiom\Analysis\OperatorSelection;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -38,11 +40,18 @@ final readonly class SourceCompilation
         private Closure $compilePrefix,
         private Closure $compileSymbol,
         private Closure $typeOfValue,
+        private ?CompilationRecorder $recorder = null,
     ) {}
 
-    public function child(Source $source): CompiledSource
+    public function child(Source $source, ?string $role = null): CompiledSource
     {
-        return new CompiledSource($this->require(($this->compileNode)($source)));
+        $node = $this->require(($this->compileNode)($source));
+
+        if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {
+            $this->recorder->child($compilation, $role);
+        }
+
+        return new CompiledSource($node);
     }
 
     /** @param array<array-key, Source> $sources */
@@ -51,7 +60,7 @@ final readonly class SourceCompilation
         $compiled = [];
 
         foreach ($sources as $name => $source) {
-            $compiled[$name] = $this->child($source);
+            $compiled[$name] = $this->child($source, (string) $name);
         }
 
         return new CompiledSources($compiled);
@@ -66,19 +75,32 @@ final readonly class SourceCompilation
     /** Bind one binary operation once from certified operand types. */
     public function infix(Type $left, string $operator, Type $right): BoundOperation
     {
-        return new BoundOperation($this->require(($this->compileInfix)($left, $operator, $right)));
+        $resolved = $this->require(($this->compileInfix)($left, $operator, $right));
+        $this->recordOperator('infix', $operator, [$left, $right], $resolved);
+
+        return new BoundOperation($resolved);
     }
 
     /** Bind one unary operation once from a certified operand type. */
     public function prefix(string $operator, Type $operand): BoundOperation
     {
-        return new BoundOperation($this->require(($this->compilePrefix)($operator, $operand)));
+        $resolved = $this->require(($this->compilePrefix)($operator, $operand));
+        $this->recordOperator('prefix', $operator, [$operand], $resolved);
+
+        return new BoundOperation($resolved);
     }
 
     /** Compile a persisted symbol child in the current type environment. */
     public function symbol(SymbolSource $symbol): CompiledSource
     {
-        return new CompiledSource($this->require(($this->compileSymbol)($symbol)));
+        $node = $this->require(($this->compileSymbol)($symbol));
+        $compilation = $node->compilation();
+
+        if ($this->recorder !== null && $compilation !== null) {
+            $this->recorder->child($compilation, 'definition');
+        }
+
+        return new CompiledSource($node);
     }
 
     /** Infer the literal-first type of an embedded PHP value. */
@@ -141,5 +163,25 @@ final readonly class SourceCompilation
         }
 
         return $result->unwrap();
+    }
+
+    /** @param non-empty-list<Type> $operands */
+    private function recordOperator(string $kind, string $operator, array $operands, ResolvedOperation $resolved): void
+    {
+        if ($this->recorder === null) {
+            return;
+        }
+
+        $this->recorder->operator(new OperatorSelection(
+            $kind,
+            $operator,
+            $operands,
+            $resolved->returns,
+            $resolved->provenance ?? new \Superscript\Axiom\Analysis\OperatorRuleProvenance(
+                'unattributed',
+                \Superscript\Axiom\Operators\ResolvedOperation::class,
+                null,
+            ),
+        ));
     }
 }

@@ -30,6 +30,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[UsesClass(StringType::class)]
 #[UsesClass(TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class BinaryOperatorResolverTest extends TestCase
 {
     private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): BinaryOperatorRule
@@ -106,6 +107,30 @@ final class BinaryOperatorResolverTest extends TestCase
         $resolver = new BinaryOperatorResolver([self::rule('+', $operation)]);
 
         $this->assertSame($operation, $resolver->resolve('+', new NumberType(), new NumberType())->unwrap());
+    }
+
+    #[Test]
+    public function an_attributed_resolution_names_its_rule_and_extension(): void
+    {
+        $operation = new ResolvedOperation(new NumberType(), fn() => 3);
+        $rule = self::rule('+', $operation);
+        $resolved = (new BinaryOperatorResolver([$rule], ['catalogue.compatibility']))
+            ->resolve('+', new NumberType(), new NumberType())
+            ->unwrap();
+
+        $this->assertNotSame($operation, $resolved);
+        $this->assertSame($rule::class, $resolved->provenance?->identifier);
+        $this->assertSame($rule::class, $resolved->provenance?->implementation);
+        $this->assertSame('catalogue.compatibility', $resolved->provenance?->extension);
+    }
+
+    #[Test]
+    public function extension_provenance_must_align_with_binary_rules(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('align one-for-one');
+
+        new BinaryOperatorResolver([self::rule('+', new UnsupportedOperation('No.'))], ['one', 'extra']);
     }
 
     #[Test]
