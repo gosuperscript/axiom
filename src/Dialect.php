@@ -120,8 +120,8 @@ final readonly class Dialect
             unaryRules: $unaryRules,
             literalMappings: [],
             sourceCompilers: $sourceCompilers,
-            binaryExtensions: array_fill(0, count($binaryRules), 'axiom.core'),
-            unaryExtensions: array_fill(0, count($unaryRules), 'axiom.core'),
+            binaryExtensions: array_fill_keys(array_keys($binaryRules), 'axiom.core'),
+            unaryExtensions: array_fill_keys(array_keys($unaryRules), 'axiom.core'),
             sourceCompilerExtensions: array_fill_keys(array_keys($sourceCompilers), 'axiom.core'),
         );
     }
@@ -147,8 +147,8 @@ final readonly class Dialect
             $extensionUnary = $extension->unaryOperators();
             $binary = [...$extensionBinary, ...$binary];
             $unary = [...$extensionUnary, ...$unary];
-            $binaryExtensions = [...array_fill(0, count($extensionBinary), $identifier), ...$binaryExtensions];
-            $unaryExtensions = [...array_fill(0, count($extensionUnary), $identifier), ...$unaryExtensions];
+            $binaryExtensions = [...array_fill_keys(array_keys($extensionBinary), $identifier), ...$binaryExtensions];
+            $unaryExtensions = [...array_fill_keys(array_keys($extensionUnary), $identifier), ...$unaryExtensions];
 
             foreach ($extension->literals() as $class => $factory) {
                 if (isset($literals[$class])) {

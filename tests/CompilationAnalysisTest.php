@@ -32,8 +32,15 @@ use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\DictType;
+use Superscript\Axiom\Types\ListType;
+use Superscript\Axiom\Types\LiteralType;
+use Superscript\Axiom\Types\OpaqueType;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\UnionType;
 
 #[CoversClass(CompilationAnalysis::class)]
 #[CoversClass(CompilationChild::class)]
@@ -129,15 +136,53 @@ final class CompilationAnalysisTest extends TestCase
 
         $this->assertSame(4.5, $program()->unwrap()->unwrap());
         $this->assertSame($analysis, $program->analysis);
-        $this->assertSame('Coerce', $export['boundary']);
-        $this->assertSame(InfixExpression::class, $export['root']['source']);
-        $this->assertSame('axiom.core', $export['root']['extension']);
-        $this->assertSame('Number', $export['root']['returns']);
-        $this->assertSame('left', $export['root']['children'][0]['role']);
-        $this->assertSame(CountingSource::class, $export['root']['children'][0]['node']['source']);
-        $this->assertSame('catalogue.compatibility', $export['root']['children'][0]['node']['extension']);
-        $this->assertSame('right', $export['root']['children'][1]['role']);
-        $this->assertSame('String', $export['root']['children'][1]['node']['returns']);
+        $this->assertSame([
+            'version' => 1,
+            'boundary' => 'Coerce',
+            'declarations' => [],
+            'root' => [
+                'path' => '$',
+                'source' => InfixExpression::class,
+                'extension' => 'axiom.core',
+                'returns' => 'Number',
+                'operators' => [[
+                    'path' => '$.operators[0]',
+                    'kind' => 'infix',
+                    'operator' => 'legacy-plus',
+                    'operands' => ['Number', 'String'],
+                    'returns' => 'Number',
+                    'rule' => [
+                        'identifier' => 'catalogue.legacy-string-addition',
+                        'implementation' => InfixOperatorRule::class,
+                        'extension' => 'catalogue.compatibility',
+                    ],
+                ]],
+                'children' => [
+                    [
+                        'role' => 'left',
+                        'node' => [
+                            'path' => '$.children[0].node',
+                            'source' => CountingSource::class,
+                            'extension' => 'catalogue.compatibility',
+                            'returns' => 'Number',
+                            'operators' => [],
+                            'children' => [],
+                        ],
+                    ],
+                    [
+                        'role' => 'right',
+                        'node' => [
+                            'path' => '$.children[1].node',
+                            'source' => StaticSource::class,
+                            'extension' => 'axiom.core',
+                            'returns' => 'String',
+                            'operators' => [],
+                            'children' => [],
+                        ],
+                    ],
+                ],
+            ],
+        ], $export);
 
         $operator = $analysis->operators()[0];
 
@@ -154,15 +199,123 @@ final class CompilationAnalysisTest extends TestCase
     #[Test]
     public function serializable_export_redacts_literals_unless_the_caller_explicitly_reveals_them(): void
     {
-        $analysis = (new Expression(new StaticSource([
-            'public_field' => ['private value'],
-        ])))->analyze()->unwrap();
+        $analysis = new CompilationAnalysis(
+            new CompilationNode(StaticSource::class, new LiteralType('private'), 'axiom.core'),
+            [
+                'boolean' => new LiteralType(true),
+                'integer' => new LiteralType(7),
+                'float' => new LiteralType(2.5),
+                'string' => new LiteralType('private'),
+                'option' => new OptionType(new LiteralType('private')),
+                'union' => new UnionType(new LiteralType('private'), new LiteralType(7)),
+                'list' => new ListType(new LiteralType('private'), 2, 4),
+                'dict' => new DictType(new LiteralType('private')),
+                'record' => new RecordType(['field' => new LiteralType('private')]),
+                'opaque' => new OpaqueType('Example', ['parameter' => new LiteralType('private')]),
+            ],
+            \Superscript\Axiom\Boundary::Assert,
+        );
 
         $redacted = json_encode($analysis, JSON_THROW_ON_ERROR);
-        $revealed = json_encode($analysis->toArray(revealLiterals: true), JSON_THROW_ON_ERROR);
+        $revealedExport = $analysis->toArray(revealLiterals: true);
+        $revealed = json_encode($revealedExport, JSON_THROW_ON_ERROR);
 
+        $this->assertSame([
+            'boolean' => 'Boolean',
+            'integer' => 'Number',
+            'float' => 'Number',
+            'string' => 'String',
+            'option' => 'String?',
+            'union' => 'String | Number',
+            'list' => 'List<String, 2..4>',
+            'dict' => 'Dict<String>',
+            'record' => '{field: String}',
+            'opaque' => 'Example<parameter: String>',
+        ], $analysis->toArray()['declarations']);
+        $this->assertSame([
+            'boolean' => 'true',
+            'integer' => '7',
+            'float' => '2.5',
+            'string' => "'private'",
+            'option' => "'private'?",
+            'union' => "'private' | 7",
+            'list' => "List<'private', 2..4>",
+            'dict' => "Dict<'private'>",
+            'record' => "{field: 'private'}",
+            'opaque' => "Example<parameter: 'private'>",
+        ], $revealedExport['declarations']);
         $this->assertStringNotContainsString('private value', $redacted);
-        $this->assertStringContainsString('private value', $revealed);
+        $this->assertStringNotContainsString('private', $redacted);
+        $this->assertStringContainsString('private', $revealed);
+        $this->assertSame('String', $analysis->root->toArray()['returns']);
+
+        $selection = new OperatorSelection(
+            'prefix',
+            'inspect',
+            [new LiteralType('private')],
+            new LiteralType('private'),
+            new OperatorRuleProvenance('inspect', self::class, 'test'),
+        );
+
+        $this->assertSame(['String'], $selection->toArray('$')['operands']);
+        $this->assertSame('String', $selection->toArray('$')['returns']);
+    }
+
+    #[Test]
+    public function flat_operator_view_walks_every_nested_node_in_deterministic_order(): void
+    {
+        $rule = new OperatorRuleProvenance('test.rule', self::class, 'test');
+        $rootSelection = new OperatorSelection('infix', '+', [new NumberType(), new NumberType()], new NumberType(), $rule);
+        $childSelection = new OperatorSelection('prefix', '-', [new NumberType()], new NumberType(), $rule);
+        $analysis = new CompilationAnalysis(
+            new CompilationNode(
+                InfixExpression::class,
+                new NumberType(),
+                'axiom.core',
+                [new CompilationChild(new CompilationNode(
+                    StaticSource::class,
+                    new NumberType(),
+                    'axiom.core',
+                    operators: [$childSelection],
+                ), 'left')],
+                [$rootSelection],
+            ),
+            [],
+            \Superscript\Axiom\Boundary::Coerce,
+        );
+
+        $operators = $analysis->operators();
+
+        $this->assertCount(2, $operators);
+        $this->assertSame('$.operators[0]', $operators[0]->path);
+        $this->assertSame('$', $operators[0]->sourcePath);
+        $this->assertSame('$.children[0].node.operators[0]', $operators[1]->path);
+        $this->assertSame('$.children[0].node', $operators[1]->sourcePath);
+        $this->assertSame($childSelection, $operators[1]->selection);
+    }
+
+    #[Test]
+    public function provenance_falls_back_to_the_rule_class_and_serializes_every_field(): void
+    {
+        $rule = new class implements BinaryOperatorRule {
+            public function operator(): string
+            {
+                return 'fallback';
+            }
+
+            public function resolve(Type $left, Type $right): OperatorResolution
+            {
+                return new ResolvedOperation(new NumberType(), fn() => 1);
+            }
+        };
+
+        $provenance = OperatorRuleProvenance::of($rule, 'catalogue.fallback');
+
+        $this->assertSame([
+            'identifier' => $rule::class,
+            'implementation' => $rule::class,
+            'extension' => 'catalogue.fallback',
+        ], $provenance->toArray());
     }
 
     #[Test]

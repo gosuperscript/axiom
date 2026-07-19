@@ -291,11 +291,21 @@ final class OperatorRuleBuilderTest extends TestCase
             ->takes(new NumberType())
             ->returns(new NumberType())
             ->evaluatesWith(fn(int|float $operand): int|float => abs($operand));
+        $matchingInfix = Operator::infix('same-literal')
+            ->identifiedBy('example.literal.same')
+            ->matching(LiteralType::class, LiteralType::class)
+            ->resolvesWith(fn() => Operation::dead('not evaluated'));
+        $matchingPrefix = Operator::prefix('literal-value')
+            ->identifiedBy('example.literal.value')
+            ->matching(LiteralType::class)
+            ->resolvesWith(fn() => Operation::dead('not evaluated'));
 
         $this->assertSame('example.string.concat', $infix->identifier());
         $this->assertSame('example.number.absolute', $prefix->identifier());
-        $this->assertMatchesRegularExpression('/:\+\+:[a-f0-9]{12}$/', self::concat()->identifier());
-        $this->assertMatchesRegularExpression('/:abs:[a-f0-9]{12}$/', self::absolute()->identifier());
+        $this->assertSame('example.literal.same', $matchingInfix->identifier());
+        $this->assertSame('example.literal.value', $matchingPrefix->identifier());
+        $this->assertSame(InfixOperatorRule::class . ':++:cf96843af1f6', self::concat()->identifier());
+        $this->assertSame(PrefixOperatorRule::class . ':abs:bd82cf16699b', self::absolute()->identifier());
     }
 
     #[Test]
@@ -338,7 +348,10 @@ final class OperatorRuleBuilderTest extends TestCase
             });
 
         $this->assertSame('same-literal', $rule->operator());
-        $this->assertStringContainsString(':same-literal(', $rule->identifier());
+        $this->assertSame(
+            MatchingInfixOperatorRule::class . ':same-literal(' . LiteralType::class . ',' . LiteralType::class . ')',
+            $rule->identifier(),
+        );
 
         $unsupported = $rule->resolve(new NumberType(), new LiteralType(1));
         $this->assertInstanceOf(UnsupportedOperation::class, $unsupported);
@@ -377,7 +390,10 @@ final class OperatorRuleBuilderTest extends TestCase
                 : Operation::returns(new NumberType())->evaluatesWith(fn(int|float $value) => $value));
 
         $this->assertSame('literal-value', $rule->operator());
-        $this->assertStringContainsString(':literal-value(', $rule->identifier());
+        $this->assertSame(
+            MatchingPrefixOperatorRule::class . ':literal-value(' . LiteralType::class . ')',
+            $rule->identifier(),
+        );
 
         $nonLiteral = $rule->resolve(new NumberType());
         $this->assertInstanceOf(UnsupportedOperation::class, $nonLiteral);
