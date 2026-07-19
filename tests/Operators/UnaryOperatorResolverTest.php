@@ -55,6 +55,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class UnaryOperatorResolverTest extends TestCase
 {
     private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): UnaryOperatorRule
@@ -171,6 +172,30 @@ final class UnaryOperatorResolverTest extends TestCase
         $this->assertStringContainsString('Unary operator [!] over Boolean is ambiguous:', $one);
         $this->assertStringContainsString($first::class, $one);
         $this->assertStringContainsString($second::class, $one);
+    }
+
+    #[Test]
+    public function an_attributed_unary_resolution_names_its_rule_and_extension(): void
+    {
+        $operation = new ResolvedOperation(new BooleanType(), fn(bool $value) => !$value);
+        $rule = self::rule('!', $operation);
+        $resolved = (new UnaryOperatorResolver([$rule], ['catalogue.compatibility']))
+            ->resolve('!', new BooleanType())
+            ->unwrap();
+
+        $this->assertNotSame($operation, $resolved);
+        $this->assertSame($rule::class, $resolved->provenance?->identifier);
+        $this->assertSame($rule::class, $resolved->provenance?->implementation);
+        $this->assertSame('catalogue.compatibility', $resolved->provenance?->extension);
+    }
+
+    #[Test]
+    public function extension_provenance_must_align_with_unary_rules(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('align one-for-one');
+
+        new UnaryOperatorResolver([self::rule('!', new UnsupportedOperation('No.'))], ['one', 'extra']);
     }
 
     #[Test]

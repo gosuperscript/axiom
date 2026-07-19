@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use Superscript\Axiom\Analysis\CompilationNode;
+use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
@@ -37,16 +39,22 @@ final readonly class TypeInference
     /** @var array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
     private array $sourceCompilers;
 
+    /** @var array<class-string<Source>, string> */
+    private array $sourceCompilerExtensions;
+
     /**
      * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
+     * @param array<class-string<Source>, string> $sourceCompilerExtensions
      */
     public function __construct(
         private BinaryOperatorResolver $operators,
         private UnaryOperatorResolver $unaryOperators,
         private LiteralTypeRegistry $literals,
         array $sourceCompilers,
+        array $sourceCompilerExtensions = [],
     ) {
         $this->sourceCompilers = $sourceCompilers;
+        $this->sourceCompilerExtensions = $sourceCompilerExtensions;
     }
 
     /**
@@ -64,19 +72,26 @@ final readonly class TypeInference
         }
 
         try {
-            $compiled = $compiler($source, $this->compilation($environment, $source));
+            $recorder = new CompilationRecorder();
+            $compiled = $compiler($source, $this->compilation($environment, $source, $recorder));
         } catch (CompilationAborted $aborted) {
             return Err($aborted->mismatch);
         }
 
-        return Ok($compiled->node()->forSource($source));
+        return Ok($compiled->node()->forSource($source, new CompilationNode(
+            $source::class,
+            $compiled->returns,
+            $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
+            $recorder->children(),
+            $recorder->operators(),
+        )));
     }
 
     /**
      * The full compiler capability for one environment — what every source
      * compiler receives, first-party and host alike.
      */
-    private function compilation(TypeEnvironment $environment, Source $owner): SourceCompilation
+    private function compilation(TypeEnvironment $environment, Source $owner, CompilationRecorder $recorder): SourceCompilation
     {
         return new SourceCompilation(
             fn(Source $child): Result => $this->compile($child, $environment),
@@ -84,6 +99,7 @@ final readonly class TypeInference
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol): Result => $this->compileOwnedSymbol($symbol, $owner, $environment),
             fn(mixed $value): Result => $this->inferValue($value),
+            $recorder,
         );
     }
 

@@ -106,6 +106,7 @@ final class TypeEnvironment
 
                 return $result;
             },
+            compilation: $node->compilation(),
         ));
     }
 }

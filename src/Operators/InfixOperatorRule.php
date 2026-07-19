@@ -24,7 +24,7 @@ use Superscript\Axiom\Types\TypeRelations;
  * reads them at construction to detect two rows that could both match
  * the same expression, which it refuses as ambiguous.
  */
-final readonly class InfixOperatorRule implements BinaryOperatorRule
+final readonly class InfixOperatorRule implements BinaryOperatorRule, IdentifiedOperatorRule
 {
     public function __construct(
         public string $operator,
@@ -32,11 +32,22 @@ final readonly class InfixOperatorRule implements BinaryOperatorRule
         public Type $right,
         public Type $returnType,
         private Closure $evaluation,
+        private ?string $identifier = null,
     ) {}
 
     public function operator(): string
     {
         return $this->operator;
+    }
+
+    public function identifier(): string
+    {
+        return $this->identifier ?? sprintf(
+            '%s:%s:%s',
+            self::class,
+            $this->operator,
+            substr(hash('sha256', TypeDescriber::describe($this->left) . "\0" . TypeDescriber::describe($this->right)), 0, 12),
+        );
     }
 
     public function resolve(Type $left, Type $right): OperatorResolution

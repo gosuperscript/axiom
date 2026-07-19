@@ -132,6 +132,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference
@@ -182,6 +183,39 @@ final class TypeInferenceTest extends TestCase
         $result = $inference->infer(new StaticSource('core'), self::env());
 
         $this->assertStringContainsString('Cannot compile', $result->unwrapErr()->message);
+    }
+
+    #[Test]
+    public function the_lower_level_compiler_marks_an_unowned_source_compiler_as_unattributed(): void
+    {
+        $dialect = Dialect::core();
+        $inference = new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $dialect->literals(),
+            $dialect->sourceCompilers(),
+        );
+
+        $compiled = $inference->compile(new StaticSource('core'), self::env())->unwrap();
+
+        $this->assertSame('unattributed', $compiled->compilation()?->extension);
+    }
+
+    #[Test]
+    public function the_lower_level_compiler_preserves_explicit_source_compiler_ownership(): void
+    {
+        $dialect = Dialect::core();
+        $inference = new TypeInference(
+            $dialect->operators(),
+            $dialect->unaryOperators(),
+            $dialect->literals(),
+            $dialect->sourceCompilers(),
+            [StaticSource::class => 'test.static-source'],
+        );
+
+        $compiled = $inference->compile(new StaticSource('core'), self::env())->unwrap();
+
+        $this->assertSame('test.static-source', $compiled->compilation()?->extension);
     }
 
     #[Test]

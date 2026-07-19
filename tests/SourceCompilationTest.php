@@ -157,6 +157,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class SourceCompilationTest extends TestCase
 {
     private static function compilation(
@@ -165,6 +166,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compilePrefix = null,
         ?Closure $compileSymbol = null,
         ?Closure $typeOfValue = null,
+        ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
     ): SourceCompilation {
         return new SourceCompilation(
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
@@ -172,6 +174,7 @@ final class SourceCompilationTest extends TestCase
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
+            $recorder,
         );
     }
 
@@ -243,6 +246,7 @@ final class SourceCompilationTest extends TestCase
         $left = new StringType();
         $right = new NumberType();
         $operation = new ResolvedOperation(new NumberType(), fn() => 1);
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $seen = null;
         $compilation = self::compilation(
             compileInfix: function (Type $actualLeft, string $operator, Type $actualRight) use (&$seen, $operation): Result {
@@ -250,6 +254,7 @@ final class SourceCompilationTest extends TestCase
 
                 return Ok($operation);
             },
+            recorder: $recorder,
         );
 
         $bound = $compilation->infix($left, '<=>', $right);
@@ -258,6 +263,27 @@ final class SourceCompilationTest extends TestCase
         $this->assertSame($operation->returns, $bound->returns);
         $this->assertSame(1, $bound());
         $this->assertSame([$left, '<=>', $right], $seen);
+        $this->assertSame([[
+            'path' => '$.operators[0]',
+            'kind' => 'infix',
+            'operator' => '<=>',
+            'operands' => ['String', 'Number'],
+            'returns' => 'Number',
+            'rule' => [
+                'identifier' => 'unattributed',
+                'implementation' => ResolvedOperation::class,
+                'extension' => null,
+            ],
+        ]], array_map(
+            fn(\Superscript\Axiom\Analysis\OperatorSelection $selection): array => $selection->toArray('$.operators[0]'),
+            $recorder->operators(),
+        ));
+
+        $withoutRecorder = self::compilation(
+            compileInfix: fn(Type $actualLeft, string $operator, Type $actualRight): Result => Ok($operation),
+        );
+
+        $this->assertSame(1, ($withoutRecorder->infix($left, '<=>', $right))());
     }
 
     #[Test]
@@ -265,6 +291,7 @@ final class SourceCompilationTest extends TestCase
     {
         $operand = new NumberType();
         $operation = new ResolvedOperation(new NumberType(), fn() => 1);
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $seen = null;
         $compilation = self::compilation(
             compilePrefix: function (string $operator, Type $actualOperand) use (&$seen, $operation): Result {
@@ -272,10 +299,26 @@ final class SourceCompilationTest extends TestCase
 
                 return Ok($operation);
             },
+            recorder: $recorder,
         );
 
         $this->assertSame(1, ($compilation->prefix('-', $operand))());
         $this->assertSame(['-', $operand], $seen);
+        $this->assertSame([[
+            'path' => '$.operators[0]',
+            'kind' => 'prefix',
+            'operator' => '-',
+            'operands' => ['Number'],
+            'returns' => 'Number',
+            'rule' => [
+                'identifier' => 'unattributed',
+                'implementation' => ResolvedOperation::class,
+                'extension' => null,
+            ],
+        ]], array_map(
+            fn(\Superscript\Axiom\Analysis\OperatorSelection $selection): array => $selection->toArray('$.operators[0]'),
+            $recorder->operators(),
+        ));
     }
 
     #[Test]
@@ -295,6 +338,34 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($node, $compilation->symbol($symbol)->node());
         $this->assertSame([$symbol], $seen);
+    }
+
+    #[Test]
+    public function analyzed_children_and_definitions_are_recorded_with_their_roles(): void
+    {
+        $source = new StaticSource(1);
+        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+            StaticSource::class,
+            new NumberType(),
+            'axiom.core',
+        );
+        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
+            ->forSource($source, $analysis);
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileNode: fn(Source $candidate): Result => Ok($node),
+            compileSymbol: fn(SymbolSource $symbol): Result => Ok($node),
+            recorder: $recorder,
+        );
+
+        $compilation->child($source, 'operand');
+        $compilation->children([$source]);
+        $compilation->symbol(new SymbolSource('defined'));
+
+        $this->assertSame(['operand', '0', 'definition'], array_map(
+            fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
+            $recorder->children(),
+        ));
     }
 
     #[Test]
@@ -518,6 +589,9 @@ final class SourceCompilationTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertTrue($program()->unwrap()->unwrap());
+        $this->assertSame('infix', $program->analysis->operators()[0]->selection->kind);
+        $this->assertSame(['Number', 'Number'], $program->analysis->operators()[0]->selection->toArray('$')['operands']);
+        $this->assertSame($extension::class, $program->analysis->operators()[0]->selection->rule->extension);
     }
 
     #[Test]
@@ -542,6 +616,9 @@ final class SourceCompilationTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertSame(-7, $program()->unwrap()->unwrap());
+        $this->assertSame('prefix', $program->analysis->operators()[0]->selection->kind);
+        $this->assertSame(['Number'], $program->analysis->operators()[0]->selection->toArray('$')['operands']);
+        $this->assertSame('axiom.core', $program->analysis->operators()[0]->selection->rule->extension);
     }
 
     #[Test]

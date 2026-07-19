@@ -54,14 +54,21 @@ use Superscript\Axiom\Operators\Operator;
 
 final class TimeExtension extends Extension
 {
+    public function identifier(): string
+    {
+        return 'time';
+    }
+
     public function operators(): array
     {
         return [
             Operator::infix('-')
+                ->identifiedBy('time.date.minus-period')
                 ->takes(new DateType(), new PeriodType())
                 ->returns(new DateType())
                 ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p)),
             Operator::infix('-')
+                ->identifiedBy('time.date.difference')
                 ->takes(new DateType(), new DateType())
                 ->returns(new PeriodType())
                 ->evaluatesWith(fn (Date $a, Date $b) => $a->until($b)),
@@ -256,16 +263,19 @@ Here is date arithmetic, complete:
 use Superscript\Axiom\Operators\Operator;
 
 Operator::infix('-')
+    ->identifiedBy('time.date.minus-period')
     ->takes(new DateType(), new PeriodType())
     ->returns(new DateType())
     ->evaluatesWith(fn (Date $d, Period $p) => $d->minus($p)),
 
 Operator::infix('-')
+    ->identifiedBy('time.date.difference')
     ->takes(new DateType(), new DateType())
     ->returns(new PeriodType())
     ->evaluatesWith(fn (Date $a, Date $b) => $a->until($b)),
 
 Operator::prefix('abs')
+    ->identifiedBy('number.absolute')
     ->takes(new NumberType())
     ->returns(new NumberType())
     ->evaluatesWith(fn (int|float $n) => abs($n)),
@@ -273,7 +283,7 @@ Operator::prefix('abs')
 
 When the compiler asks about your operator over some operand types, the row checks admissibility against its declared types — producing mismatch messages that read uniformly with core's, like `[-] expects Date and Period; got Date and String.` — and on success returns its declared return type together with your closure. The compiler binds that closure into the program. **No dispatch happens at runtime**, and your closure only ever sees values of the operand types you declared, because the compiler proved them and the boundary admitted them.
 
-The chain is staged — `takes` → `returns` → `evaluatesWith` — and the final `evaluatesWith(...)` call completes and returns the rule. There is no `build()` to forget, and a half-declared rule is unrepresentable.
+The chain is staged — optional `identifiedBy` → `takes` → `returns` → `evaluatesWith` — and the final `evaluatesWith(...)` call completes and returns the rule. Use a stable semantic identity for rules you want hosts to audit over time; a deterministic fallback is provided when it is omitted. There is no `build()` to forget, and a half-declared rule is unrepresentable.
 
 > [!NOTE]
 > One asymmetry: `Operator::prefix` **loudly rejects an `Option` operand type**. Absence never reaches a unary rule — the compiled node short-circuits absent operands and optionality propagates structurally — so a prefix rule taking `Option` would declare a claim that can never fire. Declare the present type instead.

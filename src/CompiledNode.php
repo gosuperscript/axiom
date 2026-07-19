@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Execution\Node;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Option\Option;
@@ -36,6 +37,7 @@ final readonly class CompiledNode
         public Type $returns,
         Closure $evaluation,
         ?string $sourceType = null,
+        private ?CompilationNode $compilation = null,
     ) {
         $this->evaluation = $evaluation;
         $this->sourceType = $sourceType ?? self::class;
@@ -48,9 +50,15 @@ final readonly class CompiledNode
      *
      * @internal
      */
-    public function forSource(Source $source): self
+    public function forSource(Source $source, CompilationNode $compilation): self
     {
-        return new self($this->returns, $this->evaluation, $source::class);
+        return new self($this->returns, $this->evaluation, $source::class, $compilation);
+    }
+
+    /** @internal Compilation infrastructure and Program consume this metadata. */
+    public function compilation(): ?CompilationNode
+    {
+        return $this->compilation;
     }
 
     /** @return Result<Option<mixed>, Throwable> */

@@ -22,7 +22,7 @@ final readonly class UnaryExpressionCompiler
      */
     public static function compile(UnaryExpression $source, SourceCompilation $compilation): CompiledSource
     {
-        $operand = $compilation->child($source->operand);
+        $operand = $compilation->child($source->operand, 'operand');
         $shape = $operand->returns->shape();
         $present = $shape instanceof OptionShape ? TypeReifier::reify($shape->inner) : $operand->returns;
         $operation = $compilation->prefix($source->operator, $present);

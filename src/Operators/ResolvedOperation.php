@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Closure;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
 use Throwable;
@@ -29,7 +30,14 @@ final readonly class ResolvedOperation implements OperatorResolution
     public function __construct(
         public Type $returns,
         private Closure $evaluation,
+        public ?OperatorRuleProvenance $provenance = null,
     ) {}
+
+    /** @internal The resolver attaches the identity of the rule it selected. */
+    public function attributedTo(OperatorRuleProvenance $provenance): self
+    {
+        return new self($this->returns, $this->evaluation, $provenance);
+    }
 
     /**
      * A plain return value is wrapped in Ok; a returned Result passes

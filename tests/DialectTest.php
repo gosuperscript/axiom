@@ -67,6 +67,7 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class DialectTest extends TestCase
 {
     #[Test]
@@ -409,5 +410,60 @@ final class DialectTest extends TestCase
         $resolved = $dialect->literals()->resolve(new \DateTimeImmutable());
 
         $this->assertInstanceOf(StringType::class, $resolved->unwrap());
+    }
+
+    #[Test]
+    public function an_extension_identity_cannot_be_empty(): void
+    {
+        $extension = new class extends Extension {
+            public function identifier(): string
+            {
+                return '';
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('returned an empty identifier');
+
+        Dialect::core()->with($extension);
+    }
+
+    #[Test]
+    public function operator_provenance_stays_aligned_for_every_core_and_extension_rule(): void
+    {
+        $extension = new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    \Superscript\Axiom\Operators\Operator::infix('first-binary')
+                        ->takes(new StringType(), new StringType())
+                        ->returns(new StringType())
+                        ->evaluatesWith(fn(string $left, string $right): string => $left . $right),
+                    \Superscript\Axiom\Operators\Operator::infix('second-binary')
+                        ->takes(new NumberType(), new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluatesWith(fn(int|float $left, int|float $right): int|float => $left + $right),
+                ];
+            }
+
+            public function unaryOperators(): array
+            {
+                return [
+                    \Superscript\Axiom\Operators\Operator::prefix('first-unary')
+                        ->takes(new StringType())
+                        ->returns(new StringType())
+                        ->evaluatesWith(fn(string $operand): string => $operand),
+                    \Superscript\Axiom\Operators\Operator::prefix('second-unary')
+                        ->takes(new NumberType())
+                        ->returns(new NumberType())
+                        ->evaluatesWith(fn(int|float $operand): int|float => $operand),
+                ];
+            }
+        };
+
+        $dialect = Dialect::core()->with($extension);
+
+        $this->assertInstanceOf(\Superscript\Axiom\Operators\BinaryOperatorResolver::class, $dialect->operators());
+        $this->assertInstanceOf(\Superscript\Axiom\Operators\UnaryOperatorResolver::class, $dialect->unaryOperators());
     }
 }

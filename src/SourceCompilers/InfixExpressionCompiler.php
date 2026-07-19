@@ -14,8 +14,8 @@ final readonly class InfixExpressionCompiler
 {
     public static function compile(InfixExpression $source, SourceCompilation $compilation): CompiledSource
     {
-        $left = $compilation->child($source->left);
-        $right = $compilation->child($source->right);
+        $left = $compilation->child($source->left, 'left');
+        $right = $compilation->child($source->right, 'right');
         $operation = $compilation->infix($left->returns, $source->operator, $right->returns);
 
         return $compilation->custom($operation->returns, static function (SourceEvaluation $evaluation) use ($left, $right, $operation, $source) {

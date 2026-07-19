@@ -15,18 +15,29 @@ use Superscript\Axiom\Types\TypeRelations;
  * The operand type is public for the same reason — Dialect construction
  * refuses two rows for the same operator that admit a common operand type.
  */
-final readonly class PrefixOperatorRule implements UnaryOperatorRule
+final readonly class PrefixOperatorRule implements UnaryOperatorRule, IdentifiedOperatorRule
 {
     public function __construct(
         public string $operator,
         public Type $operand,
         public Type $returnType,
         private Closure $evaluation,
+        private ?string $identifier = null,
     ) {}
 
     public function operator(): string
     {
         return $this->operator;
+    }
+
+    public function identifier(): string
+    {
+        return $this->identifier ?? sprintf(
+            '%s:%s:%s',
+            self::class,
+            $this->operator,
+            substr(hash('sha256', TypeDescriber::describe($this->operand)), 0, 12),
+        );
     }
 
     public function resolve(Type $operand): OperatorResolution

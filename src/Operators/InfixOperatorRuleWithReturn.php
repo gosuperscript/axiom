@@ -17,6 +17,7 @@ final readonly class InfixOperatorRuleWithReturn
         private Type $left,
         private Type $right,
         private Type $returnType,
+        private ?string $identifier = null,
     ) {}
 
     /**
@@ -28,6 +29,6 @@ final readonly class InfixOperatorRuleWithReturn
      */
     public function evaluatesWith(callable $evaluation): InfixOperatorRule
     {
-        return new InfixOperatorRule($this->operator, $this->left, $this->right, $this->returnType, $evaluation(...));
+        return new InfixOperatorRule($this->operator, $this->left, $this->right, $this->returnType, $evaluation(...), $this->identifier);
     }
 }

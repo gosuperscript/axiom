@@ -27,7 +27,7 @@ final readonly class CoerceSourceCompiler
         // evaluation, and Coerce discards its inner type. Every other source
         // must compile because it runs.
         try {
-            $inner = $compilation->child($source->source);
+            $inner = $compilation->child($source->source, 'source');
         } catch (CompilationAborted $aborted) {
             if (!$source->source instanceof StaticSource) {
                 throw $aborted;

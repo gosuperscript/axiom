@@ -52,12 +52,18 @@ final readonly class Dialect
      * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
      * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
+     * @param list<?string> $binaryExtensions
+     * @param list<?string> $unaryExtensions
+     * @param array<class-string<Source>, string> $sourceCompilerExtensions
      */
     private function __construct(
         private array $binaryRules,
         private array $unaryRules,
         private array $literalMappings,
         private array $sourceCompilers,
+        private array $binaryExtensions,
+        private array $unaryExtensions,
+        private array $sourceCompilerExtensions,
     ) {
         self::assertUnambiguousRows($this->binaryRules, $this->unaryRules);
     }
@@ -67,49 +73,56 @@ final readonly class Dialect
         $number = new NumberType();
         $boolean = new BooleanType();
 
+        $binaryRules = [
+            Operator::infix('+')->identifiedBy('axiom.number.add')->takes($number, $number)->returns($number)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left + $right),
+            Operator::infix('-')->identifiedBy('axiom.number.subtract')->takes($number, $number)->returns($number)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left - $right),
+            Operator::infix('*')->identifiedBy('axiom.number.multiply')->takes($number, $number)->returns($number)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left * $right),
+            Operator::infix('/')->identifiedBy('axiom.number.divide')->takes($number, $number)->returns($number)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => attempt(fn() => $left / $right)),
+            Operator::infix('<')->identifiedBy('axiom.number.less-than')->takes($number, $number)->returns($boolean)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left < $right),
+            Operator::infix('<=')->identifiedBy('axiom.number.less-than-or-equal')->takes($number, $number)->returns($boolean)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left <= $right),
+            Operator::infix('>')->identifiedBy('axiom.number.greater-than')->takes($number, $number)->returns($boolean)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left > $right),
+            Operator::infix('>=')->identifiedBy('axiom.number.greater-than-or-equal')->takes($number, $number)->returns($boolean)
+                ->evaluatesWith(fn(int|float $left, int|float $right) => $left >= $right),
+            Operator::infix('&&')->identifiedBy('axiom.boolean.and')->takes($boolean, $boolean)->returns($boolean)
+                ->evaluatesWith(fn(bool $left, bool $right) => $left && $right),
+            Operator::infix('||')->identifiedBy('axiom.boolean.or')->takes($boolean, $boolean)->returns($boolean)
+                ->evaluatesWith(fn(bool $left, bool $right) => $left || $right),
+            Operator::infix('xor')->identifiedBy('axiom.boolean.xor')->takes($boolean, $boolean)->returns($boolean)
+                ->evaluatesWith(fn(bool $left, bool $right) => $left xor $right),
+            new Equality('=', negated: false),
+            new Equality('==', negated: false),
+            new Equality('===', negated: false),
+            new Equality('!=', negated: true),
+            new Equality('!==', negated: true),
+            new Has(),
+            new In(),
+            new Intersects(),
+        ];
+        $unaryRules = [
+            Operator::prefix('!')->identifiedBy('axiom.boolean.not')->takes($boolean)->returns($boolean)
+                ->evaluatesWith(fn(bool $operand) => !$operand),
+            Operator::prefix('not')->identifiedBy('axiom.boolean.not-readable')->takes($boolean)->returns($boolean)
+                ->evaluatesWith(fn(bool $operand) => !$operand),
+            Operator::prefix('-')->identifiedBy('axiom.number.negate')->takes($number)->returns($number)
+                ->evaluatesWith(fn(int|float $operand) => -$operand),
+        ];
+        $sourceCompilers = CoreSourceCompilers::compilers();
+
         return new self(
-            binaryRules: [
-                Operator::infix('+')->takes($number, $number)->returns($number)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left + $right),
-                Operator::infix('-')->takes($number, $number)->returns($number)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left - $right),
-                Operator::infix('*')->takes($number, $number)->returns($number)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left * $right),
-                Operator::infix('/')->takes($number, $number)->returns($number)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => attempt(fn() => $left / $right)),
-                Operator::infix('<')->takes($number, $number)->returns($boolean)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left < $right),
-                Operator::infix('<=')->takes($number, $number)->returns($boolean)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left <= $right),
-                Operator::infix('>')->takes($number, $number)->returns($boolean)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left > $right),
-                Operator::infix('>=')->takes($number, $number)->returns($boolean)
-                    ->evaluatesWith(fn(int|float $left, int|float $right) => $left >= $right),
-                Operator::infix('&&')->takes($boolean, $boolean)->returns($boolean)
-                    ->evaluatesWith(fn(bool $left, bool $right) => $left && $right),
-                Operator::infix('||')->takes($boolean, $boolean)->returns($boolean)
-                    ->evaluatesWith(fn(bool $left, bool $right) => $left || $right),
-                Operator::infix('xor')->takes($boolean, $boolean)->returns($boolean)
-                    ->evaluatesWith(fn(bool $left, bool $right) => $left xor $right),
-                new Equality('=', negated: false),
-                new Equality('==', negated: false),
-                new Equality('===', negated: false),
-                new Equality('!=', negated: true),
-                new Equality('!==', negated: true),
-                new Has(),
-                new In(),
-                new Intersects(),
-            ],
-            unaryRules: [
-                Operator::prefix('!')->takes($boolean)->returns($boolean)
-                    ->evaluatesWith(fn(bool $operand) => !$operand),
-                Operator::prefix('not')->takes($boolean)->returns($boolean)
-                    ->evaluatesWith(fn(bool $operand) => !$operand),
-                Operator::prefix('-')->takes($number)->returns($number)
-                    ->evaluatesWith(fn(int|float $operand) => -$operand),
-            ],
+            binaryRules: $binaryRules,
+            unaryRules: $unaryRules,
             literalMappings: [],
-            sourceCompilers: CoreSourceCompilers::compilers(),
+            sourceCompilers: $sourceCompilers,
+            binaryExtensions: array_fill_keys(array_keys($binaryRules), 'axiom.core'),
+            unaryExtensions: array_fill_keys(array_keys($unaryRules), 'axiom.core'),
+            sourceCompilerExtensions: array_fill_keys(array_keys($sourceCompilers), 'axiom.core'),
         );
     }
 
@@ -119,10 +132,23 @@ final readonly class Dialect
         $unary = $this->unaryRules;
         $literals = $this->literalMappings;
         $sourceCompilers = $this->sourceCompilers;
+        $binaryExtensions = $this->binaryExtensions;
+        $unaryExtensions = $this->unaryExtensions;
+        $sourceCompilerExtensions = $this->sourceCompilerExtensions;
 
         foreach ($extensions as $extension) {
-            $binary = [...$extension->operators(), ...$binary];
-            $unary = [...$extension->unaryOperators(), ...$unary];
+            $identifier = $extension->identifier();
+
+            if ($identifier === '') {
+                throw new InvalidArgumentException(sprintf('Extension [%s] returned an empty identifier.', $extension::class));
+            }
+
+            $extensionBinary = $extension->operators();
+            $extensionUnary = $extension->unaryOperators();
+            $binary = [...$extensionBinary, ...$binary];
+            $unary = [...$extensionUnary, ...$unary];
+            $binaryExtensions = [...array_fill_keys(array_keys($extensionBinary), $identifier), ...$binaryExtensions];
+            $unaryExtensions = [...array_fill_keys(array_keys($extensionUnary), $identifier), ...$unaryExtensions];
 
             foreach ($extension->literals() as $class => $factory) {
                 if (isset($literals[$class])) {
@@ -144,20 +170,29 @@ final readonly class Dialect
                 }
 
                 $sourceCompilers[$sourceClass] = $compiler;
+                $sourceCompilerExtensions[$sourceClass] = $identifier;
             }
         }
 
-        return new self($binary, $unary, $literals, $sourceCompilers);
+        return new self(
+            $binary,
+            $unary,
+            $literals,
+            $sourceCompilers,
+            $binaryExtensions,
+            $unaryExtensions,
+            $sourceCompilerExtensions,
+        );
     }
 
     public function operators(): BinaryOperatorResolver
     {
-        return new BinaryOperatorResolver($this->binaryRules);
+        return new BinaryOperatorResolver($this->binaryRules, $this->binaryExtensions);
     }
 
     public function unaryOperators(): UnaryOperatorResolver
     {
-        return new UnaryOperatorResolver($this->unaryRules);
+        return new UnaryOperatorResolver($this->unaryRules, $this->unaryExtensions);
     }
 
     public function literals(): LiteralTypeRegistry
@@ -169,6 +204,12 @@ final readonly class Dialect
     public function sourceCompilers(): array
     {
         return $this->sourceCompilers;
+    }
+
+    /** @return array<class-string<Source>, string> */
+    public function sourceCompilerExtensions(): array
+    {
+        return $this->sourceCompilerExtensions;
     }
 
     /**

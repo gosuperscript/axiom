@@ -134,6 +134,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
+#[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 final class ProgramTest extends TestCase
 {
     /**
@@ -148,6 +149,30 @@ final class ProgramTest extends TestCase
     private static function dialect(?EvaluationCounter $counter = null): Dialect
     {
         return Dialect::core()->with(new SourceCompilerExtension($counter));
+    }
+
+    #[Test]
+    public function program_preserves_attached_compilation_analysis_and_falls_back_only_for_bare_nodes(): void
+    {
+        $source = new StaticSource(1);
+        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+            StaticSource::class,
+            new NumberType(),
+            'axiom.core',
+        );
+        $attached = (new CompiledNode(
+            new NumberType(),
+            fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
+        ))->forSource($source, $analysis);
+
+        $this->assertSame(StaticSource::class, (new Program($attached))->analysis->root->source);
+        $this->assertSame(
+            CompiledNode::class,
+            (new Program(new CompiledNode(
+                new NumberType(),
+                fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
+            )))->analysis->root->source,
+        );
     }
 
     #[Test]
