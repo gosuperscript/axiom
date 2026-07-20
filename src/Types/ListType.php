@@ -84,6 +84,9 @@ class ListType implements Type
         );
     }
 
+    /**
+     * @param list<mixed> $value
+     */
     public function format(mixed $value): string
     {
         return implode(', ', array_map(fn(mixed $item) => $this->type->format($item), $value));

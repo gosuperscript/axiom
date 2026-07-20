@@ -9,13 +9,12 @@ use Superscript\Monads\Result\Result;
 use Throwable;
 
 /**
- * @template T = mixed
+ * @template-covariant T = mixed
  */
 interface Type extends Shaped
 {
     /**
      * Assert that a value is of type T and return it wrapped in Option
-     * @param T $value
      * @return Result<Option<T>, Throwable>
      */
     public function assert(mixed $value): Result;
@@ -28,7 +27,6 @@ interface Type extends Shaped
     public function coerce(mixed $value): Result;
 
     /**
-     * @param T $value
      * @return string
      */
     public function format(mixed $value): string;

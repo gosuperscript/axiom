@@ -89,6 +89,9 @@ class DictType implements Type
         }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
     }
 
+    /**
+     * @param array<mixed> $value
+     */
     public function format(mixed $value): string
     {
         /** @var array<string> $parts */
