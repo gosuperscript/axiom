@@ -107,6 +107,9 @@ final readonly class RecordType implements Type
         return Ok(Some($record));
     }
 
+    /**
+     * @param array<string, mixed> $value
+     */
     public function format(mixed $value): string
     {
         $parts = [];

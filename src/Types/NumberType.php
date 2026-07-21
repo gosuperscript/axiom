@@ -44,6 +44,9 @@ class NumberType implements Type
         })->map(fn(int|float $value) => Some($value));
     }
 
+    /**
+     * @param float|int $value
+     */
     public function format(mixed $value): string
     {
         $formatter = new NumberFormatter('en_GB', NumberFormatter::DECIMAL);

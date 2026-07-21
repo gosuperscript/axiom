@@ -41,6 +41,9 @@ class StringType implements Type
         };
     }
 
+    /**
+     * @param string $value
+     */
     public function format(mixed $value): string
     {
         return strval($value);
