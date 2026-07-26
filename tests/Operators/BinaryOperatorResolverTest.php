@@ -207,6 +207,61 @@ final class BinaryOperatorResolverTest extends TestCase
     }
 
     #[Test]
+    public function every_claimed_symbol_is_enumerable_once_and_sorted(): void
+    {
+        $resolver = new BinaryOperatorResolver([
+            self::rule('xor', new UnsupportedOperation('No.')),
+            self::rule('+', new UnsupportedOperation('No.')),
+            self::alternativeRule('+', new UnsupportedOperation('No.')),
+        ]);
+
+        $this->assertSame(['+', 'xor'], $resolver->symbols(), 'two rows for one symbol are one offer');
+    }
+
+    #[Test]
+    public function enumeration_does_not_invoke_any_rule(): void
+    {
+        $calls = 0;
+        $resolver = new BinaryOperatorResolver([self::rule('+', new UnsupportedOperation('No.'), $calls)]);
+
+        $resolver->symbols();
+        $resolver->extensions();
+
+        $this->assertSame(0, $calls, 'enumeration reads the index; it never asks a rule to resolve');
+    }
+
+    #[Test]
+    public function each_symbol_names_the_extensions_that_claim_it(): void
+    {
+        $resolver = new BinaryOperatorResolver(
+            [
+                self::rule('xor', new UnsupportedOperation('No.')),
+                self::rule('-', new UnsupportedOperation('No.')),
+                self::alternativeRule('-', new UnsupportedOperation('No.')),
+                // Two rows one extension owns, over different operand types.
+                self::rule('+', new UnsupportedOperation('No.')),
+                self::alternativeRule('+', new UnsupportedOperation('No.')),
+            ],
+            ['axiom.core', 'axiom.date', 'axiom.core', 'axiom.core', 'axiom.core'],
+        );
+
+        $this->assertSame([
+            '+' => ['axiom.core'],
+            '-' => ['axiom.core', 'axiom.date'],
+            'xor' => ['axiom.core'],
+        ], $resolver->extensions(), 'an owner of several rows for one symbol is named once');
+        $this->assertSame($resolver->symbols(), array_keys($resolver->extensions()));
+    }
+
+    #[Test]
+    public function rules_registered_without_provenance_are_unattributed(): void
+    {
+        $resolver = new BinaryOperatorResolver([self::rule('+', new UnsupportedOperation('No.'))]);
+
+        $this->assertSame(['+' => ['unattributed']], $resolver->extensions());
+    }
+
+    #[Test]
     public function an_unknown_resolution_variant_is_rejected(): void
     {
         $unknown = new class implements OperatorResolution {};

@@ -92,6 +92,27 @@ $expression = new Expression($source, dialect: $dialect);
 
 A dialect indexes its rules once. `operators()`, `unaryOperators()`, and `literals()` build on first call and hand out the same instance afterwards; a dialect derived with `with()` indexes its own. Ask a dialect what it supports as often as you like.
 
+### Enumerating a dialect's operators
+
+Both resolvers answer two questions. `resolve()` answers "may these operand types use this symbol?"; `symbols()` answers "which symbols exist at all?".
+
+```php
+$dialect = Dialect::core();
+
+$dialect->operators()->symbols();
+// ['!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=', 'has', 'in', 'intersects', 'xor', '||']
+
+$dialect->unaryOperators()->symbols();
+// ['!', '-', 'not']
+
+$dialect->operators()->extensions()['=='];
+// ['axiom.core'] — and also your identifier once your extension contributes a '==' row
+```
+
+A caller that offers a choice of operators should read `symbols()` rather than propose a list of its own and filter it through `resolve()`: a proposed list can only ever shrink, so operators the dialect has and the caller forgot stay invisible, and every operator an extension adds needs the caller changed before anyone can pick it.
+
+Both methods are sorted, not in registration order — composition carries no precedence, so an order derived from it would be an accident to depend on. `extensions()` returns the same keys in the same order, mapping each symbol to the distinct extension identifiers that claim it (several when extensions contribute rules for one symbol over different operand types). A rule registered without provenance — a resolver constructed directly rather than through a dialect — reports `unattributed`.
+
 Composition has no precedence. Fixed rows that can admit a common operand type are refused when the dialect is constructed. Any remaining case in which multiple computed rules resolve is refused during compilation. Extension order never chooses an evaluation.
 
 ## Sources and source compilers

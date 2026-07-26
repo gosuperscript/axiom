@@ -199,6 +199,44 @@ final class UnaryOperatorResolverTest extends TestCase
     }
 
     #[Test]
+    public function every_claimed_symbol_is_enumerable_once_and_sorted(): void
+    {
+        $calls = 0;
+        $resolver = new UnaryOperatorResolver([
+            self::rule('not', new UnsupportedOperation('No.'), $calls),
+            self::rule('!', new UnsupportedOperation('No.')),
+            self::rule('!', new UnsupportedOperation('No.')),
+        ]);
+
+        $this->assertSame(['!', 'not'], $resolver->symbols());
+        $this->assertSame(0, $calls, 'enumeration reads the index; it never asks a rule to resolve');
+    }
+
+    #[Test]
+    public function each_symbol_names_the_extensions_that_claim_it(): void
+    {
+        $attributed = new UnaryOperatorResolver(
+            [
+                // Two rows one extension owns, over different operand types.
+                self::rule('not', new UnsupportedOperation('No.')),
+                self::rule('not', new UnsupportedOperation('No.')),
+                self::rule('-', new UnsupportedOperation('No.')),
+                self::rule('-', new UnsupportedOperation('No.')),
+            ],
+            ['axiom.core', 'axiom.core', 'axiom.date', 'axiom.core'],
+        );
+
+        $this->assertSame([
+            '-' => ['axiom.core', 'axiom.date'],
+            'not' => ['axiom.core'],
+        ], $attributed->extensions(), 'an owner of several rows for one symbol is named once');
+        $this->assertSame($attributed->symbols(), array_keys($attributed->extensions()));
+
+        $unattributed = new UnaryOperatorResolver([self::rule('!', new UnsupportedOperation('No.'))]);
+        $this->assertSame(['!' => ['unattributed']], $unattributed->extensions());
+    }
+
+    #[Test]
     public function an_unknown_resolution_variant_is_rejected(): void
     {
         $unknown = new class implements OperatorResolution {};
