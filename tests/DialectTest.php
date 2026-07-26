@@ -103,6 +103,44 @@ final class DialectTest extends TestCase
     }
 
     #[Test]
+    public function a_dialect_reports_its_whole_operator_vocabulary(): void
+    {
+        $dialect = Dialect::core();
+
+        $this->assertSame([
+            '!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=',
+            'has', 'in', 'intersects', 'xor', '||',
+        ], $dialect->operators()->symbols());
+        $this->assertSame(['!', '-', 'not'], $dialect->unaryOperators()->symbols());
+        $this->assertSame(['axiom.core'], $dialect->operators()->extensions()['xor']);
+    }
+
+    #[Test]
+    public function an_extensions_operators_join_the_vocabulary_without_the_caller_knowing_the_extension(): void
+    {
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function identifier(): string
+            {
+                return 'axiom.tests.concat';
+            }
+
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('++')
+                        ->takes(new StringType(), new StringType())
+                        ->returns(new StringType())
+                        ->evaluatesWith(fn(string $a, string $b) => $a . $b),
+                ];
+            }
+        });
+
+        $this->assertContains('++', $dialect->operators()->symbols());
+        $this->assertSame(['axiom.tests.concat'], $dialect->operators()->extensions()['++']);
+        $this->assertNotContains('++', Dialect::core()->operators()->symbols());
+    }
+
+    #[Test]
     public function a_dialect_indexes_its_rules_once_and_a_derived_dialect_indexes_its_own(): void
     {
         $dialect = Dialect::core();
