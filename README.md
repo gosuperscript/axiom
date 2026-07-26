@@ -175,6 +175,17 @@ The compiler refuses, with a nested cause chain (`TypeMismatch::describe()`):
 - **Inert `Unknown`** — an `Unknown`-typed value at an operator, comparison, or member access is refused with the fix in the message: bridge it with `Coerce` or `Ascription`
 - **Ambiguity** — two rules resolving the same operator over jointly admissible operand types (some operand type would resolve both) is an error naming both rules, never a precedence question
 
+A refusal also says *which node* it is about. `TypeMismatch::$path` is the failing node's position in the source tree, in the same language a successful compile's analysis uses for the nodes that passed — so a caller marking an error in an editor addresses it exactly as it addresses a compiled node:
+
+```php
+$failure = $expression->compile()->unwrapErr(); // (name + 1) * 2, name declared String
+
+$failure->message; // '[+] expects Number and Number; got String and 1.'
+$failure->path;    // '$.children[0].node' — the inner +, not the outer *
+```
+
+`$path` is `null` when the verdict is not about a node: a definition cycle is a property of the graph, and a cause like `String is not assignable to Number.` is a claim about types.
+
 ### Types
 
 The built-in types, and what their coercions read:
