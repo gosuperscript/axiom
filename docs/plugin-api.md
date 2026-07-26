@@ -504,9 +504,31 @@ new TypeMismatch(
 | `$message` | Human-readable local verdict. |
 | `$causes` | Nested `TypeMismatch` causes, preserving context. |
 | `$dead` | The program is well-formed in principle but statically meaningless. Normally set by the compiler when converting `DeadOperation`. |
-| `describe(): string` | Render the complete indented cause tree. |
+| `$path` | Where the refusal was made, in the same language compilation analysis uses — or `null` when the verdict is not about a node. See below. |
+| `describe(): string` | Render the complete indented cause tree. Paths are not rendered; read them from `$path`. |
 
-Use `SourceCompilation::reject()` for a compiler-owned refusal and `within()` to add context. Use `UnsupportedOperation` or `DeadOperation` at an operator-rule boundary. Do not throw `TypeMismatch`; it is a value, not an exception.
+Use `SourceCompilation::reject()` for a compiler-owned refusal and `within()` to add context. Use `UnsupportedOperation` or `DeadOperation` at an operator-rule boundary. Do not throw `TypeMismatch`; it is a value, not an exception. A compiler-owned refusal needs no path: the compiler stamps the failing node's own path on the way out.
+
+### Which node refused
+
+`(name + 1) * 2` with `name` declared `String` fails at the inner `+`, and says so:
+
+```php
+$failure = $expression->compile()->unwrapErr();
+
+$failure->message;           // '[+] expects Number and Number; got String and 1.'
+$failure->path;              // '$.children[0].node'
+$failure->causes[0]->path;   // null
+```
+
+`$path` is the [compilation-analysis](#compilation-analysis) path of that node — the same string `$analysis->toArray()` gives it when the tree compiles — so one addressing scheme serves both channels, and the ancestor chain falls out of the prefixes. The path names the **deepest** node that refused, since that is the one to point at.
+
+`null` means the verdict is not about a node, and reads as "not a node's fault" rather than "location unknown". Two kinds keep it:
+
+- **Whole-program properties.** A definition cycle is a property of the definition graph, refused before any node is walked.
+- **Claims about types rather than nodes.** The cause above, `String is not assignable to Number.`, comes from a relation given two types; nothing at that level knows which node produced either, because `infix()` receives types, not the children they came from.
+
+Refusals that a compiler wraps with `within()` carry one path per level, outermost first — a match arm body that will not type gives the match node's path on the wrapper and the arm's path on the cause.
 
 ## Compilation analysis
 

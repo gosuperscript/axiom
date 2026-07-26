@@ -52,9 +52,14 @@ final class TypeEnvironment
     ) {}
 
     /**
+     * @param string $path Where a defined symbol's source compiles — the edge
+     *                     that referenced it. A memoized verdict keeps the path
+     *                     of the first reference that compiled it; harmless
+     *                     while a refusal aborts the whole compilation, since a
+     *                     memoized refusal is then never served twice.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler): Result
+    public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler, string $path = '$'): Result
     {
         $key = SymbolSource::key($name, $namespace);
 
@@ -93,7 +98,7 @@ final class TypeEnvironment
         }
 
         $this->inProgress[] = $key;
-        $result = $compiler->compile($source->unwrap(), $this);
+        $result = $compiler->compile($source->unwrap(), $this, $path);
         array_pop($this->inProgress);
 
         return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(

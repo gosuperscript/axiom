@@ -58,9 +58,14 @@ final readonly class TypeInference
     }
 
     /**
+     * @param string $path Where this source sits in the tree being compiled,
+     *                     in {@see CompilationNode::toArray()}'s language. Every
+     *                     refusal made here is stamped with it, so a failed
+     *                     compile names the node that failed in the same terms
+     *                     a successful one names the nodes that passed.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function compile(Source $source, TypeEnvironment $environment): Result
+    public function compile(Source $source, TypeEnvironment $environment, string $path = '$'): Result
     {
         $compiler = $this->sourceCompilers[$source::class] ?? null;
 
@@ -68,14 +73,19 @@ final readonly class TypeInference
             return Err(new TypeMismatch(sprintf(
                 'Cannot compile [%s]; register its exact class through Extension::sourceCompilers().',
                 $source::class,
-            )));
+            ), path: $path));
         }
 
         try {
-            $recorder = new CompilationRecorder();
+            $recorder = new CompilationRecorder($path);
             $compiled = $compiler($source, $this->compilation($environment, $source, $recorder));
         } catch (CompilationAborted $aborted) {
-            return Err($aborted->mismatch);
+            // The one place a node's refusal becomes a returned error, whoever
+            // made it: a source compiler, an operator no rule resolves, an
+            // unbound symbol, a failed relation. Locating it here locates all
+            // of them, and at() keeps an already-located refusal from a child
+            // pointing at the child.
+            return Err($aborted->mismatch->at($path));
         }
 
         return Ok($compiled->node()->forSource($source, new CompilationNode(
@@ -94,10 +104,10 @@ final readonly class TypeInference
     private function compilation(TypeEnvironment $environment, Source $owner, CompilationRecorder $recorder): SourceCompilation
     {
         return new SourceCompilation(
-            fn(Source $child): Result => $this->compile($child, $environment),
+            fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
             fn(Type $left, string $operator, Type $right): Result => $this->operators->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol): Result => $this->compileOwnedSymbol($symbol, $owner, $environment),
+            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
             fn(mixed $value): Result => $this->inferValue($value),
             $recorder,
         );
@@ -109,9 +119,14 @@ final readonly class TypeInference
      * constructing a reference inside a compiler would hide an edge from
      * both structural passes.
      *
+     * @param string $path Where a defined symbol's own source compiles: the
+     *                     referencing edge, the same edge the analysis records
+     *                     with role `definition`. Two references to one
+     *                     definition therefore address it by two paths, as the
+     *                     success path already does.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment): Result
+    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path): Result
     {
         if (!array_any(
             UnboundSymbols::in($owner),
@@ -124,7 +139,7 @@ final readonly class TypeInference
             )));
         }
 
-        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this);
+        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path);
     }
 
     /**

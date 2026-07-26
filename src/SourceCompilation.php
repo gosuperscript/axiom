@@ -28,10 +28,10 @@ final readonly class SourceCompilation
 {
     /**
      * @internal Constructed by TypeInference for the current environment.
-     * @param Closure(Source): Result<CompiledNode, TypeMismatch> $compileNode
+     * @param Closure(Source, string): Result<CompiledNode, TypeMismatch> $compileNode
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
-     * @param Closure(SymbolSource): Result<CompiledNode, TypeMismatch> $compileSymbol
+     * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      */
     public function __construct(
@@ -45,7 +45,7 @@ final readonly class SourceCompilation
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
-        $node = $this->require(($this->compileNode)($source));
+        $node = $this->require(($this->compileNode)($source, $this->childPath()));
 
         if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {
             $this->recorder->child($compilation, $role);
@@ -93,7 +93,7 @@ final readonly class SourceCompilation
     /** Compile a persisted symbol child in the current type environment. */
     public function symbol(SymbolSource $symbol): CompiledSource
     {
-        $node = $this->require(($this->compileSymbol)($symbol));
+        $node = $this->require(($this->compileSymbol)($symbol, $this->childPath()));
         $compilation = $node->compilation();
 
         if ($this->recorder !== null && $compilation !== null) {
@@ -163,6 +163,17 @@ final readonly class SourceCompilation
         }
 
         return $result->unwrap();
+    }
+
+    /**
+     * Where the child about to be compiled sits. Without a recorder there is
+     * no child numbering to derive one from, so the child compiles as its own
+     * root — a standalone compilation, which is what a recorderless
+     * SourceCompilation is.
+     */
+    private function childPath(): string
+    {
+        return $this->recorder?->childPath() ?? '$';
     }
 
     /** @param non-empty-list<Type> $operands */
