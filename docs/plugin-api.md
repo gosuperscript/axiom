@@ -90,6 +90,8 @@ $expression = new Expression($source, dialect: $dialect);
 | `$dialect->literals(): LiteralTypeRegistry` | The composed object-literal registry. |
 | `$dialect->sourceCompilers(): array` | The composed exact-class compiler map. |
 
+A dialect indexes its rules once. `operators()`, `unaryOperators()`, and `literals()` build on first call and hand out the same instance afterwards; a dialect derived with `with()` indexes its own. Ask a dialect what it supports as often as you like.
+
 Composition has no precedence. Fixed rows that can admit a common operand type are refused when the dialect is constructed. Any remaining case in which multiple computed rules resolve is refused during compilation. Extension order never chooses an evaluation.
 
 ## Sources and source compilers

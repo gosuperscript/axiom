@@ -44,9 +44,22 @@ use function Superscript\Monads\Result\attempt;
  *
  * Packages contribute through {@see Extension}; duplicate literal or source
  * registrations are loud errors.
+ *
+ * A dialect is a value: {@see with()} derives a new instance and never
+ * mutates this one. Because the rules can never change after construction,
+ * the resolvers they index into are built once, on first request, and
+ * handed out again on every later call — a derived dialect indexes its own.
+ * Callers may therefore ask a dialect what it supports as often as they
+ * like; only the first question pays for the index.
  */
-final readonly class Dialect
+final class Dialect
 {
+    private ?BinaryOperatorResolver $binaryResolver = null;
+
+    private ?UnaryOperatorResolver $unaryResolver = null;
+
+    private ?LiteralTypeRegistry $literalRegistry = null;
+
     /**
      * @param list<BinaryOperatorRule> $binaryRules
      * @param list<UnaryOperatorRule> $unaryRules
@@ -57,13 +70,13 @@ final readonly class Dialect
      * @param array<class-string<Source>, string> $sourceCompilerExtensions
      */
     private function __construct(
-        private array $binaryRules,
-        private array $unaryRules,
-        private array $literalMappings,
-        private array $sourceCompilers,
-        private array $binaryExtensions,
-        private array $unaryExtensions,
-        private array $sourceCompilerExtensions,
+        private readonly array $binaryRules,
+        private readonly array $unaryRules,
+        private readonly array $literalMappings,
+        private readonly array $sourceCompilers,
+        private readonly array $binaryExtensions,
+        private readonly array $unaryExtensions,
+        private readonly array $sourceCompilerExtensions,
     ) {
         self::assertUnambiguousRows($this->binaryRules, $this->unaryRules);
     }
@@ -187,17 +200,17 @@ final readonly class Dialect
 
     public function operators(): BinaryOperatorResolver
     {
-        return new BinaryOperatorResolver($this->binaryRules, $this->binaryExtensions);
+        return $this->binaryResolver ??= new BinaryOperatorResolver($this->binaryRules, $this->binaryExtensions);
     }
 
     public function unaryOperators(): UnaryOperatorResolver
     {
-        return new UnaryOperatorResolver($this->unaryRules, $this->unaryExtensions);
+        return $this->unaryResolver ??= new UnaryOperatorResolver($this->unaryRules, $this->unaryExtensions);
     }
 
     public function literals(): LiteralTypeRegistry
     {
-        return new LiteralTypeRegistry($this->literalMappings);
+        return $this->literalRegistry ??= new LiteralTypeRegistry($this->literalMappings);
     }
 
     /** @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */

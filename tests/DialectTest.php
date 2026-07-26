@@ -103,6 +103,29 @@ final class DialectTest extends TestCase
     }
 
     #[Test]
+    public function a_dialect_indexes_its_rules_once_and_a_derived_dialect_indexes_its_own(): void
+    {
+        $dialect = Dialect::core();
+
+        $this->assertSame($dialect->operators(), $dialect->operators());
+        $this->assertSame($dialect->unaryOperators(), $dialect->unaryOperators());
+        $this->assertSame($dialect->literals(), $dialect->literals());
+
+        $derived = $dialect->with(new MoneyExtension(['GBP']));
+
+        $this->assertNotSame($dialect->operators(), $derived->operators());
+        $this->assertNotSame($dialect->unaryOperators(), $derived->unaryOperators());
+        $this->assertNotSame($dialect->literals(), $derived->literals());
+
+        // The index a dialect hands out is its own: an already-indexed parent
+        // does not learn the money rules from the dialect derived from it.
+        $sterling = new MoneyType('GBP');
+        $this->assertTrue($derived->operators()->resolve('==', $sterling, $sterling)->isOk());
+        $this->assertTrue($dialect->operators()->resolve('==', $sterling, $sterling)->isErr());
+        $this->assertTrue($dialect->literals()->resolve(new Money(100, 'GBP'))->isErr());
+    }
+
+    #[Test]
     public function a_package_owned_equality_row_resolves_opaque_values_core_refuses(): void
     {
         $dialect = Dialect::core()->with(new MoneyExtension(['GBP', 'EUR']));
