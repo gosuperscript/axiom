@@ -1,6 +1,6 @@
 # RFC 0002: Locating compilation failures
 
-- **Status**: Proposed
+- **Status**: Accepted — implemented as described. `describe()` was left unchanged; paths are read from `$path`.
 - **Date**: 2026-07-26
 
 ## TL;DR
@@ -139,7 +139,7 @@ Reuse `CompilationNode::toArray()`'s convention exactly: `$`-rooted, `.children[
 | Do causes carry their own paths? | Node failures do; type-relation causes stay `null`, because nothing at that level knows the node. |
 | Which node does the top-level path name? | The deepest one that refused — `at()` is idempotent, so the first stamp survives. |
 | Path syntax | `CompilationNode::toArray()`'s positional `$`-rooted convention, unchanged. |
-| Does `describe()` change? | Proposed: no, so existing rendered output is stable. Paths are read from `->path`. (Open: an opt-in `describe(bool $withPaths = false)` would be cheap and non-breaking — worth it or noise?) |
+| Does `describe()` change? | No, so existing rendered output is stable. Paths are read from `->path`. |
 
 ## Backwards compatibility
 
@@ -158,12 +158,18 @@ No deprecation is needed and nothing is removed.
 
 The two are not in conflict: locating the mismatch is what attribution needs, and partial analysis is an additive capability that can land later on its own merits (as a separate entry point, leaving `compile()`'s signature alone). Proposed: location now.
 
-## Test plan
+## Tests
 
-- The worked example above, asserted end to end: the failure's `path` is `$.children[0].node`, and it equals the path the same tree's successful analysis gives that node — one test tying the two channels to one string.
+`tests/CompilationFailureLocationTest.php`, nine cases:
+
+- The worked example end to end: the failure's `path` is `$.children[0].node`, and it is one of the paths the *same tree, typed so it compiles* reports through `analyze()`. Tying the two channels to one string is the test that matters — it fails if either side's numbering drifts.
+- The same tie for a definition body: located at the referencing edge, and present in the working tree's analysis paths.
 - First-stamp-wins: a failure nested two levels deep names the deepest node, not an ancestor.
-- A `within()`-wrapping compiler (match expressions) produces a chain whose levels carry their own paths, outermost to innermost.
+- The `within()`-wrapping compiler (match expressions) produces a chain carrying one path per level, outermost first, ending in an unlocated type claim.
 - Type-relation causes stay `null`.
-- Whole-program refusals (definition cycles, an unregistered source class at the root) — cycles unlocated, root refusal at `$`.
-- A node whose child records no compilation does not shift its siblings' indexes: compile-time paths and `toArray()` paths agree for the same tree.
-- Unbound symbol and definition-subtree failures are located at the referencing edge.
+- Definition cycles stay unlocated, wrapper and cause alike.
+- A source no compiler claims is located where it sits — `$` at the root, `$.children[0].node` nested.
+- An unbound symbol is located where it is referenced.
+- `at()` as a unit: it carries message, causes and `dead` across, and re-locating is a no-op.
+
+Two notes on coverage of the mechanism. A declared symbol records no `definition` child, so the guard on recording is exercised by the worked example itself — its `SymbolSource` node has no children in the analysis, and the paths still agree. And nothing reachable through `child()` can record a null compilation (every node `compile()` returns carries a `CompilationNode`), so sibling numbering has no way to shift; the only null-compilation child is the declared symbol above.

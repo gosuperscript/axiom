@@ -369,6 +369,49 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function a_child_is_compiled_at_the_path_its_position_gives_it(): void
+    {
+        $source = new StaticSource(1);
+        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+            StaticSource::class,
+            new NumberType(),
+            'axiom.core',
+        );
+        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
+            ->forSource($source, $analysis);
+        $paths = [];
+        $record = function (string $path) use (&$paths, $node): Result {
+            $paths[] = $path;
+
+            return Ok($node);
+        };
+
+        $located = self::compilation(
+            compileNode: fn(Source $candidate, string $path): Result => $record($path),
+            compileSymbol: fn(SymbolSource $symbol, string $path): Result => $record($path),
+            recorder: new \Superscript\Axiom\Analysis\CompilationRecorder('$.children[7].node'),
+        );
+
+        $located->child($source);
+        $located->child($source);
+        $located->symbol(new SymbolSource('defined'));
+
+        $this->assertSame([
+            '$.children[7].node.children[0].node',
+            '$.children[7].node.children[1].node',
+            '$.children[7].node.children[2].node',
+        ], $paths, 'each child is numbered off the children recorded before it');
+
+        // Without a recorder there is no numbering to descend from, so the
+        // child compiles as its own root.
+        $paths = [];
+        self::compilation(compileNode: fn(Source $candidate, string $path): Result => $record($path))
+            ->child($source);
+
+        $this->assertSame(['$'], $paths);
+    }
+
+    #[Test]
     public function type_of_value_delegates_the_value(): void
     {
         $type = new NumberType();
