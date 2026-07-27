@@ -44,6 +44,65 @@ final class BinaryOperatorResolver
         }
     }
 
+    /**
+     * Every operator symbol at least one rule claims.
+     *
+     * This is the enumerating face of resolve(): resolve() answers "may these
+     * operand types use this symbol?", symbols() answers "which symbols are
+     * there at all?". A caller that renders a choice of operators asks here
+     * rather than proposing a list of its own and filtering it, so an
+     * extension's operators appear without that caller being taught about
+     * the extension.
+     *
+     * The answer is sorted, not in registration order. A composed dialect
+     * carries rules from several extensions and its list order decides
+     * nothing (see {@see \Superscript\Axiom\Dialect}), so an order derived
+     * from it would be an accident callers could come to depend on.
+     *
+     * @return list<string>
+     */
+    public function symbols(): array
+    {
+        $symbols = array_keys($this->rules);
+        sort($symbols);
+
+        return $symbols;
+    }
+
+    /**
+     * Which extensions claim each symbol — same keys as {@see symbols()}, in
+     * the same order. A symbol maps to several identifiers when extensions
+     * contribute rules for it over different operand types, so `-` on a
+     * dialect with a date extension reports both owners:
+     *
+     * ```php
+     * ['-' => ['axiom.core', 'axiom.date'], 'xor' => ['axiom.core']]
+     * ```
+     *
+     * Rules registered without provenance report `unattributed`, the word
+     * {@see \Superscript\Axiom\Analysis\CompilationAnalysis} uses for the
+     * same absence.
+     *
+     * @return array<string, list<string>>
+     */
+    public function extensions(): array
+    {
+        $extensions = [];
+
+        foreach ($this->rules as $operator => $rules) {
+            $owners = array_unique(array_map(
+                fn(array $rule): string => $rule['extension'] ?? 'unattributed',
+                $rules,
+            ));
+            sort($owners);
+            $extensions[$operator] = $owners;
+        }
+
+        ksort($extensions);
+
+        return $extensions;
+    }
+
     /** @return Result<ResolvedOperation, TypeMismatch> */
     public function resolve(string $operator, Type $left, Type $right): Result
     {

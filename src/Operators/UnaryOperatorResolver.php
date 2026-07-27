@@ -44,6 +44,47 @@ final class UnaryOperatorResolver
         }
     }
 
+    /**
+     * Every operator symbol at least one rule claims, sorted rather than in
+     * registration order — see {@see BinaryOperatorResolver::symbols()} for
+     * why enumeration belongs beside resolve() and why the order is not the
+     * dialect's.
+     *
+     * @return list<string>
+     */
+    public function symbols(): array
+    {
+        $symbols = array_keys($this->rules);
+        sort($symbols);
+
+        return $symbols;
+    }
+
+    /**
+     * Which extensions claim each symbol — same keys as {@see symbols()}, in
+     * the same order; `unattributed` where a rule was registered without
+     * provenance. See {@see BinaryOperatorResolver::extensions()}.
+     *
+     * @return array<string, list<string>>
+     */
+    public function extensions(): array
+    {
+        $extensions = [];
+
+        foreach ($this->rules as $operator => $rules) {
+            $owners = array_unique(array_map(
+                fn(array $rule): string => $rule['extension'] ?? 'unattributed',
+                $rules,
+            ));
+            sort($owners);
+            $extensions[$operator] = $owners;
+        }
+
+        ksort($extensions);
+
+        return $extensions;
+    }
+
     /** @return Result<ResolvedOperation, TypeMismatch> */
     public function resolve(string $operator, Type $operand): Result
     {
