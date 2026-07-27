@@ -58,7 +58,7 @@ final readonly class MatchExpressionCompiler
 
             $pattern = $compilation->within(
                 sprintf('The pattern of match arm %d cannot be compiled.', $index),
-                fn() => self::compilePattern($arm->pattern, $compilation),
+                fn() => self::compilePattern($arm->pattern, $index, $compilation),
             );
             $body = $compilation->within(
                 sprintf('Match arm %d cannot be typed.', $index),
@@ -109,10 +109,17 @@ final readonly class MatchExpressionCompiler
      * A pattern compiles to a predicate over the subject value. Matching and
      * coverage analysis consume the same value-equality definition.
      *
+     * The arm's index reaches here only to name the child an expression
+     * pattern compiles. A role is how a caller tells one child from another,
+     * so a name shared by every arm's pattern would name none of them.
+     *
      * @return Closure(mixed, SourceEvaluation): bool
      */
-    private static function compilePattern(MatchPattern $pattern, SourceCompilation $compilation): Closure
-    {
+    private static function compilePattern(
+        MatchPattern $pattern,
+        int $index,
+        SourceCompilation $compilation,
+    ): Closure {
         if ($pattern instanceof WildcardPattern) {
             return static fn(mixed $subject, SourceEvaluation $evaluation): bool => true;
         }
@@ -122,7 +129,7 @@ final readonly class MatchExpressionCompiler
         }
 
         if ($pattern instanceof ExpressionPattern) {
-            $compiled = $compilation->child($pattern->source, 'pattern.expression');
+            $compiled = $compilation->child($pattern->source, "arm.{$index}.pattern");
 
             return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $evaluation->value($compiled) === $subject;
         }
