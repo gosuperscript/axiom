@@ -29,6 +29,11 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\ExpressionPattern;
+use Superscript\Axiom\Sources\MatchArm;
+use Superscript\Axiom\Sources\MatchExpression;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Types\NumberType;
@@ -342,5 +347,41 @@ final class CompilationAnalysisTest extends TestCase
         $this->expectExceptionMessage('returned an empty identifier');
 
         OperatorRuleProvenance::of($rule, 'test');
+    }
+
+    /**
+     * A role is how a caller tells one child from another — the naming a
+     * consumer maps onto its own vocabulary when it reads types off an
+     * analysis. A match compiles two children per arm, and both must be
+     * addressable: with every arm's pattern named alike, a two-arm match
+     * would report one name twice and the analysis could not say which
+     * pattern a type belonged to.
+     */
+    #[Test]
+    public function every_child_of_a_match_is_addressable_by_its_role(): void
+    {
+        $analysis = (new Expression(
+            new MatchExpression(new SymbolSource('n'), [
+                new MatchArm(new ExpressionPattern(new StaticSource(5)), new StaticSource('five')),
+                new MatchArm(new ExpressionPattern(new StaticSource(10)), new StaticSource('ten')),
+                new MatchArm(new WildcardPattern(), new StaticSource('other')),
+            ]),
+            declarations: ['n' => new NumberType()],
+        ))->analyze()->unwrap();
+
+        $roles = array_map(
+            fn(CompilationChild $child): ?string => $child->role,
+            $analysis->root->children,
+        );
+
+        $this->assertSame([
+            'subject',
+            'arm.0.pattern',
+            'arm.0.expression',
+            'arm.1.pattern',
+            'arm.1.expression',
+            'arm.2.expression',
+        ], $roles);
+        $this->assertSame($roles, array_unique($roles), 'Two children share a role, so neither can be addressed.');
     }
 }
