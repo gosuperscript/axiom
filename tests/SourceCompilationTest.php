@@ -158,6 +158,9 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 final class SourceCompilationTest extends TestCase
 {
     private static function compilation(

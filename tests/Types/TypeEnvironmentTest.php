@@ -77,6 +77,9 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 final class TypeEnvironmentTest extends TestCase
 {
     private static function compiler(?Dialect $dialect = null): TypeInference

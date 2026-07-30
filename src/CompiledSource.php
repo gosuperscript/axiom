@@ -9,10 +9,10 @@ use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\TypeReifier;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -63,8 +63,7 @@ final readonly class CompiledSource
      */
     public function expectPresent(Type $expected): self
     {
-        $shape = $this->returns->shape();
-        $present = $shape instanceof OptionShape ? TypeReifier::reify($shape->inner) : $this->returns;
+        $present = PresentType::of($this->returns);
         $admitted = TypeRelations::admits($present, $expected);
 
         if ($admitted->isErr()) {

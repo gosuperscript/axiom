@@ -7,6 +7,7 @@ namespace Superscript\Axiom;
 use InvalidArgumentException;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\Connective;
 use Superscript\Axiom\Operators\Equality;
 use Superscript\Axiom\Operators\Has;
 use Superscript\Axiom\Operators\In;
@@ -103,10 +104,8 @@ final class Dialect
                 ->evaluatesWith(fn(int|float $left, int|float $right) => $left > $right),
             Operator::infix('>=')->identifiedBy('axiom.number.greater-than-or-equal')->takes($number, $number)->returns($boolean)
                 ->evaluatesWith(fn(int|float $left, int|float $right) => $left >= $right),
-            Operator::infix('&&')->identifiedBy('axiom.boolean.and')->takes($boolean, $boolean)->returns($boolean)
-                ->evaluatesWith(fn(bool $left, bool $right) => $left && $right),
-            Operator::infix('||')->identifiedBy('axiom.boolean.or')->takes($boolean, $boolean)->returns($boolean)
-                ->evaluatesWith(fn(bool $left, bool $right) => $left || $right),
+            new Connective('&&', conjunction: true, identifier: 'axiom.boolean.and'),
+            new Connective('||', conjunction: false, identifier: 'axiom.boolean.or'),
             Operator::infix('xor')->identifiedBy('axiom.boolean.xor')->takes($boolean, $boolean)->returns($boolean)
                 ->evaluatesWith(fn(bool $left, bool $right) => $left xor $right),
             new Equality('=', negated: false),

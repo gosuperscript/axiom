@@ -68,6 +68,8 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 final class DialectTest extends TestCase
 {
     #[Test]

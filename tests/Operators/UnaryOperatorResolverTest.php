@@ -50,12 +50,16 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 final class UnaryOperatorResolverTest extends TestCase
 {
     private static function rule(string $operator, OperatorResolution $resolution, ?int &$calls = null): UnaryOperatorRule
@@ -120,7 +124,30 @@ final class UnaryOperatorResolverTest extends TestCase
         $this->assertInstanceOf(NumberType::class, $resolver->resolve('-', new NumberType())->unwrap()->returns);
         $this->assertStringContainsString('[!] expects Boolean; got Number.', $resolver->resolve('!', new NumberType())->unwrapErr()->describe());
         $this->assertStringContainsString('An Unknown operand is inert', $resolver->resolve('!', new UnknownType())->unwrapErr()->describe());
-        $this->assertStringContainsString('the value may be absent', $resolver->resolve('-', new OptionType(new NumberType()))->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_optional_operand_lifts_the_matching_row(): void
+    {
+        $resolver = Dialect::core()->unaryOperators();
+
+        $lifted = $resolver->resolve('-', new OptionType(new NumberType()))->unwrap();
+
+        $this->assertInstanceOf(OptionType::class, $lifted->returns);
+        $this->assertSame(-5, $lifted->evaluate(5)->unwrap());
+        $this->assertNull($lifted->evaluate(null)->unwrap(), 'absence answers absence without the rule running');
+    }
+
+    #[Test]
+    public function a_constant_absent_operand_does_not_lift(): void
+    {
+        // A bare null types as Option<Never>: nothing can ever be present,
+        // so the exact refusal stands.
+        $resolver = Dialect::core()->unaryOperators();
+
+        $verdict = $resolver->resolve('-', new OptionType(new \Superscript\Axiom\Types\NeverType()));
+
+        $this->assertStringContainsString('[-] expects Number', $verdict->unwrapErr()->describe());
     }
 
     #[Test]
@@ -246,5 +273,115 @@ final class UnaryOperatorResolverTest extends TestCase
         $this->expectExceptionMessage('Unknown operator resolution');
 
         $resolver->resolve('!', new BooleanType());
+    }
+
+    /** A rule that resolves present operand types only, like every dispatch-table row. */
+    private static function presentOnlyRule(string $operator, ResolvedOperation $operation, ?int &$calls = null): UnaryOperatorRule
+    {
+        return new class ($operator, $operation, $calls) implements UnaryOperatorRule {
+            public function __construct(
+                private readonly string $symbol,
+                private readonly ResolvedOperation $operation,
+                private ?int &$calls,
+            ) {}
+
+            public function operator(): string
+            {
+                return $this->symbol;
+            }
+
+            public function resolve(Type $operand): OperatorResolution
+            {
+                ++$this->calls;
+
+                if ($operand instanceof OptionType) {
+                    return new UnsupportedOperation('Absent operands refused.');
+                }
+
+                return $this->operation;
+            }
+        };
+    }
+
+    /** The distinct-class twin of presentOnlyRule, so ambiguity is observable. */
+    private static function alternativePresentOnlyRule(string $operator, ResolvedOperation $operation): UnaryOperatorRule
+    {
+        return new class ($operator, $operation) implements UnaryOperatorRule {
+            public function __construct(
+                private readonly string $symbol,
+                private readonly ResolvedOperation $operation,
+            ) {}
+
+            public function operator(): string
+            {
+                return $this->symbol;
+            }
+
+            public function resolve(Type $operand): OperatorResolution
+            {
+                if ($operand instanceof OptionType) {
+                    return new UnsupportedOperation('Absent operands refused.');
+                }
+
+                return $this->operation;
+            }
+        };
+    }
+
+    #[Test]
+    public function a_present_operand_never_attempts_a_lift(): void
+    {
+        $calls = 0;
+        $operation = new ResolvedOperation(new BooleanType(), fn() => true);
+        $resolver = new UnaryOperatorResolver([self::presentOnlyRule('!', $operation, $calls)]);
+
+        $this->assertSame($operation, $resolver->resolve('!', new BooleanType())->unwrap());
+        $this->assertSame(1, $calls);
+    }
+
+    #[Test]
+    public function a_rule_reading_an_optional_operand_wins_untouched(): void
+    {
+        $calls = 0;
+        $operation = new ResolvedOperation(new BooleanType(), fn() => true);
+        $resolver = new UnaryOperatorResolver([self::rule('!', $operation, $calls)]);
+
+        $this->assertSame($operation, $resolver->resolve('!', new OptionType(new BooleanType()))->unwrap());
+        $this->assertSame(1, $calls);
+    }
+
+    #[Test]
+    public function lifting_preserves_provenance(): void
+    {
+        $rule = self::presentOnlyRule('!', new ResolvedOperation(new BooleanType(), fn(bool $operand) => !$operand));
+        $lifted = (new UnaryOperatorResolver([$rule], ['axiom.core']))
+            ->resolve('!', new OptionType(new BooleanType()))
+            ->unwrap();
+
+        $this->assertSame('axiom.core', $lifted->provenance?->extension);
+        $this->assertFalse($lifted->evaluate(true)->unwrap(), 'a present operand still runs the rule');
+    }
+
+    #[Test]
+    public function lifted_ambiguity_names_the_present_type(): void
+    {
+        $resolver = new UnaryOperatorResolver([
+            self::presentOnlyRule('!', new ResolvedOperation(new BooleanType(), fn() => true)),
+            self::alternativePresentOnlyRule('!', new ResolvedOperation(new BooleanType(), fn() => false)),
+        ]);
+
+        $message = $resolver->resolve('!', new OptionType(new BooleanType()))->unwrapErr()->message;
+
+        $this->assertStringContainsString('Unary operator [!] over Boolean is ambiguous:', $message);
+    }
+
+    #[Test]
+    public function a_failed_lift_reports_the_exact_refusal(): void
+    {
+        $resolver = new UnaryOperatorResolver([self::rule('!', new UnsupportedOperation('Not for this.'))]);
+
+        $verdict = $resolver->resolve('!', new OptionType(new NumberType()))->unwrapErr();
+
+        $this->assertSame('Not for this.', $verdict->message, 'stage-one diagnostics stand when the lift resolves nothing');
     }
 }
