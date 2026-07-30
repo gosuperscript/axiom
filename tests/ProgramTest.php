@@ -135,6 +135,9 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
+#[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 final class ProgramTest extends TestCase
 {
     /**

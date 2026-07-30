@@ -47,6 +47,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[CoversClass(Intersects::class)]
 #[CoversClass(SetOperands::class)]
 #[CoversClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ResolvedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
@@ -159,6 +161,20 @@ final class ResolveTest extends TestCase
         yield 'ordering of number literals' => [$core, '>=', new LiteralType(1), new LiteralType(2), BooleanType::class];
         yield 'booleans conjoin' => [$core, '&&', new BooleanType(), new BooleanType(), BooleanType::class];
 
+        // The resolver lifts a rule matched on the present types: the result
+        // is optional and an absent operand answers absence at runtime.
+        yield 'ordering lifts an optional number' => [
+            $core, '<=', new OptionType(new NumberType()), new NumberType(), OptionType::class,
+        ];
+        yield 'arithmetic lifts an optional number' => [
+            $core, '-', new OptionType(new NumberType()), new NumberType(), OptionType::class,
+        ];
+        // Connectives read optional booleans directly (Kleene, not lifted):
+        // a dominant present operand still decides alone.
+        yield 'a connective reads an optional boolean' => [
+            $core, '||', new BooleanType(), new OptionType(new BooleanType()), OptionType::class,
+        ];
+
         yield 'equality of overlapping types' => [self::equality('=='), '==', new NumberType(), new NumberType(), BooleanType::class];
         yield 'equality of a literal against its enum' => [
             self::equality('='), '=', new LiteralType('shop'), new UnionType(new LiteralType('shop'), new LiteralType('office')), BooleanType::class,
@@ -224,8 +240,10 @@ final class ResolveTest extends TestCase
     {
         $core = self::core();
         yield 'arithmetic refuses strings' => [$core, '+', new StringType(), new NumberType(), '[+] expects Number and Number; got String and Number.'];
-        yield 'arithmetic refuses options' => [
-            $core, '-', new OptionType(new NumberType()), new NumberType(), 'the value may be absent',
+        // Lifting only strips optionality; a wrong present type refuses with
+        // the types as the author wrote them.
+        yield 'lifting does not rescue a wrong present type' => [
+            $core, '-', new OptionType(new StringType()), new NumberType(), 'got String? and Number',
         ];
         yield 'arithmetic refuses a cross-base union' => [
             $core, '+', new UnionType(new NumberType(), new StringType()), new NumberType(), 'every union member must be assignable',
@@ -241,15 +259,9 @@ final class ResolveTest extends TestCase
             $core, '||', new UnknownType(), new BooleanType(), 'An Unknown operand is inert',
         ];
         yield 'ordering refuses strings' => [$core, '<', new StringType(), new StringType(), '[<] expects Number and Number; got String and String.'];
-        yield 'ordering refuses options' => [
-            $core, '<=', new OptionType(new NumberType()), new NumberType(), 'the value may be absent',
-        ];
         yield 'logic refuses numbers' => [$core, '&&', new NumberType(), new BooleanType(), '[&&] expects Boolean and Boolean; got Number and Boolean.'];
         yield 'logic refusals carry the assignability cause' => [
             $core, '&&', new NumberType(), new BooleanType(), 'Number is not assignable to Boolean',
-        ];
-        yield 'logic refuses optional booleans' => [
-            $core, '||', new BooleanType(), new OptionType(new BooleanType()), '[||] expects Boolean and Boolean',
         ];
         yield 'an unsupported operator is refused by the whole dialect' => [
             $core, 'coalesce', new NumberType(), new NumberType(), 'Operator [coalesce] is not supported.',

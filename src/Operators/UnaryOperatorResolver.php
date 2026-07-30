@@ -6,6 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Types\PresentType;
+use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -85,7 +87,16 @@ final class UnaryOperatorResolver
         return $extensions;
     }
 
-    /** @return Result<ResolvedOperation, TypeMismatch> */
+    /**
+     * Resolution is two-staged, exactly as in
+     * {@see BinaryOperatorResolver::resolve()}: the rules see the operand
+     * type as given first, and only when every rule refuses an optional
+     * operand are they consulted with its present type — a match there is
+     * returned lifted ({@see ResolvedOperation::liftedOverAbsence()}).
+     * Refusals always report the type as given.
+     *
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
     public function resolve(string $operator, Type $operand): Result
     {
         $rules = $this->rules[$operator] ?? [];
@@ -94,6 +105,51 @@ final class UnaryOperatorResolver
             return Err(new TypeMismatch(sprintf('Unary operator [%s] is not supported.', $operator)));
         }
 
+        [$resolved, $refused] = $this->attempt($rules, $operand);
+
+        if (count($resolved) > 1) {
+            return self::ambiguous($operator, $resolved, $operand);
+        }
+
+        if ($resolved !== []) {
+            return Ok($resolved[0][1]);
+        }
+
+        $present = PresentType::of($operand);
+
+        // A bare null types as Option<Never>: it can never be present, so
+        // there is nothing to lift over and the exact refusal stands.
+        if ($present !== $operand && !$present->shape() instanceof NeverShape) {
+            [$lifted] = $this->attempt($rules, $present);
+
+            if (count($lifted) > 1) {
+                return self::ambiguous($operator, $lifted, $present);
+            }
+
+            if ($lifted !== []) {
+                return Ok($lifted[0][1]->liftedOverAbsence());
+            }
+        }
+
+        if (count($refused) === 1) {
+            return Err($refused[0]);
+        }
+
+        return Err(new TypeMismatch(
+            sprintf('No overload of unary [%s] accepts %s.', $operator, TypeDescriber::describe($operand)),
+            $refused,
+            dead: array_all($refused, fn(TypeMismatch $mismatch) => $mismatch->dead),
+        ));
+    }
+
+    /**
+     * Consult every rule once over one operand type.
+     *
+     * @param list<array{rule: UnaryOperatorRule, extension: ?string}> $rules
+     * @return array{list<array{class-string, ResolvedOperation}>, list<TypeMismatch>}
+     */
+    private function attempt(array $rules, Type $operand): array
+    {
         $resolved = [];
         $refused = [];
 
@@ -113,30 +169,23 @@ final class UnaryOperatorResolver
             }
         }
 
-        if (count($resolved) > 1) {
-            $owners = array_column($resolved, 0);
-            sort($owners);
+        return [$resolved, $refused];
+    }
 
-            return Err(new TypeMismatch(sprintf(
-                'Unary operator [%s] over %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand type.',
-                $operator,
-                TypeDescriber::describe($operand),
-                implode('], [', $owners),
-            )));
-        }
+    /**
+     * @param list<array{class-string, ResolvedOperation}> $resolved
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    private static function ambiguous(string $operator, array $resolved, Type $operand): Result
+    {
+        $owners = array_column($resolved, 0);
+        sort($owners);
 
-        if ($resolved !== []) {
-            return Ok($resolved[0][1]);
-        }
-
-        if (count($refused) === 1) {
-            return Err($refused[0]);
-        }
-
-        return Err(new TypeMismatch(
-            sprintf('No overload of unary [%s] accepts %s.', $operator, TypeDescriber::describe($operand)),
-            $refused,
-            dead: array_all($refused, fn(TypeMismatch $mismatch) => $mismatch->dead),
-        ));
+        return Err(new TypeMismatch(sprintf(
+            'Unary operator [%s] over %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand type.',
+            $operator,
+            TypeDescriber::describe($operand),
+            implode('], [', $owners),
+        )));
     }
 }

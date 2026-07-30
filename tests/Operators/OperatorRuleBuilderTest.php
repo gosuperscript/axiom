@@ -74,6 +74,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnknownShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 final class OperatorRuleBuilderTest extends TestCase
 {
     private static function concat(): InfixOperatorRule

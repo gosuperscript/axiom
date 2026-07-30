@@ -6,6 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Types\PresentType;
+use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -103,7 +105,20 @@ final class BinaryOperatorResolver
         return $extensions;
     }
 
-    /** @return Result<ResolvedOperation, TypeMismatch> */
+    /**
+     * Resolution is two-staged. The rules are consulted with the operand
+     * types as given, and a match there — including a rule that reads
+     * optional operands deliberately, the way equality reads `x == null` —
+     * always wins untouched. Only when every rule refuses and an operand is
+     * optional are the rules consulted again with the operands' present
+     * types; a match there is returned lifted
+     * ({@see ResolvedOperation::liftedOverAbsence()}), so `answer > 0.25`
+     * types over an optional answer without any rule knowing about absence.
+     * Refusals always report the types as given — the lifted attempt adds
+     * no diagnostics of its own.
+     *
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
     public function resolve(string $operator, Type $left, Type $right): Result
     {
         $rules = $this->rules[$operator] ?? [];
@@ -112,36 +127,35 @@ final class BinaryOperatorResolver
             return Err(new TypeMismatch(sprintf('Operator [%s] is not supported.', $operator)));
         }
 
-        $resolved = [];
-        $refused = [];
-
-        foreach ($rules as ['rule' => $rule, 'extension' => $extension]) {
-            $resolution = $rule->resolve($left, $right);
-
-            if ($resolution instanceof ResolvedOperation) {
-                $resolved[] = [$rule::class, $this->attributesResolutions
-                    ? $resolution->attributedTo(OperatorRuleProvenance::of($rule, $extension))
-                    : $resolution];
-            } else {
-                $refused[] = self::mismatch($resolution);
-            }
-        }
+        [$resolved, $refused] = $this->attempt($rules, $left, $right);
 
         if (count($resolved) > 1) {
-            $owners = array_column($resolved, 0);
-            sort($owners);
-
-            return Err(new TypeMismatch(sprintf(
-                'Operator [%s] over %s and %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand types.',
-                $operator,
-                TypeDescriber::describe($left),
-                TypeDescriber::describe($right),
-                implode('], [', $owners),
-            )));
+            return self::ambiguous($operator, $resolved, $left, $right);
         }
 
         if ($resolved !== []) {
             return Ok($resolved[0][1]);
+        }
+
+        $presentLeft = PresentType::of($left);
+        $presentRight = PresentType::of($right);
+
+        // A bare null types as Option<Never>: it can never be present, so
+        // there is nothing to lift over and the exact refusal stands.
+        $liftable = ($presentLeft !== $left || $presentRight !== $right)
+            && !$presentLeft->shape() instanceof NeverShape
+            && !$presentRight->shape() instanceof NeverShape;
+
+        if ($liftable) {
+            [$lifted] = $this->attempt($rules, $presentLeft, $presentRight);
+
+            if (count($lifted) > 1) {
+                return self::ambiguous($operator, $lifted, $presentLeft, $presentRight);
+            }
+
+            if ($lifted !== []) {
+                return Ok($lifted[0][1]->liftedOverAbsence());
+            }
         }
 
         if (count($refused) === 1) {
@@ -158,6 +172,50 @@ final class BinaryOperatorResolver
             $refused,
             dead: array_all($refused, fn(TypeMismatch $mismatch) => $mismatch->dead),
         ));
+    }
+
+    /**
+     * Consult every rule once over one pair of operand types.
+     *
+     * @param list<array{rule: BinaryOperatorRule, extension: ?string}> $rules
+     * @return array{list<array{class-string, ResolvedOperation}>, list<TypeMismatch>}
+     */
+    private function attempt(array $rules, Type $left, Type $right): array
+    {
+        $resolved = [];
+        $refused = [];
+
+        foreach ($rules as ['rule' => $rule, 'extension' => $extension]) {
+            $resolution = $rule->resolve($left, $right);
+
+            if ($resolution instanceof ResolvedOperation) {
+                $resolved[] = [$rule::class, $this->attributesResolutions
+                    ? $resolution->attributedTo(OperatorRuleProvenance::of($rule, $extension))
+                    : $resolution];
+            } else {
+                $refused[] = self::mismatch($resolution);
+            }
+        }
+
+        return [$resolved, $refused];
+    }
+
+    /**
+     * @param list<array{class-string, ResolvedOperation}> $resolved
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    private static function ambiguous(string $operator, array $resolved, Type $left, Type $right): Result
+    {
+        $owners = array_column($resolved, 0);
+        sort($owners);
+
+        return Err(new TypeMismatch(sprintf(
+            'Operator [%s] over %s and %s is ambiguous: [%s] all resolve it. A composed dialect has exactly one owner for any operand types.',
+            $operator,
+            TypeDescriber::describe($left),
+            TypeDescriber::describe($right),
+            implode('], [', $owners),
+        )));
     }
 
     private static function mismatch(OperatorResolution $resolution): TypeMismatch

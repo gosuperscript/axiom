@@ -133,6 +133,8 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference

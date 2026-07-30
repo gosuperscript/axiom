@@ -6,6 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use Closure;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
 use Throwable;
@@ -37,6 +39,27 @@ final readonly class ResolvedOperation implements OperatorResolution
     public function attributedTo(OperatorRuleProvenance $provenance): self
     {
         return new self($this->returns, $this->evaluation, $provenance);
+    }
+
+    /**
+     * The absence-propagating form of an operation whose rule matched on the
+     * operands' present types: an absent operand answers absence without the
+     * rule running, and the return type becomes optional. This is the same
+     * law {@see \Superscript\Axiom\CompiledSource::mapPresent()} applies to
+     * one child — operations are strict in present values; the boundary
+     * decides what absence means.
+     *
+     * @internal The resolvers construct lifted operations.
+     */
+    public function liftedOverAbsence(): self
+    {
+        $evaluation = $this->evaluation;
+
+        return new self(
+            $this->returns->shape() instanceof OptionShape ? $this->returns : new OptionType($this->returns),
+            static fn(mixed ...$operands) => in_array(null, $operands, true) ? null : $evaluation(...$operands),
+            $this->provenance,
+        );
     }
 
     /**
