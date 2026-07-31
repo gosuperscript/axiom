@@ -52,6 +52,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]

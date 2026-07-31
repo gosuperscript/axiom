@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Types\Type;
@@ -61,6 +62,25 @@ abstract class Extension
      * @return array<class-string, callable(object): Type>
      */
     public function literals(): array
+    {
+        return [];
+    }
+
+    /**
+     * Computed fields on opaque types: each declares that `identity.name` is
+     * certified and how to read it off the concrete value. Any extension may
+     * declare a field on any identity, including one introduced by another
+     * extension's type — the declarer answers for the extractor being total
+     * over that identity's values. Declaring a field another extension already
+     * declares — same identity and name — is a loud configuration error,
+     * never a precedence question. The
+     * declarations are consulted only at the member-access checkpoint and
+     * never enter assignability, so a declared field never makes its opaque
+     * assignable to a record slot.
+     *
+     * @return list<OpaqueField>
+     */
+    public function fields(): array
     {
         return [];
     }

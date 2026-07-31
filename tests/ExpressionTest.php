@@ -65,6 +65,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]

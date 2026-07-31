@@ -64,6 +64,7 @@ use Superscript\Monads\Result\Result;
 #[UsesClass(UnionType::class)]
 #[UsesClass(\Superscript\Axiom\Types\BooleanType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]

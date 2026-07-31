@@ -171,6 +171,7 @@ final readonly class Expression
             $this->dialect->literals(),
             $this->dialect->sourceCompilers(),
             $this->dialect->sourceCompilerExtensions(),
+            $this->dialect->opaqueFields(),
         );
     }
 

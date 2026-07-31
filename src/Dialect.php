@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\Connective;
@@ -61,11 +62,14 @@ final class Dialect
 
     private ?LiteralTypeRegistry $literalRegistry = null;
 
+    private ?OpaqueFieldRegistry $opaqueFieldRegistry = null;
+
     /**
      * @param list<BinaryOperatorRule> $binaryRules
      * @param list<UnaryOperatorRule> $unaryRules
      * @param array<class-string, callable(object): Type> $literalMappings
      * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
+     * @param array<string, array<string, \Superscript\Axiom\Fields\OpaqueField>> $opaqueFields keyed by identity, then name
      * @param list<?string> $binaryExtensions
      * @param list<?string> $unaryExtensions
      * @param array<class-string<Source>, string> $sourceCompilerExtensions
@@ -75,6 +79,7 @@ final class Dialect
         private readonly array $unaryRules,
         private readonly array $literalMappings,
         private readonly array $sourceCompilers,
+        private readonly array $opaqueFields,
         private readonly array $binaryExtensions,
         private readonly array $unaryExtensions,
         private readonly array $sourceCompilerExtensions,
@@ -132,6 +137,7 @@ final class Dialect
             unaryRules: $unaryRules,
             literalMappings: [],
             sourceCompilers: $sourceCompilers,
+            opaqueFields: [],
             binaryExtensions: array_fill_keys(array_keys($binaryRules), 'axiom.core'),
             unaryExtensions: array_fill_keys(array_keys($unaryRules), 'axiom.core'),
             sourceCompilerExtensions: array_fill_keys(array_keys($sourceCompilers), 'axiom.core'),
@@ -144,6 +150,7 @@ final class Dialect
         $unary = $this->unaryRules;
         $literals = $this->literalMappings;
         $sourceCompilers = $this->sourceCompilers;
+        $opaqueFields = $this->opaqueFields;
         $binaryExtensions = $this->binaryExtensions;
         $unaryExtensions = $this->unaryExtensions;
         $sourceCompilerExtensions = $this->sourceCompilerExtensions;
@@ -184,6 +191,18 @@ final class Dialect
                 $sourceCompilers[$sourceClass] = $compiler;
                 $sourceCompilerExtensions[$sourceClass] = $identifier;
             }
+
+            foreach ($extension->fields() as $field) {
+                if (isset($opaqueFields[$field->identity][$field->name])) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Field [%s.%s] is registered by two extensions; field ownership on an opaque type is exact and extension order carries no precedence.',
+                        $field->identity,
+                        $field->name,
+                    ));
+                }
+
+                $opaqueFields[$field->identity][$field->name] = $field;
+            }
         }
 
         return new self(
@@ -191,6 +210,7 @@ final class Dialect
             $unary,
             $literals,
             $sourceCompilers,
+            $opaqueFields,
             $binaryExtensions,
             $unaryExtensions,
             $sourceCompilerExtensions,
@@ -210,6 +230,11 @@ final class Dialect
     public function literals(): LiteralTypeRegistry
     {
         return $this->literalRegistry ??= new LiteralTypeRegistry($this->literalMappings);
+    }
+
+    public function opaqueFields(): OpaqueFieldRegistry
+    {
+        return $this->opaqueFieldRegistry ??= new OpaqueFieldRegistry($this->opaqueFields);
     }
 
     /** @return array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */

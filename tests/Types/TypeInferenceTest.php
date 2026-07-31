@@ -10,6 +10,9 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Extension;
+use Superscript\Axiom\Fields\Field;
+use Superscript\Axiom\Types\OpaqueType;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
@@ -55,6 +58,7 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
@@ -67,6 +71,12 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\Field::class)]
+#[UsesClass(\Superscript\Axiom\Fields\FieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\NamedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\TypedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
@@ -146,6 +156,8 @@ final class TypeInferenceTest extends TestCase
             $dialect->unaryOperators(),
             $literals ?? $dialect->literals(),
             $dialect->sourceCompilers(),
+            $dialect->sourceCompilerExtensions(),
+            $dialect->opaqueFields(),
         );
     }
 
@@ -849,6 +861,61 @@ final class TypeInferenceTest extends TestCase
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('nominal types make no structural claims', $result->unwrapErr()->describe());
         $this->assertStringContainsString("money<currency: 'GBP'>", $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function member_access_on_an_opaque_type_with_a_declared_field_is_certified(): void
+    {
+        $env = self::env(declarations: [
+            'price' => new OpaqueType('money', ['currency' => new LiteralType('GBP')]),
+        ]);
+
+        $result = self::inference(dialect: self::moneyAmountDialect())
+            ->infer(new MemberAccessSource(new SymbolSource('price'), 'amount'), $env);
+
+        $this->assertInstanceOf(NumberType::class, $result->unwrap());
+    }
+
+    #[Test]
+    public function member_access_on_an_opaque_type_without_that_declared_field_stays_refused(): void
+    {
+        $env = self::env(declarations: [
+            'price' => new OpaqueType('money', ['currency' => new LiteralType('GBP')]),
+        ]);
+
+        $result = self::inference(dialect: self::moneyAmountDialect())
+            ->infer(new MemberAccessSource(new SymbolSource('price'), 'currency'), $env);
+
+        $this->assertTrue($result->isErr());
+        $this->assertStringContainsString('nominal types make no structural claims', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function optionality_propagates_through_a_declared_opaque_field(): void
+    {
+        $env = self::env(declarations: [
+            'price' => new OptionType(new OpaqueType('money', ['currency' => new LiteralType('GBP')])),
+        ]);
+
+        $result = self::inference(dialect: self::moneyAmountDialect())
+            ->infer(new MemberAccessSource(new SymbolSource('price'), 'amount'), $env);
+
+        $option = $result->unwrap();
+        $this->assertInstanceOf(OptionType::class, $option);
+        $this->assertInstanceOf(NumberType::class, $option->inner);
+    }
+
+    private static function moneyAmountDialect(): Dialect
+    {
+        return Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(mixed $value): int => 0),
+                ];
+            }
+        });
     }
 
     #[Test]

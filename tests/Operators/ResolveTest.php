@@ -78,6 +78,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\BooleanShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\DictShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ListShape::class)]

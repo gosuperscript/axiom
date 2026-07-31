@@ -12,7 +12,9 @@ use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Fields\Field;
 use Superscript\Axiom\Operators\Operator;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -20,6 +22,9 @@ use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ListType;
@@ -363,5 +368,40 @@ final class SoundnessRegressionTest extends TestCase
         // now it can, structurally.
         $this->assertFalse(method_exists(Expression::class, 'call'));
         $this->assertFalse(method_exists(Expression::class, '__invoke'));
+    }
+
+    #[Test]
+    public function a_declared_opaque_field_is_certified_at_access_but_never_leaks_into_assignability(): void
+    {
+        // The owner of `money` declares money.amount, so `price.amount` is
+        // certified and evaluates to the extracted value. That certification
+        // lives only at the member-access checkpoint: it must not make money
+        // structurally assignable to a {amount: Number} record, or a certified
+        // record access would later crash on the real Money object — the
+        // fictional-field hole the OpaqueShape design exists to close.
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money): int => $money->minor),
+                ];
+            }
+        });
+
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new MoneyType('GBP')],
+            dialect: $dialect,
+        ))->compile()->unwrap();
+
+        $this->assertSame(500, $program(['price' => new Money(500, 'GBP')])->unwrap()->unwrap());
+
+        // Same declared field, yet money is not assignable to the record its
+        // field would seem to describe: assignability never consults the
+        // field registry.
+        $this->assertTrue(
+            TypeRelations::isTypeAssignableTo(new MoneyType('GBP'), new RecordType(['amount' => new NumberType()]))->isErr(),
+        );
     }
 }
