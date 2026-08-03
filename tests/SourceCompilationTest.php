@@ -18,6 +18,8 @@ use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Fields\Field;
+use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
@@ -128,6 +130,12 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\Field::class)]
+#[UsesClass(\Superscript\Axiom\Fields\FieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\NamedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\TypedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
@@ -170,6 +178,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compileSymbol = null,
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
+        ?Closure $resolveOpaqueField = null,
     ): SourceCompilation {
         return new SourceCompilation(
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
@@ -177,8 +186,26 @@ final class SourceCompilationTest extends TestCase
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
+            $resolveOpaqueField,
             $recorder,
         );
+    }
+
+    #[Test]
+    public function opaque_field_resolves_to_null_without_a_resolver(): void
+    {
+        $this->assertNull(self::compilation()->opaqueField('money', 'amount'));
+    }
+
+    #[Test]
+    public function opaque_field_delegates_to_the_resolver(): void
+    {
+        $amount = Field::on('money')->named('amount')->returns(new NumberType())
+            ->extractedWith(fn(mixed $value): int => 0);
+        $compilation = self::compilation(resolveOpaqueField: fn(string $identity, string $name): ?OpaqueField => $identity === 'money' && $name === 'amount' ? $amount : null);
+
+        $this->assertSame($amount, $compilation->opaqueField('money', 'amount'));
+        $this->assertNull($compilation->opaqueField('money', 'currency'));
     }
 
     #[Test]

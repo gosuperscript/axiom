@@ -9,6 +9,8 @@ use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Fields\OpaqueField;
+use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
@@ -42,6 +44,8 @@ final readonly class TypeInference
     /** @var array<class-string<Source>, string> */
     private array $sourceCompilerExtensions;
 
+    private OpaqueFieldRegistry $opaqueFields;
+
     /**
      * @param array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> $sourceCompilers
      * @param array<class-string<Source>, string> $sourceCompilerExtensions
@@ -52,9 +56,11 @@ final readonly class TypeInference
         private LiteralTypeRegistry $literals,
         array $sourceCompilers,
         array $sourceCompilerExtensions = [],
+        ?OpaqueFieldRegistry $opaqueFields = null,
     ) {
         $this->sourceCompilers = $sourceCompilers;
         $this->sourceCompilerExtensions = $sourceCompilerExtensions;
+        $this->opaqueFields = $opaqueFields ?? new OpaqueFieldRegistry();
     }
 
     /**
@@ -109,6 +115,7 @@ final readonly class TypeInference
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
             fn(mixed $value): Result => $this->inferValue($value),
+            fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
         );
     }

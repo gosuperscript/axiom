@@ -8,6 +8,7 @@ use Closure;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\OperatorSelection;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
@@ -33,6 +34,7 @@ final readonly class SourceCompilation
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
+     * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
     public function __construct(
         private Closure $compileNode,
@@ -40,6 +42,7 @@ final readonly class SourceCompilation
         private Closure $compilePrefix,
         private Closure $compileSymbol,
         private Closure $typeOfValue,
+        private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
     ) {}
 
@@ -107,6 +110,21 @@ final readonly class SourceCompilation
     public function typeOfValue(mixed $value): Type
     {
         return $this->require(($this->typeOfValue)($value));
+    }
+
+    /**
+     * The field the owner of this opaque identity declared under this name,
+     * or null when none exists — the member-access checkpoint decides whether
+     * the absence is a refusal. A dialect with no field declarations resolves
+     * every lookup to null, so every opaque access stays refused.
+     */
+    public function opaqueField(string $identity, string $name): ?OpaqueField
+    {
+        if ($this->resolveOpaqueField === null) {
+            return null;
+        }
+
+        return ($this->resolveOpaqueField)($identity, $name);
     }
 
     /** A total embedded value; null represents absence. */

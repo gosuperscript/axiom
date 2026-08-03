@@ -12,6 +12,10 @@ use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Extension;
+use Superscript\Axiom\Fields\Field;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\Ascription;
@@ -57,6 +61,7 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
@@ -111,6 +116,12 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
 #[UsesClass(TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\Field::class)]
+#[UsesClass(\Superscript\Axiom\Fields\FieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\NamedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\TypedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
@@ -129,6 +140,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\LiteralShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
@@ -307,6 +319,114 @@ final class ProgramTest extends TestCase
         $onScalar = (new Expression(new MemberAccessSource($scalar, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
 
         $this->assertStringContainsString("Property 'turnover' does not exist on int", $onScalar()->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function an_opaque_field_reads_through_the_declared_extractor(): void
+    {
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new MoneyType('GBP')],
+            dialect: self::moneyAmountDialect(),
+        ))->compile()->unwrap();
+
+        $this->assertSame(500, $program(['price' => new Money(500, 'GBP')])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_opaque_field_extractor_that_errs_propagates_the_failure(): void
+    {
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money) => \Superscript\Monads\Result\Err(new \RuntimeException('no amount'))),
+                ];
+            }
+        });
+
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new MoneyType('GBP')],
+            dialect: $dialect,
+        ))->compile()->unwrap();
+
+        $this->assertStringContainsString('no amount', $program(['price' => new Money(500, 'GBP')])->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function an_opaque_field_on_an_absent_optional_short_circuits_to_absence(): void
+    {
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new OptionType(new MoneyType('GBP'))],
+            dialect: self::moneyAmountDialect(),
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program(['price' => null])->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function an_opaque_field_extractor_returning_null_on_a_value_certifying_field_fails_evaluation(): void
+    {
+        // The certificate promised a Number; silently reading null as absence
+        // would hand downstream a value the type never admitted.
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money) => null),
+                ];
+            }
+        });
+
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new MoneyType('GBP')],
+            dialect: $dialect,
+        ))->compile()->unwrap();
+
+        $this->assertStringContainsString(
+            'Field [money.amount] is declared Number but its extractor returned null',
+            $program(['price' => new Money(500, 'GBP')])->unwrapErr()->getMessage(),
+        );
+    }
+
+    #[Test]
+    public function an_option_typed_opaque_field_reads_null_as_absence(): void
+    {
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new OptionType(new NumberType()))
+                        ->extractedWith(fn(Money $money) => null),
+                ];
+            }
+        });
+
+        $program = (new Expression(
+            new MemberAccessSource(new SymbolSource('price'), 'amount'),
+            declarations: ['price' => new MoneyType('GBP')],
+            dialect: $dialect,
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program(['price' => new Money(500, 'GBP')])->unwrap()->isNone());
+    }
+
+    private static function moneyAmountDialect(): Dialect
+    {
+        return Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money): int => $money->minor),
+                ];
+            }
+        });
     }
 
     #[Test]

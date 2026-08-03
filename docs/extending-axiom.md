@@ -148,7 +148,7 @@ A few things to keep in mind:
 
 Project `OpaqueShape` for object-valued domain types and nominal identities. Your type will relate only to opaques of the same identity, so no core rule can ever accidentally claim your values.
 
-- **No structural claims means no member access.** `money.amount` is a compile error unless your host exposes it another way. That is the point — nothing is certified that your object can't deliver.
+- **No structural claims means no member access — except the fields you declare.** `money.amount` is a compile error by default; nothing is certified that your object can't deliver. When you *can* deliver a value, declare it as a field (below) and `money.amount` becomes certified — by your explicit declaration, not by any structural claim about the shape.
 - **Parameters give you subtyping without structure.** Parameters relate by the ordinary rules under the same identity: `Money<GBP>` is assignable to a `Money<GBP|USD>` slot (because `'GBP' ⊆ 'GBP'|'USD'`), while `Money<GBP>` and `Money<USD>` share no values — and no relation code anywhere has to mention money:
 
 ```php
@@ -170,6 +170,31 @@ final readonly class MoneyType implements Type
 ```
 
 - **Every operator must be yours.** Core refuses opaques everywhere — including `==`, because object equality belongs to you. Every operation on your type is a rule you ship ([Custom Operators](#custom-operators)).
+
+#### Fields on Opaque Types
+
+Member access is the one exception to "every operation is an operator": declare a field and `value.name` reads through it. A field carries both faces at once — the type `value.name` certifies to, and the extractor that reads it off the concrete object — the same static-and-runtime-in-one-value shape as an operator rule. Return the field from `Extension::fields()`:
+
+```php
+use Superscript\Axiom\Fields\Field;
+use Superscript\Axiom\Types\NumberType;
+
+public function fields(): array
+{
+    return [
+        Field::on('money')->named('amount')->returns(new NumberType())
+            ->extractedWith(fn (Money $money): int => $money->minor),
+    ];
+}
+```
+
+Now `price.amount` type-checks as `Number` and, at runtime, evaluates the extractor against the `Money` value. The extractor receives the concrete value natively — the compiler proved the operand's `money` identity — and must be total over every value of the type, returning an inhabitant of the declared return type: the raw value, never an `Option`. A plain return is wrapped in `Ok`, a returned `Result` passes through (value-dependent partiality), and a throw is a defect that propagates. Optionality propagates structurally, so `price.amount` on an optional `price` is an optional `Number` and an absent `price` short-circuits before the extractor runs.
+
+Null is absence, and only a field declared with an `Option` return type can be absent. On `returns(new OptionType(new StringType()))`, an extractor returning `null` reads as absence — `address.postcode` is an optional `String` and downstream absence semantics apply. On any other return type, `null` fails the evaluation loudly: the certificate promised a value, so a null read is a defect of the declaration, never a quiet absence downstream code was told cannot happen.
+
+- **Fields are consulted only at member access.** They never enter assignability: declaring `money.amount` does **not** make `Money` assignable to a `{amount: Number}` record slot. This is exactly what keeps opaques nominal — a structural (record) projection would leak through assignability and let a certified record access crash on the real object, the fictional-field hole [Never project fictional fields](#opaque-projections) exists to close. A declared field is *behavior over an opaque value*, not a structural claim, so the leak never opens.
+- **A field slot has one declarer.** Any extension may declare a field on any identity — including one introduced by another extension's type — and the declarer answers for the extractor being total over that identity's values. But two extensions declaring the same `identity.name` is a loud configuration error, never a precedence question — like duplicate literal or operator registrations.
+- **Fields project; operators compute.** A field is a pure, cheap, total projection — it reads off what the value already is (`money.amount`, `address.postcode`). Anything conditional, expensive, cross-value, or that produces a new value is an operator (`money == money`, currency conversion). If you are tempted to put logic in an extractor, you wanted an operator rule.
 
 ### Scalar Refinements
 

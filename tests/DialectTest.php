@@ -49,6 +49,12 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
+#[UsesClass(\Superscript\Axiom\Fields\Field::class)]
+#[UsesClass(\Superscript\Axiom\Fields\FieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\NamedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\TypedFieldBuilder::class)]
+#[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(DictType::class)]
 #[UsesClass(ListType::class)]
@@ -150,12 +156,14 @@ final class DialectTest extends TestCase
         $this->assertSame($dialect->operators(), $dialect->operators());
         $this->assertSame($dialect->unaryOperators(), $dialect->unaryOperators());
         $this->assertSame($dialect->literals(), $dialect->literals());
+        $this->assertSame($dialect->opaqueFields(), $dialect->opaqueFields());
 
         $derived = $dialect->with(new MoneyExtension(['GBP']));
 
         $this->assertNotSame($dialect->operators(), $derived->operators());
         $this->assertNotSame($dialect->unaryOperators(), $derived->unaryOperators());
         $this->assertNotSame($dialect->literals(), $derived->literals());
+        $this->assertNotSame($dialect->opaqueFields(), $derived->opaqueFields());
 
         // The index a dialect hands out is its own: an already-indexed parent
         // does not learn the money rules from the dialect derived from it.
@@ -528,5 +536,80 @@ final class DialectTest extends TestCase
 
         $this->assertInstanceOf(\Superscript\Axiom\Operators\BinaryOperatorResolver::class, $dialect->operators());
         $this->assertInstanceOf(\Superscript\Axiom\Operators\UnaryOperatorResolver::class, $dialect->unaryOperators());
+    }
+
+    #[Test]
+    public function an_extension_contributes_opaque_field_declarations(): void
+    {
+        $dialect = Dialect::core()->with(new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    \Superscript\Axiom\Fields\Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money): int => $money->minor),
+                ];
+            }
+        });
+
+        $amount = $dialect->opaqueFields()->resolve('money', 'amount');
+
+        $this->assertNotNull($amount);
+        $this->assertSame('money', $amount->identity);
+        $this->assertSame('amount', $amount->name);
+        $this->assertSame(500, $amount->extract(new Money(500, 'GBP'))->unwrap()->unwrap());
+        $this->assertNull($dialect->opaqueFields()->resolve('money', 'currency'));
+    }
+
+    #[Test]
+    public function core_declares_no_opaque_fields(): void
+    {
+        $this->assertNull(Dialect::core()->opaqueFields()->resolve('money', 'amount'));
+    }
+
+    #[Test]
+    public function two_extensions_declaring_the_same_field_collide(): void
+    {
+        $owner = new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    \Superscript\Axiom\Fields\Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money): int => $money->minor),
+                ];
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Field [money.amount] is registered by two extensions');
+
+        Dialect::core()->with($owner, clone $owner);
+    }
+
+    #[Test]
+    public function distinct_fields_on_one_identity_from_two_extensions_coexist(): void
+    {
+        $amountOwner = new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    \Superscript\Axiom\Fields\Field::on('money')->named('amount')->returns(new NumberType())
+                        ->extractedWith(fn(Money $money): int => $money->minor),
+                ];
+            }
+        };
+        $currencyOwner = new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    \Superscript\Axiom\Fields\Field::on('money')->named('currency')->returns(new StringType())
+                        ->extractedWith(fn(Money $money): string => $money->currency),
+                ];
+            }
+        };
+
+        $fields = Dialect::core()->with($amountOwner, $currencyOwner)->opaqueFields();
+
+        $this->assertSame(500, $fields->resolve('money', 'amount')?->extract(new Money(500, 'GBP'))->unwrap()->unwrap());
+        $this->assertSame('GBP', $fields->resolve('money', 'currency')?->extract(new Money(500, 'GBP'))->unwrap()->unwrap());
     }
 }
