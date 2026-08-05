@@ -31,6 +31,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(UnsupportedOperation::class)]
 #[UsesClass(DeadOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]

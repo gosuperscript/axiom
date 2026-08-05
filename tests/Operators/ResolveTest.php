@@ -41,6 +41,7 @@ use Superscript\Axiom\Types\UnknownType;
  * core dialect; the type functions (equality, membership, intersection)
  * also directly.
  */
+#[CoversClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[CoversClass(Equality::class)]
 #[CoversClass(Has::class)]
 #[CoversClass(In::class)]
@@ -176,6 +177,16 @@ final class ResolveTest extends TestCase
             $core, '||', new BooleanType(), new OptionType(new BooleanType()), OptionType::class,
         ];
 
+        // `??` reads optional operands on purpose, so the first pass matches
+        // and the lift never runs — lifting would strip the optionality the
+        // rule exists to discharge, and the result would be Number? again.
+        yield 'the authored default is not lifted' => [
+            $core, '??', new OptionType(new NumberType()), new LiteralType(0), NumberType::class,
+        ];
+        yield 'an optional fallback keeps the chain optional' => [
+            $core, '??', new OptionType(new NumberType()), new OptionType(new NumberType()), OptionType::class,
+        ];
+
         yield 'equality of overlapping types' => [self::equality('=='), '==', new NumberType(), new NumberType(), BooleanType::class];
         yield 'equality of a literal against its enum' => [
             self::equality('='), '=', new LiteralType('shop'), new UnionType(new LiteralType('shop'), new LiteralType('office')), BooleanType::class,
@@ -271,6 +282,19 @@ final class ResolveTest extends TestCase
         // nothing in core, so the null literal pair is an ordinary refusal.
         yield 'null arithmetic resolves nothing in core' => [
             $core, '+', new OptionType(new NeverType()), new OptionType(new NeverType()), '[+] expects Number and Number',
+        ];
+
+        yield 'the authored default on a present left is dead' => [
+            $core, '??', new NumberType(), new LiteralType(0), 'the fallback can never fire', true,
+        ];
+        // A present left refuses in the first pass; the second pass sees the
+        // same present left and refuses again, so the dead verdict survives
+        // an optional fallback rather than being lifted into a resolution.
+        yield 'a present left stays dead against an optional fallback' => [
+            $core, '??', new NumberType(), new OptionType(new NumberType()), 'the fallback can never fire', true,
+        ];
+        yield 'the authored default refuses an inert Unknown' => [
+            $core, '??', new UnknownType(), new NumberType(), 'Claim its type with an Ascription',
         ];
 
         // Totality: Ok certifies EVERY value of the operand types, and value

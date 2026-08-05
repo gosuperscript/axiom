@@ -74,7 +74,7 @@ final class TotalityHarnessTest extends TestCase
     private const binaryOperators = [
         '+', '-', '*', '/',
         '=', '==', '===', '!=', '!==', '<', '<=', '>', '>=',
-        '&&', '||', 'xor',
+        '&&', '||', 'xor', '??',
         'has', 'in', 'intersects',
     ];
 

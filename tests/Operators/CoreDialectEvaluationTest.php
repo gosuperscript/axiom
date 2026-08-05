@@ -79,6 +79,7 @@ use Superscript\Monads\Result\Result;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 final class CoreDialectEvaluationTest extends TestCase

@@ -41,6 +41,7 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Has::class)]
 #[UsesClass(\Superscript\Axiom\Operators\In::class)]
@@ -116,7 +117,7 @@ final class DialectTest extends TestCase
         $dialect = Dialect::core();
 
         $this->assertSame([
-            '!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=',
+            '!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=', '??',
             'has', 'in', 'intersects', 'xor', '||',
         ], $dialect->operators()->symbols());
         $this->assertSame(['!', '-', 'not'], $dialect->unaryOperators()->symbols());

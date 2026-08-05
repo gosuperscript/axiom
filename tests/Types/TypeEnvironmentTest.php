@@ -64,6 +64,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Has::class)]
 #[UsesClass(\Superscript\Axiom\Operators\In::class)]

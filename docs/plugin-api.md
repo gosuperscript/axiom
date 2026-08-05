@@ -100,7 +100,7 @@ Both resolvers answer two questions. `resolve()` answers "may these operand type
 $dialect = Dialect::core();
 
 $dialect->operators()->symbols();
-// ['!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=', 'has', 'in', 'intersects', 'xor', '||']
+// ['!=', '!==', '&&', '*', '+', '-', '/', '<', '<=', '=', '==', '===', '>', '>=', '??', 'has', 'in', 'intersects', 'xor', '||']
 
 $dialect->unaryOperators()->symbols();
 // ['!', '-', 'not']

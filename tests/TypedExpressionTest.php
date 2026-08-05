@@ -80,6 +80,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Operators\Coalesce::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Equality::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Has::class)]
 #[UsesClass(\Superscript\Axiom\Operators\In::class)]

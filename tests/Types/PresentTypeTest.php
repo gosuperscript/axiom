@@ -43,6 +43,21 @@ final class PresentTypeTest extends TestCase
         $this->assertSame($type, PresentType::of($type));
     }
 
+    /**
+     * Nesting collapses in the shape algebra but not in the types
+     * themselves: member access on an optional owner wraps an
+     * already-optional field. The projection must still be present, or an
+     * operator would be told it may get nothing when the value is there.
+     */
+    #[Test]
+    public function every_option_constructor_is_peeled(): void
+    {
+        $inner = new NumberType();
+
+        $this->assertSame($inner, PresentType::of(new OptionType(new OptionType($inner))));
+        $this->assertSame($inner, PresentType::of(new OptionType(new OptionType(new OptionType($inner)))));
+    }
+
     #[Test]
     public function option_shaped_optionality_projects_through_the_shape(): void
     {

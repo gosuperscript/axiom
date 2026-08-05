@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
+use Superscript\Axiom\Operators\Coalesce;
 use Superscript\Axiom\Operators\Connective;
 use Superscript\Axiom\Operators\Equality;
 use Superscript\Axiom\Operators\Has;
@@ -118,6 +119,7 @@ final class Dialect
             new Equality('===', negated: false),
             new Equality('!=', negated: true),
             new Equality('!==', negated: true),
+            new Coalesce(),
             new Has(),
             new In(),
             new Intersects(),

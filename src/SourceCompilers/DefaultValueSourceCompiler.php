@@ -8,11 +8,10 @@ use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\DefaultValue;
-use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\TypeReifier;
 
 /** @internal Compiler for the core explicit-default source. */
 final readonly class DefaultValueSourceCompiler
@@ -27,9 +26,7 @@ final readonly class DefaultValueSourceCompiler
             return $inner;
         }
 
-        $present = $inner->returns instanceof OptionType
-            ? $inner->returns->inner
-            : TypeReifier::reify($shape->inner);
+        $present = PresentType::of($inner->returns);
         $coerced = $present->coerce($source->default);
 
         if ($coerced->isErr()) {
