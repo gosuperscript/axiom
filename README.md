@@ -269,6 +269,14 @@ new DefaultValue($optionalPremium, 0)
 new DefaultValue($optionalTags, [])
 ```
 
+The `??` operator spells the same policy where the fallback is itself an expression rather than data:
+
+```php
+new InfixExpression($optionalPremium, '??', new SymbolSource('standard_premium'))
+```
+
+Both discharge absence and both keep the assumption in the stored program. They differ in two ways. `DefaultValue` **coerces** its fallback to the present type at compile time, so `0` becomes the correct domain zero and `[]` the correctly typed empty collection; `??` requires its right operand to be **assignable** to the present type, since an expression has a type of its own to honor. And where `DefaultValue` on a source that can never be absent is silently the identity, `??` refuses it as *dead* — a fallback that can never fire is an author's mistake, not a no-op.
+
 > [!TIP]
 > Converting? `Coerce`, preferably via declarations at the boundary. Claiming? `Ascription`. If you find yourself ascribing to paper over a conversion, the value wanted a boundary declaration instead. These two nodes plus the binding boundary are the **only** places a compiled program ever inspects a value's type — everything else was proven at compile time.
 
@@ -370,6 +378,7 @@ The core dialect ships these rules:
 - **Ordering**: `<`, `<=`, `>`, `>=` — rows over **numbers only**; PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own row)
 - **Logical**: `&&`, `||`, `xor` — rows over two present booleans
 - **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never `array_intersect` string juggling)
+- **Authored default**: `??` — the present value, else the fallback. `T? ?? T` is `T` and `T? ?? T?` is `T?`, so `(roof_percentage ?? 0) > 0.25` types `Boolean` where the bare comparison types `Boolean?`. A fallback on a value that can never be absent is a *dead* refusal, so the operator only appears where absence is real
 - **Unary**: `!`/`not` (booleans only), `-` (numbers only)
 
 Every rule owns one symbol (`operator()`) and answers one question — `resolve(operand types)` — with a `ResolvedOperation`, `UnsupportedOperation`, or `DeadOperation`. A success carries the return type *and* the evaluation, so rule selection and evaluation cannot drift apart; that the evaluation honors its stated type is your certified obligation, tested by the totality harness. Resolvers index rules by symbol, so unrelated rules are never invoked. Most rules are declarative rows built with the operator rule builder; equality and the set operators are hand-written type functions. Ambiguity is refused at composition time (jointly admissible rows) or compile time (multiple resolutions), never absorbed.

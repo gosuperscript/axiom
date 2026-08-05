@@ -97,6 +97,59 @@ final class OptionLiftingTest extends TestCase
         $this->assertFalse($program(['x' => 1])->unwrap()->unwrap());
     }
 
+    /**
+     * The authored default, end to end: the same comparison that types
+     * `Boolean?` over an optional symbol types `Boolean` once the author
+     * spells out what an unanswered question counts as.
+     */
+    #[Test]
+    public function an_authored_default_makes_a_comparison_definite(): void
+    {
+        $program = (new Expression(
+            source: new InfixExpression(
+                new InfixExpression(new SymbolSource('x'), '??', new StaticSource(0)),
+                '>',
+                new StaticSource(0.25),
+            ),
+            declarations: ['x' => new OptionType(new NumberType())],
+        ))->compile()->unwrap();
+
+        $this->assertTrue(TypeRelations::areEquivalent($program->returns, new BooleanType())->isOk());
+        $this->assertTrue($program(['x' => 0.3])->unwrap()->unwrap());
+        $this->assertFalse($program([])->unwrap()->unwrap(), 'unanswered counts as 0, and 0 is not above a quarter');
+    }
+
+    #[Test]
+    public function authored_defaults_chain_left_to_right(): void
+    {
+        $program = (new Expression(
+            source: new InfixExpression(
+                new InfixExpression(new SymbolSource('x'), '??', new SymbolSource('y')),
+                '??',
+                new StaticSource(0),
+            ),
+            declarations: ['x' => new OptionType(new NumberType()), 'y' => new OptionType(new NumberType())],
+        ))->compile()->unwrap();
+
+        $this->assertTrue(TypeRelations::areEquivalent($program->returns, new NumberType())->isOk());
+        $this->assertSame(1, $program(['x' => 1, 'y' => 2])->unwrap()->unwrap());
+        $this->assertSame(2, $program(['y' => 2])->unwrap()->unwrap());
+        $this->assertSame(0, $program([])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function defaulting_a_value_that_can_never_be_absent_refuses(): void
+    {
+        // The fallback could never fire, so the operator is a constant the
+        // author did not mean to write.
+        $verdict = (new Expression(
+            source: new InfixExpression(new SymbolSource('x'), '??', new StaticSource(0)),
+            declarations: ['x' => new NumberType()],
+        ))->compile();
+
+        $this->assertStringContainsString('the fallback can never fire', $verdict->unwrapErr()->describe());
+    }
+
     #[Test]
     public function literal_null_arithmetic_still_refuses(): void
     {
