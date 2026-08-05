@@ -46,6 +46,12 @@ use Superscript\Axiom\Types\TypeRelations;
  * very optionality the rule exists to discharge, leaving a present left the
  * rule then calls dead. Evaluation is total: absence is `null` in the
  * operand channel, and every operand pair answers a value.
+ *
+ * Unlike PHP's `??`, this does not short-circuit. Operands are values by
+ * the time a rule sees one, and the infix node evaluates both children
+ * before applying the operation, so a fallback that errs (a division by
+ * zero) or costs (a host source that calls a service) does so even when the
+ * left operand is present. Keep the fallback cheap and total.
  */
 final readonly class Coalesce implements BinaryOperatorRule, IdentifiedOperatorRule
 {
