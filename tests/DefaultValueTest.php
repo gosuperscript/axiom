@@ -12,6 +12,8 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\SourceCompilers\DefaultValueSourceCompiler;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\DefaultValue;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
@@ -21,6 +23,7 @@ use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 
 #[CoversClass(DefaultValueSourceCompiler::class)]
@@ -97,6 +100,33 @@ final class DefaultValueTest extends TestCase
 
         $this->assertInstanceOf(NumberType::class, $program->returns);
         $this->assertSame(3, $program([])->unwrap()->unwrap());
+    }
+
+    /**
+     * An optional field behind an optional owner is optional once, not
+     * twice: absence is one null in the value domain however many Option
+     * constructors the type is built from. So the default discharges it in
+     * full, and this spelling agrees with the `??` operator on the same
+     * expression.
+     */
+    #[Test]
+    public function it_discharges_absence_behind_an_optional_owner(): void
+    {
+        $premium = new MemberAccessSource(new SymbolSource('quote'), 'premium');
+        $declarations = ['quote' => new OptionType(new RecordType(['premium' => new OptionType(new NumberType())]))];
+
+        $defaulted = (new Expression(new DefaultValue($premium, 0), declarations: $declarations))->compile()->unwrap();
+        $coalesced = (new Expression(
+            new InfixExpression($premium, '??', new StaticSource(0)),
+            declarations: $declarations,
+        ))->compile()->unwrap();
+
+        foreach (['DefaultValue' => $defaulted, '??' => $coalesced] as $spelling => $program) {
+            $this->assertInstanceOf(NumberType::class, $program->returns, "$spelling must certify a present Number");
+            $this->assertSame(0, $program([])->unwrap()->unwrap(), "$spelling: an unanswered owner takes the default");
+            $this->assertSame(0, $program(['quote' => []])->unwrap()->unwrap(), "$spelling: an unanswered field takes the default");
+            $this->assertSame(7, $program(['quote' => ['premium' => 7]])->unwrap()->unwrap(), "$spelling: a present value survives");
+        }
     }
 
     #[Test]
