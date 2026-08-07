@@ -6,8 +6,10 @@ namespace Superscript\Axiom\Operators;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\Shapes\NeverShape;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -20,6 +22,14 @@ use function Superscript\Monads\Result\Ok;
 /** Compiler-facing collection of binary operator rules, indexed by symbol. */
 final class BinaryOperatorResolver
 {
+    private const array EqualityNegations = [
+        '=' => false,
+        '==' => false,
+        '===' => false,
+        '!=' => true,
+        '!==' => true,
+    ];
+
     /** @var array<string, list<array{rule: BinaryOperatorRule, extension: ?string}>> */
     private array $rules = [];
 
@@ -128,14 +138,16 @@ final class BinaryOperatorResolver
             return Err(new TypeMismatch(sprintf('Operator [%s] is not supported.', $operator)));
         }
 
-        $intrinsic = $this->intrinsic($rules, $left, $right);
+        $intrinsic = self::presenceComparison($operator, $left, $right);
 
-        if (count($intrinsic) > 1) {
-            return self::ambiguous($operator, $intrinsic, $left, $right);
-        }
-
-        if ($intrinsic !== []) {
-            return Ok($intrinsic[0][1]);
+        if ($intrinsic !== null) {
+            return Ok($this->attributesResolutions
+                ? $intrinsic->attributedTo(new OperatorRuleProvenance(
+                    identifier: 'axiom.option.presence-comparison',
+                    implementation: self::class,
+                    extension: 'axiom.core',
+                ))
+                : $intrinsic);
         }
 
         [$resolved, $refused] = $this->attempt($rules, $left, $right);
@@ -212,32 +224,47 @@ final class BinaryOperatorResolver
     }
 
     /**
-     * Resolve structural language semantics before consulting ordinary overloads.
+     * The core structural reading of an equality alias against absence.
      *
-     * @param list<array{rule: BinaryOperatorRule, extension: ?string}> $rules
-     * @return list<array{class-string, ResolvedOperation}>
+     * Option<T> is the sum 1 + T, while the absence-only type Option<Never>
+     * is 1 + 0. Their comparison therefore observes only the sum constructor:
+     * the present-present branch is uninhabited and needs no equality for T.
+     * A total type has no option constructor to eliminate and reaches ordinary
+     * overload resolution, where a dialect may reject the constant comparison
+     * or deliberately define it. A bare Unknown reaches ordinary resolution for
+     * the separate reason that it has no statically observable outer constructor.
      */
-    private function intrinsic(array $rules, Type $left, Type $right): array
+    private static function presenceComparison(string $operator, Type $left, Type $right): ?ResolvedOperation
     {
-        $resolved = [];
-
-        foreach ($rules as ['rule' => $rule, 'extension' => $extension]) {
-            if (!$rule instanceof Equality) {
-                continue;
-            }
-
-            $resolution = $rule->resolveIntrinsic($left, $right);
-
-            if ($resolution === null) {
-                continue;
-            }
-
-            $resolved[] = [$rule::class, $this->attributesResolutions
-                ? $resolution->attributedTo(OperatorRuleProvenance::of($rule, $extension))
-                : $resolution];
+        if (!array_key_exists($operator, self::EqualityNegations)) {
+            return null;
         }
 
-        return $resolved;
+        $counterpart = match (true) {
+            self::isAbsenceOnly($left) => $right,
+            self::isAbsenceOnly($right) => $left,
+            default => null,
+        };
+
+        if (!$counterpart?->shape() instanceof OptionShape) {
+            return null;
+        }
+
+        $negated = self::EqualityNegations[$operator];
+
+        return new ResolvedOperation(
+            new BooleanType(),
+            static fn(mixed $left, mixed $right): bool => $negated
+                ? ($left === null) !== ($right === null)
+                : ($left === null) === ($right === null),
+        );
+    }
+
+    private static function isAbsenceOnly(Type $type): bool
+    {
+        $shape = $type->shape();
+
+        return $shape instanceof OptionShape && $shape->inner instanceof NeverShape;
     }
 
     /**

@@ -146,12 +146,12 @@ Diagnostics are first-class: relations fail with a `TypeMismatch` — a message 
   - `T <: Option<T>` — a present value fills an optional slot.
   - `Option<Option<T>> ≡ Option<T>` — canonicalized at construction; the runtime value domain cannot represent nesting.
   - The `null` literal infers as `Option<Never>` — the set `{null}` — assignable to every `Option<T>`.
-  - `Option<T>` always overlaps `Option<U>` (shared member `null`). The authored `x == null` emptiness test is a core structural presence reading: it does not require value equality for `T`, so it remains answerable when `T` is opaque.
+  - `Option<T>` always overlaps `Option<U>` (shared member `null`). The authored `x == null` emptiness test is a core structural presence reading: `Option<T>` is `1 + T`, while the absence-only `Option<Never>` is `1 + 0`, so their present-present branch is uninhabited and the comparison needs no value equality for `T`. It therefore remains answerable when `T` is opaque or `Unknown`; only a bare `Unknown`, whose outer constructor is not known, stays inert.
 - Coercion law: `OptionType<T>::coerce(null)` yields a *present* `Some(null)` — absence is a legal value of the option, not a failed coercion. That is what lets an optional field live inside a record whose fields treat a `None` coercion as "required but missing".
 - **One absence axis**: missing-key and present-null are indistinguishable after record coercion (coercion canonicalizes, inserting `null` for missing optional keys). No expression can observe the difference — member access yields `null` for both, and `has`/`in` are list membership, not key presence. *Revisit trigger, recorded here deliberately: if a `keys()`-like operation over records ever enters the language, this decision must be revisited before it ships.*
 
 *Value-equality support, overlap & admissibility*
-- `ValueEquality::supports(L, R)` asks whether the built-in evaluator is total over every pair in `L × R`. It is universal over reachable union members, options, and container elements; it refuses `Unknown` and opaque values. A list bounded to length zero passes vacuously because its element is unreachable.
+- `ValueEquality::supports(L, R)` asks whether the built-in evaluator is total over every pair in `L × R`. It is universal over reachable union members, options, and container elements; it refuses `Unknown` and opaque values. A list bounded to length zero passes vacuously because its element is unreachable. The core absence comparison is a separate structural judgment rather than an exception in this support relation.
 - Equality support and overlap are independent judgments. `Number` and `String` are supported but disjoint (the comparison is statically constant-false); `Unknown` and `Number` overlap but are unsupported; `Money` and `Money` overlap nominally but built-in equality refuses them so the owning package can supply the lone successful equality resolution.
 - `overlaps` is symmetric and is **not** derivable from assignability.
 - `overlaps(Unknown, T)` always holds — nothing can be ruled out. (This is the ascription bridge working: a claim over an `Unknown` inner value is never statically false.)
@@ -227,16 +227,16 @@ The same contract reaches every dialect: `axiom-money` resolves money arithmetic
 
 `UnaryOperatorRule` is the sibling: `operator(): string` and `resolve(Type $operand): OperatorResolution` (the resolved evaluation takes one argument). Prefix rows come from the same builder; core ships `not` (**booleans only** — `!5` is a compile error) and negate (numbers) as rows.
 
-Deliberate asymmetry, kept: **absence is handled structurally for unary.** The compiler resolves the rule against the *present* operand type and wraps the compiled node with the absence short-circuit, so optionality propagates (`!Option<Boolean>` is `Option<Boolean>`) and a unary rule never sees `null`. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary usually leaves absence policy to each rule: a dialect may deliberately resolve `Option`-shaped operands for semantics such as absence-as-zero. The equality aliases reserve the live `Option<T> == null` question as core structural presence semantics, independently of value equality for `T`.
+Deliberate asymmetry, kept: **absence is handled structurally for unary.** The compiler resolves the rule against the *present* operand type and wraps the compiled node with the absence short-circuit, so optionality propagates (`!Option<Boolean>` is `Option<Boolean>`) and a unary rule never sees `null`. A host cannot write an absence-handling unary rule — a feature, not a gap. Binary usually leaves absence policy to each rule: a dialect may deliberately resolve `Option`-shaped operands for semantics such as absence-as-zero. The equality aliases reserve `Option<T>` against the absence-only type as one core structural judgment that exposes only the outer presence constructor, independently of value equality for `T`. A total operand has no option constructor to eliminate and reaches ordinary dialect resolution.
 
 #### Composition: the dialect is one list, and ambiguity is refused
 
 `BinaryOperatorResolver` is a compiler-facing collection, not a rule. It indexes rules by `operator()` at construction. Resolution only invokes the requested symbol's bucket:
 
 1. No bucket → unsupported-operator `TypeMismatch`; no unrelated rule is called.
-2. A core intrinsic structural reading resolves → that reading, before ordinary overloads.
+2. The single core presence judgment resolves → that reading, before and independently of ordinary overloads.
 3. Exactly one ordinary `ResolvedOperation` → that resolution, bound into the program.
-4. **Two or more resolutions at either layer → a stable ambiguity error naming the competing rules.** Registration order is never precedence.
+4. **Two or more ordinary resolutions → a stable ambiguity error naming the competing rules.** The core judgment has one implementation and does not participate in overload composition. Registration order is never precedence.
 5. No resolution → one refusal is preserved exactly; multiple refusals are aggregated with their causes and dead metadata.
 
 Rows are statically comparable, so `Dialect` construction additionally refuses two rows for the same operator whose slots are **jointly admissible** — some inhabited operand type is admitted by both (the relation dispatch actually runs on; see the joint-admissibility law). Value overlap is deliberately *not* the test: `List + List` beside `Dict + Dict` is a legal pair — `[]` the value inhabits both types, but no compilable operand type reaches both rows — while `Number + Number` beside `Literal(5) + Literal(5)` is refused, because a `5`-typed operand resolves both and no precedence rule exists to pick one. Construction is the earliest moment the conflict exists. List order decides nothing: it is a registration order, not a precedence.
