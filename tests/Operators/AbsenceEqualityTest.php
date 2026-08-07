@@ -13,11 +13,13 @@ use Superscript\Axiom\Operators\Equality;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Operators\ValueEquality;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\Types\OpaqueType;
 use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
@@ -43,12 +45,12 @@ use Superscript\Axiom\Types\UnknownType;
 #[CoversClass(Equality::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(DeadOperation::class)]
+#[UsesClass(LiteralShape::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NeverType::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OpaqueShape::class)]
-#[UsesClass(OpaqueType::class)]
 #[UsesClass(OptionShape::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(ResolvedOperation::class)]
@@ -68,7 +70,7 @@ final class AbsenceEqualityTest extends TestCase
 
         self::assertInstanceOf(ResolvedOperation::class, $resolution);
         self::assertTrue($resolution->evaluate(null, null)->unwrap());
-        self::assertFalse($resolution->evaluate(new OpaqueType('money'), null)->unwrap());
+        self::assertFalse($resolution->evaluate(new Money(500, 'GBP'), null)->unwrap());
     }
 
     #[Test]
@@ -78,7 +80,7 @@ final class AbsenceEqualityTest extends TestCase
 
         self::assertInstanceOf(ResolvedOperation::class, $resolution);
         self::assertFalse($resolution->evaluate(null, null)->unwrap());
-        self::assertTrue($resolution->evaluate(new OpaqueType('money'), null)->unwrap());
+        self::assertTrue($resolution->evaluate(new Money(500, 'GBP'), null)->unwrap());
     }
 
     /**
@@ -92,7 +94,7 @@ final class AbsenceEqualityTest extends TestCase
 
         self::assertInstanceOf(ResolvedOperation::class, $resolution);
         self::assertTrue($resolution->evaluate(null, null)->unwrap());
-        self::assertFalse($resolution->evaluate(null, new OpaqueType('money'))->unwrap());
+        self::assertFalse($resolution->evaluate(null, new Money(500, 'GBP'))->unwrap());
     }
 
     /**
@@ -126,7 +128,7 @@ final class AbsenceEqualityTest extends TestCase
     {
         self::assertInstanceOf(
             DeadOperation::class,
-            self::resolve('===', negated: false, left: new OpaqueType('money'), right: self::absence()),
+            self::resolve('===', negated: false, left: new MoneyType('GBP'), right: self::absence()),
         );
     }
 
@@ -139,7 +141,7 @@ final class AbsenceEqualityTest extends TestCase
     {
         self::assertInstanceOf(
             UnsupportedOperation::class,
-            self::resolve('===', negated: false, left: new OpaqueType('money'), right: new OpaqueType('money')),
+            self::resolve('===', negated: false, left: new MoneyType('GBP'), right: new MoneyType('GBP')),
         );
     }
 
@@ -172,6 +174,6 @@ final class AbsenceEqualityTest extends TestCase
 
     private static function optionalMoney(): Type
     {
-        return new OptionType(new OpaqueType('money'));
+        return new OptionType(new MoneyType('GBP'));
     }
 }
