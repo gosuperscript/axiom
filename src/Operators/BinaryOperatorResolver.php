@@ -6,10 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
-use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\Shapes\NeverShape;
-use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -22,14 +20,6 @@ use function Superscript\Monads\Result\Ok;
 /** Compiler-facing collection of binary operator rules, indexed by symbol. */
 final class BinaryOperatorResolver
 {
-    private const array EqualityNegations = [
-        '=' => false,
-        '==' => false,
-        '===' => false,
-        '!=' => true,
-        '!==' => true,
-    ];
-
     /** @var array<string, list<array{rule: BinaryOperatorRule, extension: ?string}>> */
     private array $rules = [];
 
@@ -116,11 +106,9 @@ final class BinaryOperatorResolver
     }
 
     /**
-     * Resolution first settles any core structural reading, such as the
-     * universal presence question `x == null`, before extension overloads.
-     * Ordinary overload resolution is then two-staged. The rules are
-     * consulted with the operand types as given, and a match there — including
-     * a rule that deliberately reads optional operand pairs — wins untouched.
+     * Overload resolution is two-staged. The rules are consulted with the
+     * operand types as given, and a match there — including a rule that
+     * deliberately reads optional operand pairs — wins untouched.
      * Only when every rule refuses and an operand is optional are the rules
      * consulted again with the operands' present types; a match there is returned lifted
      * ({@see ResolvedOperation::liftedOverAbsence()}), so `answer > 0.25`
@@ -132,22 +120,28 @@ final class BinaryOperatorResolver
      */
     public function resolve(string $operator, Type $left, Type $right): Result
     {
+        return $this->resolveOr($operator, $left, $right);
+    }
+
+    /**
+     * Resolve an overload, using a typed fallback only when no direct or lifted
+     * rule resolves. Ambiguity still refuses: a fallback is the default meaning
+     * of an otherwise-unclaimed judgment, never precedence over two claimants.
+     *
+     * @internal Infix-expression typing supplies structural language theorems
+     *           here after it has classified the operand types.
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    public function resolveOr(
+        string $operator,
+        Type $left,
+        Type $right,
+        ?ResolvedOperation $fallback = null,
+    ): Result {
         $rules = $this->rules[$operator] ?? [];
 
         if ($rules === []) {
             return Err(new TypeMismatch(sprintf('Operator [%s] is not supported.', $operator)));
-        }
-
-        $intrinsic = self::presenceComparison($operator, $left, $right);
-
-        if ($intrinsic !== null) {
-            return Ok($this->attributesResolutions
-                ? $intrinsic->attributedTo(new OperatorRuleProvenance(
-                    identifier: 'axiom.option.presence-comparison',
-                    implementation: self::class,
-                    extension: 'axiom.core',
-                ))
-                : $intrinsic);
         }
 
         [$resolved, $refused] = $this->attempt($rules, $left, $right);
@@ -179,6 +173,10 @@ final class BinaryOperatorResolver
             if ($lifted !== []) {
                 return Ok($lifted[0][1]->liftedOverAbsence());
             }
+        }
+
+        if ($fallback !== null) {
+            return Ok($fallback);
         }
 
         if (count($refused) === 1) {
@@ -221,50 +219,6 @@ final class BinaryOperatorResolver
         }
 
         return [$resolved, $refused];
-    }
-
-    /**
-     * The core structural reading of an equality alias against absence.
-     *
-     * Option<T> is the sum 1 + T, while the absence-only type Option<Never>
-     * is 1 + 0. Their comparison therefore observes only the sum constructor:
-     * the present-present branch is uninhabited and needs no equality for T.
-     * A total type has no option constructor to eliminate and reaches ordinary
-     * overload resolution, where a dialect may reject the constant comparison
-     * or deliberately define it. A bare Unknown reaches ordinary resolution for
-     * the separate reason that it has no statically observable outer constructor.
-     */
-    private static function presenceComparison(string $operator, Type $left, Type $right): ?ResolvedOperation
-    {
-        if (!array_key_exists($operator, self::EqualityNegations)) {
-            return null;
-        }
-
-        $counterpart = match (true) {
-            self::isAbsenceOnly($left) => $right,
-            self::isAbsenceOnly($right) => $left,
-            default => null,
-        };
-
-        if (!$counterpart?->shape() instanceof OptionShape) {
-            return null;
-        }
-
-        $negated = self::EqualityNegations[$operator];
-
-        return new ResolvedOperation(
-            new BooleanType(),
-            static fn(mixed $left, mixed $right): bool => $negated
-                ? ($left === null) !== ($right === null)
-                : ($left === null) === ($right === null),
-        );
-    }
-
-    private static function isAbsenceOnly(Type $type): bool
-    {
-        $shape = $type->shape();
-
-        return $shape instanceof OptionShape && $shape->inner instanceof NeverShape;
     }
 
     /**

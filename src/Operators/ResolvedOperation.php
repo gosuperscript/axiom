@@ -15,7 +15,7 @@ use Throwable;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The successful verdict of an operator rule or core intrinsic: the return type
+ * The successful verdict of an operator rule or structural elaboration: the return type
  * and the evaluation, together in one value — the compiler keeps the type
  * and binds the evaluation into the program, so a node can never run
  * under a different rule than the one that typed it.

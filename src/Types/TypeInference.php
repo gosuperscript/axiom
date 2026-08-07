@@ -111,7 +111,8 @@ final readonly class TypeInference
     {
         return new SourceCompilation(
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
-            fn(Type $left, string $operator, Type $right): Result => $this->operators->resolve($operator, $left, $right),
+            fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))
+                ->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
             fn(mixed $value): Result => $this->inferValue($value),

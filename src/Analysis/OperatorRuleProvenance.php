@@ -9,7 +9,7 @@ use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\IdentifiedOperatorRule;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 
-/** Stable, data-only identity for the rule or core intrinsic selected during compilation. */
+/** Stable, data-only identity for the rule or structural elaboration selected during compilation. */
 final readonly class OperatorRuleProvenance
 {
     /** @param class-string $implementation */

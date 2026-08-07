@@ -19,6 +19,7 @@ use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\InfixExpressionTyping;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\NumberType;
@@ -43,8 +44,9 @@ use Superscript\Axiom\Types\UnknownType;
  * It observes only whether the other operand's outer value is null, independently of value
  * equality for its payload and independently of how many ordinary equality overloads exist.
  */
-#[CoversClass(BinaryOperatorResolver::class)]
+#[CoversClass(InfixExpressionTyping::class)]
 #[CoversClass(Equality::class)]
+#[UsesClass(BinaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(ListType::class)]
@@ -72,7 +74,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function an_optional_opaque_operand_can_be_asked_whether_it_is_absent(): void
     {
-        $operation = self::resolver()->resolve(
+        $operation = self::typing()->resolve(
             '===',
             new OptionType(new MoneyType('GBP')),
             new OptionType(new NeverType()),
@@ -85,7 +87,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function a_negated_alias_asks_whether_the_operand_is_present(): void
     {
-        $operation = self::resolver('!==', negated: true)
+        $operation = self::typing('!==', negated: true)
             ->resolve(
                 '!==',
                 new OptionType(new MoneyType('GBP')),
@@ -100,7 +102,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function the_absence_only_operand_may_be_on_either_side(): void
     {
-        $operation = self::resolver()->resolve(
+        $operation = self::typing()->resolve(
             '===',
             new OptionType(new NeverType()),
             new OptionType(new MoneyType('GBP')),
@@ -113,7 +115,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function absence_compared_with_itself_has_the_structural_answer(): void
     {
-        $operation = self::resolver()->resolve(
+        $operation = self::typing()->resolve(
             '===',
             new OptionType(new NeverType()),
             new OptionType(new NeverType()),
@@ -132,15 +134,15 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ], ['host.equality', 'axiom.core', 'axiom.duplicate']);
 
-        $operation = $resolver->resolve(
+        $operation = new InfixExpressionTyping($resolver)->resolve(
             '===',
             new OptionType(new MoneyType('GBP')),
             new OptionType(new NeverType()),
         )->unwrap();
 
         self::assertSame(0, $calls);
-        self::assertSame('axiom.option.presence-comparison', $operation->provenance?->identifier);
-        self::assertSame(BinaryOperatorResolver::class, $operation->provenance?->implementation);
+        self::assertSame('axiom.option.null-comparison', $operation->provenance?->identifier);
+        self::assertSame(InfixExpressionTyping::class, $operation->provenance?->implementation);
         self::assertSame('axiom.core', $operation->provenance?->extension);
     }
 
@@ -153,7 +155,7 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ]);
 
-        $operation = $resolver->resolve(
+        $operation = new InfixExpressionTyping($resolver)->resolve(
             '===',
             new MoneyType('GBP'),
             new OptionType(new NeverType()),
@@ -164,17 +166,35 @@ final class PresenceComparisonTest extends TestCase
     }
 
     #[Test]
+    public function a_known_total_operand_uses_the_structural_fallback_when_no_overload_owns_it(): void
+    {
+        $equality = self::typing()->resolve(
+            '===',
+            new MoneyType('GBP'),
+            new OptionType(new NeverType()),
+        )->unwrap();
+        $inequality = self::typing('!==', negated: true)->resolve(
+            '!==',
+            new MoneyType('GBP'),
+            new OptionType(new NeverType()),
+        )->unwrap();
+
+        self::assertFalse($equality->evaluate(new Money(500, 'GBP'), null)->unwrap());
+        self::assertTrue($inequality->evaluate(new Money(500, 'GBP'), null)->unwrap());
+    }
+
+    #[Test]
     public function an_unknown_payload_does_not_hide_the_known_option_constructor(): void
     {
         $unknown = new OptionType(new UnknownType());
         $nestedUnknown = new OptionType(new ListType(new UnknownType()));
 
-        $unknownOperation = self::resolver()->resolve(
+        $unknownOperation = self::typing()->resolve(
             '===',
             $unknown,
             new OptionType(new NeverType()),
         )->unwrap();
-        $nestedOperation = self::resolver()->resolve(
+        $nestedOperation = self::typing()->resolve(
             '===',
             $nestedUnknown,
             new OptionType(new NeverType()),
@@ -188,7 +208,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function a_bare_unknown_has_no_observable_outer_constructor(): void
     {
-        $refusal = self::resolver()->resolve(
+        $refusal = self::typing()->resolve(
             '===',
             new UnknownType(),
             new OptionType(new NeverType()),
@@ -211,7 +231,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function comparing_two_opaque_values_still_needs_the_owning_package(): void
     {
-        $refusal = self::resolver()
+        $refusal = self::typing()
             ->resolve('===', new MoneyType('GBP'), new MoneyType('GBP'))
             ->unwrapErr();
 
@@ -227,7 +247,7 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ]);
 
-        $resolver->resolve(
+        new InfixExpressionTyping($resolver)->resolve(
             '===',
             new OptionType(new MoneyType('GBP')),
             new OptionType(new MoneyType('GBP')),
@@ -239,7 +259,7 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function supported_operands_still_compare_by_value(): void
     {
-        $operation = self::resolver()->resolve(
+        $operation = self::typing()->resolve(
             '===',
             new OptionType(new NumberType()),
             new NumberType(),
@@ -250,9 +270,37 @@ final class PresenceComparisonTest extends TestCase
         self::assertFalse($operation->evaluate(null, 5)->unwrap());
     }
 
-    private static function resolver(string $operator = '===', bool $negated = false): BinaryOperatorResolver
+    #[Test]
+    public function non_equality_symbols_delegate_directly_to_overload_resolution(): void
     {
-        return new BinaryOperatorResolver([new Equality($operator, $negated)]);
+        $typing = new InfixExpressionTyping(new BinaryOperatorResolver([
+            new Equality('same', negated: false),
+        ]));
+
+        $operation = $typing->resolve('same', new NumberType(), new NumberType())->unwrap();
+
+        self::assertTrue($operation->evaluate(5, 5)->unwrap());
+    }
+
+    #[Test]
+    public function structural_elaboration_never_manufactures_an_unoffered_equality_alias(): void
+    {
+        $typing = new InfixExpressionTyping(new BinaryOperatorResolver([
+            new Equality('same', negated: false),
+        ]));
+
+        $refusal = $typing->resolve(
+            '===',
+            new OptionType(new MoneyType('GBP')),
+            new OptionType(new NeverType()),
+        )->unwrapErr();
+
+        self::assertSame('Operator [===] is not supported.', $refusal->message);
+    }
+
+    private static function typing(string $operator = '===', bool $negated = false): InfixExpressionTyping
+    {
+        return new InfixExpressionTyping(new BinaryOperatorResolver([new Equality($operator, $negated)]));
     }
 
     private static function extensionRule(?int &$calls): BinaryOperatorRule

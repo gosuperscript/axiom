@@ -13,6 +13,8 @@ use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
+use Superscript\Axiom\Tests\Fixtures\Money;
+use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
@@ -97,6 +99,17 @@ final class OptionLiftingTest extends TestCase
 
         $this->assertTrue($program([])->unwrap()->unwrap());
         $this->assertFalse($program(['x' => 1])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_total_opaque_value_is_provably_not_absent_without_value_equality(): void
+    {
+        $program = (new Expression(
+            source: new InfixExpression(new SymbolSource('price'), '===', new StaticSource(null)),
+            declarations: ['price' => new MoneyType('GBP')],
+        ))->compile()->unwrap();
+
+        $this->assertFalse($program(['price' => new Money(500, 'GBP')])->unwrap()->unwrap());
     }
 
     /**
