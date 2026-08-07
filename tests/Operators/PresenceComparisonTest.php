@@ -218,7 +218,7 @@ final class PresenceComparisonTest extends TestCase
     }
 
     #[Test]
-    public function ordinary_equality_no_longer_owns_the_structural_reading(): void
+    public function value_equality_does_not_own_structural_null_comparison(): void
     {
         $resolution = new Equality('===', negated: false)->resolve(
             new OptionType(new MoneyType('GBP')),
@@ -229,7 +229,7 @@ final class PresenceComparisonTest extends TestCase
     }
 
     #[Test]
-    public function comparing_two_opaque_values_still_needs_the_owning_package(): void
+    public function opaque_value_equality_requires_an_owning_package_rule(): void
     {
         $refusal = self::typing()
             ->resolve('===', new MoneyType('GBP'), new MoneyType('GBP'))
@@ -257,7 +257,7 @@ final class PresenceComparisonTest extends TestCase
     }
 
     #[Test]
-    public function supported_operands_still_compare_by_value(): void
+    public function supported_operands_use_value_equality(): void
     {
         $operation = self::typing()->resolve(
             '===',

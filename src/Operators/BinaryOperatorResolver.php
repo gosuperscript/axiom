@@ -125,7 +125,7 @@ final class BinaryOperatorResolver
 
     /**
      * Resolve an overload, using a typed fallback only when no direct or lifted
-     * rule resolves. Ambiguity still refuses: a fallback is the default meaning
+     * rule resolves. Ambiguity refuses: a fallback is the default meaning
      * of an otherwise-unclaimed judgment, never precedence over two claimants.
      *
      * @internal Infix-expression typing supplies structural language theorems
