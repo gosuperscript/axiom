@@ -72,7 +72,11 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function an_optional_opaque_operand_can_be_asked_whether_it_is_absent(): void
     {
-        $operation = self::resolver()->resolve('===', self::optionalMoney(), self::absence())->unwrap();
+        $operation = self::resolver()->resolve(
+            '===',
+            new OptionType(new MoneyType('GBP')),
+            new OptionType(new NeverType()),
+        )->unwrap();
 
         self::assertTrue($operation->evaluate(null, null)->unwrap());
         self::assertFalse($operation->evaluate(new Money(500, 'GBP'), null)->unwrap());
@@ -82,7 +86,11 @@ final class PresenceComparisonTest extends TestCase
     public function a_negated_alias_asks_whether_the_operand_is_present(): void
     {
         $operation = self::resolver('!==', negated: true)
-            ->resolve('!==', self::optionalMoney(), self::absence())
+            ->resolve(
+                '!==',
+                new OptionType(new MoneyType('GBP')),
+                new OptionType(new NeverType()),
+            )
             ->unwrap();
 
         self::assertFalse($operation->evaluate(null, null)->unwrap());
@@ -92,7 +100,11 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function the_absence_only_operand_may_be_on_either_side(): void
     {
-        $operation = self::resolver()->resolve('===', self::absence(), self::optionalMoney())->unwrap();
+        $operation = self::resolver()->resolve(
+            '===',
+            new OptionType(new NeverType()),
+            new OptionType(new MoneyType('GBP')),
+        )->unwrap();
 
         self::assertTrue($operation->evaluate(null, null)->unwrap());
         self::assertFalse($operation->evaluate(null, new Money(500, 'GBP'))->unwrap());
@@ -101,7 +113,11 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function absence_compared_with_itself_has_the_structural_answer(): void
     {
-        $operation = self::resolver()->resolve('===', self::absence(), self::absence())->unwrap();
+        $operation = self::resolver()->resolve(
+            '===',
+            new OptionType(new NeverType()),
+            new OptionType(new NeverType()),
+        )->unwrap();
 
         self::assertTrue($operation->evaluate(null, null)->unwrap());
     }
@@ -116,7 +132,11 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ], ['host.equality', 'axiom.core', 'axiom.duplicate']);
 
-        $operation = $resolver->resolve('===', self::optionalMoney(), self::absence())->unwrap();
+        $operation = $resolver->resolve(
+            '===',
+            new OptionType(new MoneyType('GBP')),
+            new OptionType(new NeverType()),
+        )->unwrap();
 
         self::assertSame(0, $calls);
         self::assertSame('axiom.option.presence-comparison', $operation->provenance?->identifier);
@@ -133,7 +153,11 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ]);
 
-        $operation = $resolver->resolve('===', new MoneyType('GBP'), self::absence())->unwrap();
+        $operation = $resolver->resolve(
+            '===',
+            new MoneyType('GBP'),
+            new OptionType(new NeverType()),
+        )->unwrap();
 
         self::assertSame(1, $calls);
         self::assertFalse($operation->evaluate(new Money(500, 'GBP'), null)->unwrap());
@@ -145,8 +169,16 @@ final class PresenceComparisonTest extends TestCase
         $unknown = new OptionType(new UnknownType());
         $nestedUnknown = new OptionType(new ListType(new UnknownType()));
 
-        $unknownOperation = self::resolver()->resolve('===', $unknown, self::absence())->unwrap();
-        $nestedOperation = self::resolver()->resolve('===', $nestedUnknown, self::absence())->unwrap();
+        $unknownOperation = self::resolver()->resolve(
+            '===',
+            $unknown,
+            new OptionType(new NeverType()),
+        )->unwrap();
+        $nestedOperation = self::resolver()->resolve(
+            '===',
+            $nestedUnknown,
+            new OptionType(new NeverType()),
+        )->unwrap();
 
         self::assertTrue($unknownOperation->evaluate(null, null)->unwrap());
         self::assertFalse($unknownOperation->evaluate(new \stdClass(), null)->unwrap());
@@ -156,7 +188,11 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function a_bare_unknown_has_no_observable_outer_constructor(): void
     {
-        $refusal = self::resolver()->resolve('===', new UnknownType(), self::absence())->unwrapErr();
+        $refusal = self::resolver()->resolve(
+            '===',
+            new UnknownType(),
+            new OptionType(new NeverType()),
+        )->unwrapErr();
 
         self::assertStringContainsString('Unknown', $refusal->message);
     }
@@ -164,7 +200,10 @@ final class PresenceComparisonTest extends TestCase
     #[Test]
     public function ordinary_equality_no_longer_owns_the_structural_reading(): void
     {
-        $resolution = new Equality('===', negated: false)->resolve(self::optionalMoney(), self::absence());
+        $resolution = new Equality('===', negated: false)->resolve(
+            new OptionType(new MoneyType('GBP')),
+            new OptionType(new NeverType()),
+        );
 
         self::assertInstanceOf(UnsupportedOperation::class, $resolution);
     }
@@ -188,7 +227,11 @@ final class PresenceComparisonTest extends TestCase
             new Equality('===', negated: false),
         ]);
 
-        $resolver->resolve('===', self::optionalMoney(), self::optionalMoney())->unwrap();
+        $resolver->resolve(
+            '===',
+            new OptionType(new MoneyType('GBP')),
+            new OptionType(new MoneyType('GBP')),
+        )->unwrap();
 
         self::assertSame(1, $calls);
     }
@@ -210,16 +253,6 @@ final class PresenceComparisonTest extends TestCase
     private static function resolver(string $operator = '===', bool $negated = false): BinaryOperatorResolver
     {
         return new BinaryOperatorResolver([new Equality($operator, $negated)]);
-    }
-
-    private static function absence(): Type
-    {
-        return new OptionType(new NeverType());
-    }
-
-    private static function optionalMoney(): Type
-    {
-        return new OptionType(new MoneyType('GBP'));
     }
 
     private static function extensionRule(?int &$calls): BinaryOperatorRule
