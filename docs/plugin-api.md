@@ -115,6 +115,8 @@ Both methods are sorted, not in registration order — composition carries no pr
 
 Composition has no precedence. Fixed rows that can admit a common operand type are refused when the dialect is constructed. Any remaining case in which multiple computed rules resolve is refused during compilation. Extension order never chooses an evaluation.
 
+Core structural readings are settled before that overload composition. In particular, `optional === null` asks whether a value is present without asking what equality means for the optional value's domain. An extension equality rule may own its opaque present values, but it does not compete for this presence question. A total value against `null` is not a live presence question and still reaches ordinary overload resolution, where a dialect may reject it as dead or define its constant reading.
+
 ## Sources and source compilers
 
 ### `Source`

@@ -374,7 +374,7 @@ new MatchExpression(
 The core dialect ships these rules:
 
 - **Binary arithmetic**: `+`, `-`, `*`, `/` — rows over two present numbers
-- **Equality**: `=`/`==`, `===`, `!=`, `!==` over domains supported by built-in value equality — numeric within `Number` (`1 == 1.0`), strict otherwise, `false` across bases (`===`/`!==` are aliases). Support is established before overlap is used for a *dead* compile diagnostic; opaque values get equality from their owning package.
+- **Equality**: `=`/`==`, `===`, `!=`, `!==` over domains supported by built-in value equality — numeric within `Number` (`1 == 1.0`), strict otherwise, `false` across bases (`===`/`!==` are aliases). Comparing a known optional value with the absence-only `null` type is the core structural presence reading and is settled before extension overloads; equality between present opaque values still belongs to their owning package. Support is established before overlap is used for a *dead* compile diagnostic.
 - **Ordering**: `<`, `<=`, `>`, `>=` — rows over **numbers only**; PHP's willingness to rank strings is not a defined order (a dialect that wants lexicographic ranking ships its own row)
 - **Logical**: `&&`, `||`, `xor` — rows over two present booleans
 - **Set**: `has`, `in`, `intersects` — list membership and intersection by the same value equality (never `array_intersect` string juggling)

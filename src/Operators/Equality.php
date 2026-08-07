@@ -38,21 +38,21 @@ final readonly class Equality implements BinaryOperatorRule
         // nothing resolves over it until it is claimed or coerced. Presence would be the one
         // question askable of a value the engine knows nothing else about, and answering it would
         // be the first crack in that.
-        $comparesAbsence =
-            (self::isAbsenceLiteral($left) && self::isKnown($right))
-            || (self::isAbsenceLiteral($right) && self::isKnown($left));
+        $absence = $this->resolveIntrinsic($left, $right);
 
-        if (!$comparesAbsence) {
-            $support = ValueEquality::supports($left, $right);
+        if ($absence !== null) {
+            return $absence;
+        }
 
-            if ($support->isErr()) {
-                $mismatch = $support->unwrapErr();
+        $support = ValueEquality::supports($left, $right);
 
-                return new UnsupportedOperation(
-                    sprintf('[%s] %s', $this->operator, $mismatch->message),
-                    $mismatch->causes,
-                );
-            }
+        if ($support->isErr()) {
+            $mismatch = $support->unwrapErr();
+
+            return new UnsupportedOperation(
+                sprintf('[%s] %s', $this->operator, $mismatch->message),
+                $mismatch->causes,
+            );
         }
 
         $overlap = TypeRelations::overlaps($left, $right);
@@ -67,13 +67,30 @@ final readonly class Equality implements BinaryOperatorRule
             ), [$overlap->unwrapErr()]);
         }
 
-        $equal = $comparesAbsence
-            ? static fn(mixed $left, mixed $right): bool => ($left === null) === ($right === null)
-            : ValueEquality::equals(...);
+        return new ResolvedOperation(
+            new BooleanType(),
+            fn(mixed $left, mixed $right) => $this->negated
+                ? !ValueEquality::equals($left, $right)
+                : ValueEquality::equals($left, $right),
+        );
+    }
+
+    /** @internal The binary resolver settles this core structural reading before overloads. */
+    public function resolveIntrinsic(Type $left, Type $right): ?ResolvedOperation
+    {
+        $comparesAbsence
+            = (self::isAbsenceLiteral($left) && self::admitsAbsence($right))
+            || (self::isAbsenceLiteral($right) && self::admitsAbsence($left));
+
+        if (!$comparesAbsence) {
+            return null;
+        }
 
         return new ResolvedOperation(
             new BooleanType(),
-            fn(mixed $left, mixed $right) => $this->negated ? !$equal($left, $right) : $equal($left, $right),
+            fn(mixed $left, mixed $right): bool => $this->negated
+                ? ($left === null) !== ($right === null)
+                : ($left === null) === ($right === null),
         );
     }
 
@@ -89,11 +106,21 @@ final readonly class Equality implements BinaryOperatorRule
     }
 
     /**
-     * Whether the engine knows what every value of this type is. {@see ShapeDomain::all} refuses
-     * Unknown whatever the leaf predicate says, so asking it nothing is asking exactly this.
+     * Whether "is this absent?" is a live question of this type: it must be able to be absent, and
+     * the engine must know what its values are.
+     *
+     * An operand that cannot be absent turns the comparison into a constant, and whether a constant
+     * is an error or an ordinary false is a dialect's call, not this rule's — a caller may have a
+     * ref that resolved to nothing and need the comparison to read false rather than fail to
+     * compile. So the reading declines that pair and leaves it to whoever wants to own it.
+     *
+     * {@see ShapeDomain::all} is what keeps Unknown out: it refuses Unknown whatever the leaf
+     * predicate says, so asking it nothing asks exactly whether every value is known.
      */
-    private static function isKnown(Type $type): bool
+    private static function admitsAbsence(Type $type): bool
     {
-        return ShapeDomain::all($type->shape(), static fn(): bool => true);
+        $shape = $type->shape();
+
+        return $shape instanceof OptionShape && ShapeDomain::all($shape, static fn(): bool => true);
     }
 }

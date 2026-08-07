@@ -106,12 +106,13 @@ final class BinaryOperatorResolver
     }
 
     /**
-     * Resolution is two-staged. The rules are consulted with the operand
-     * types as given, and a match there — including a rule that reads
-     * optional operands deliberately, the way equality reads `x == null` —
-     * always wins untouched. Only when every rule refuses and an operand is
-     * optional are the rules consulted again with the operands' present
-     * types; a match there is returned lifted
+     * Resolution first settles any core structural reading, such as the
+     * universal presence question `x == null`, before extension overloads.
+     * Ordinary overload resolution is then two-staged. The rules are
+     * consulted with the operand types as given, and a match there — including
+     * a rule that deliberately reads optional operand pairs — wins untouched.
+     * Only when every rule refuses and an operand is optional are the rules
+     * consulted again with the operands' present types; a match there is returned lifted
      * ({@see ResolvedOperation::liftedOverAbsence()}), so `answer > 0.25`
      * types over an optional answer without any rule knowing about absence.
      * Refusals always report the types as given — the lifted attempt adds
@@ -125,6 +126,16 @@ final class BinaryOperatorResolver
 
         if ($rules === []) {
             return Err(new TypeMismatch(sprintf('Operator [%s] is not supported.', $operator)));
+        }
+
+        $intrinsic = $this->intrinsic($rules, $left, $right);
+
+        if (count($intrinsic) > 1) {
+            return self::ambiguous($operator, $intrinsic, $left, $right);
+        }
+
+        if ($intrinsic !== []) {
+            return Ok($intrinsic[0][1]);
         }
 
         [$resolved, $refused] = $this->attempt($rules, $left, $right);
@@ -198,6 +209,35 @@ final class BinaryOperatorResolver
         }
 
         return [$resolved, $refused];
+    }
+
+    /**
+     * Resolve structural language semantics before consulting ordinary overloads.
+     *
+     * @param list<array{rule: BinaryOperatorRule, extension: ?string}> $rules
+     * @return list<array{class-string, ResolvedOperation}>
+     */
+    private function intrinsic(array $rules, Type $left, Type $right): array
+    {
+        $resolved = [];
+
+        foreach ($rules as ['rule' => $rule, 'extension' => $extension]) {
+            if (!$rule instanceof Equality) {
+                continue;
+            }
+
+            $resolution = $rule->resolveIntrinsic($left, $right);
+
+            if ($resolution === null) {
+                continue;
+            }
+
+            $resolved[] = [$rule::class, $this->attributesResolutions
+                ? $resolution->attributedTo(OperatorRuleProvenance::of($rule, $extension))
+                : $resolution];
+        }
+
+        return $resolved;
     }
 
     /**

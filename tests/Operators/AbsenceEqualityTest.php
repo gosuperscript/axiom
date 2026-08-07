@@ -8,8 +8,11 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Superscript\Axiom\Operators\DeadOperation;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Operators\BinaryOperatorResolver;
+use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\Equality;
+use Superscript\Axiom\Operators\OperatorResolution;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Operators\ValueEquality;
@@ -43,8 +46,8 @@ use Superscript\Axiom\Types\UnknownType;
  * would be the single question askable of a value the engine knows nothing else about.
  */
 #[CoversClass(Equality::class)]
+#[CoversClass(BinaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
-#[UsesClass(DeadOperation::class)]
 #[UsesClass(LiteralShape::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NeverType::class)]
@@ -53,6 +56,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(OpaqueShape::class)]
 #[UsesClass(OptionShape::class)]
 #[UsesClass(OptionType::class)]
+#[UsesClass(OperatorRuleProvenance::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(ShapeDomain::class)]
 #[UsesClass(TypeDescriber::class)]
@@ -81,6 +85,58 @@ final class AbsenceEqualityTest extends TestCase
         self::assertInstanceOf(ResolvedOperation::class, $resolution);
         self::assertFalse($resolution->evaluate(null, null)->unwrap());
         self::assertTrue($resolution->evaluate(new Money(500, 'GBP'), null)->unwrap());
+    }
+
+    /**
+     * Presence is structural language semantics rather than an equality overload. A package may
+     * still have a broad legacy equality rule that admits absence, but it is not a second claimant
+     * for this question and is never consulted.
+     */
+    #[Test]
+    public function structural_absence_is_settled_before_extension_overloads(): void
+    {
+        $calls = 0;
+        $resolver = new BinaryOperatorResolver([
+            self::extensionRule($calls),
+            new Equality('===', negated: false),
+        ], ['host.equality', 'axiom.core']);
+
+        $operation = $resolver->resolve('===', self::optionalMoney(), self::absence())->unwrap();
+
+        self::assertSame(0, $calls);
+        self::assertSame('axiom.core', $operation->provenance?->extension);
+        self::assertTrue($operation->evaluate(null, null)->unwrap());
+        self::assertFalse($operation->evaluate(new Money(500, 'GBP'), null)->unwrap());
+    }
+
+    /** Structural ownership is singular too; two intrinsics are a configuration error. */
+    #[Test]
+    public function two_structural_readings_are_ambiguous(): void
+    {
+        $resolver = new BinaryOperatorResolver([
+            new Equality('===', negated: false),
+            new Equality('===', negated: false),
+        ]);
+
+        $refusal = $resolver->resolve('===', self::optionalMoney(), self::absence())->unwrapErr();
+
+        self::assertStringContainsString('is ambiguous', $refusal->message);
+    }
+
+    /** A constant comparison remains a dialect decision and therefore reaches the extension. */
+    #[Test]
+    public function a_total_operand_against_absence_reaches_an_extension_overload(): void
+    {
+        $calls = 0;
+        $resolver = new BinaryOperatorResolver([
+            self::extensionRule($calls),
+            new Equality('===', negated: false),
+        ]);
+
+        $operation = $resolver->resolve('===', new MoneyType('GBP'), self::absence())->unwrap();
+
+        self::assertSame(1, $calls);
+        self::assertFalse($operation->evaluate(new Money(500, 'GBP'), null)->unwrap());
     }
 
     /**
@@ -120,14 +176,16 @@ final class AbsenceEqualityTest extends TestCase
     }
 
     /**
-     * An operand that cannot be absent is answered with the constant it is: making absence
-     * answerable must not make a question that has only one answer look like a live one.
+     * An operand that cannot be absent makes the comparison a constant, and whether a constant is
+     * an error or an ordinary false is a dialect's call rather than this rule's. A caller may hold
+     * a ref that resolved to nothing and need the comparison to read false instead of failing to
+     * compile, so the reading declines the pair and leaves it to whoever wants to own it.
      */
     #[Test]
-    public function an_operand_that_admits_no_absence_is_refused_as_constant(): void
+    public function an_operand_that_cannot_be_absent_is_left_to_another_rule(): void
     {
         self::assertInstanceOf(
-            DeadOperation::class,
+            UnsupportedOperation::class,
             self::resolve('===', negated: false, left: new MoneyType('GBP'), right: self::absence()),
         );
     }
@@ -175,5 +233,29 @@ final class AbsenceEqualityTest extends TestCase
     private static function optionalMoney(): Type
     {
         return new OptionType(new MoneyType('GBP'));
+    }
+
+    private static function extensionRule(?int &$calls): BinaryOperatorRule
+    {
+        return new class ($calls) implements BinaryOperatorRule {
+            public function __construct(
+                private ?int &$calls,
+            ) {}
+
+            public function operator(): string
+            {
+                return '===';
+            }
+
+            public function resolve(Type $left, Type $right): OperatorResolution
+            {
+                ++$this->calls;
+
+                return new ResolvedOperation(
+                    new BooleanType(),
+                    static fn(mixed $left, mixed $right): bool => $left === $right,
+                );
+            }
+        };
     }
 }
