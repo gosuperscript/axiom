@@ -13,6 +13,7 @@ This reference covers the supported API for packages and applications that exten
     - [`BoundOperation`](#boundoperation)
     - [`SourceEvaluation`](#sourceevaluation)
     - [Callback results and failures](#callback-results-and-failures)
+- [Predicates and implication](#predicates-and-implication)
 - [Types and shapes](#types-and-shapes)
     - [`Type`](#type)
     - [Built-in types](#built-in-types)
@@ -272,6 +273,32 @@ All source evaluation callbacks follow one convention:
 | Thrown exception | Plugin defect; it propagates and is observable as `Threw` |
 
 Expected runtime failures include a missing remote record or a value-dependent domain rejection that static types cannot rule out. Misconfigured services, impossible callback inputs, and return values that violate the declared type are defects, not normal `Err` results.
+
+## Predicates and implication
+
+`Predicate::fromSource()` projects a persisted expression into Axiom's small propositional vocabulary:
+
+| Source shape | Predicate |
+| --- | --- |
+| `left && right` | `AllOf(left, right)` |
+| `left || right` | `AnyOf(left, right)` |
+| Any other core or host Source | Opaque `Atom(source)` |
+
+Repeated conjunctions and disjunctions flatten, duplicate members disappear, and member order does not affect equality. Atom equality uses exact persisted source state, so independently loaded copies match without PHP's loose scalar comparison. A host Source remains one atom even when it contains child Sources; projection never reflectively interprets extension internals.
+
+```php
+use Superscript\Axiom\Predicates\Predicate;
+use Superscript\Axiom\Predicates\PredicateRelations;
+
+$gate = Predicate::fromSource($gateSource);
+$visibleWhen = Predicate::fromSource($visibilitySource);
+
+if (PredicateRelations::implies($gate, $visibleWhen)) {
+    // Every path represented by the gate proves the visibility predicate.
+}
+```
+
+The relation proves identity and the structural laws of conjunction and disjunction. It deliberately does not evaluate atoms, reason about negation, or solve arbitrary boolean formulae. `false` therefore means **unproved**, never **disproved**. The caller owns the domain conclusion drawn from a proof and must first establish that projected `&&` and `||` expressions are valid boolean predicates.
 
 ## Types and shapes
 
