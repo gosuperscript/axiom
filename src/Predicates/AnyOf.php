@@ -7,7 +7,6 @@ namespace Superscript\Axiom\Predicates;
 use Closure;
 use InvalidArgumentException;
 use Superscript\Axiom\Source;
-use Superscript\Axiom\Sources\InfixExpression;
 
 /** A disjunction, canonicalized by flattening and deduplicating its members. */
 final readonly class AnyOf extends Predicate
@@ -71,13 +70,7 @@ final readonly class AnyOf extends Predicate
 
     public function toSource(): Source
     {
-        $source = $this->members[0]->toSource();
-
-        foreach (array_slice($this->members, 1) as $member) {
-            $source = new InfixExpression($source, '||', $member->toSource());
-        }
-
-        return $source;
+        return self::sourceChain($this->members, '||');
     }
 
     /**

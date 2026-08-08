@@ -39,4 +39,19 @@ abstract readonly class Predicate
     abstract public function partiallyEvaluate(Closure $evaluateAtom): bool|self;
 
     abstract public function toSource(): Source;
+
+    /**
+     * @param non-empty-list<Predicate> $members
+     * @param '&&'|'||' $operator
+     */
+    final protected static function sourceChain(array $members, string $operator): Source
+    {
+        $source = $members[0]->toSource();
+
+        foreach (array_slice($members, 1) as $member) {
+            $source = new InfixExpression($source, $operator, $member->toSource());
+        }
+
+        return $source;
+    }
 }
