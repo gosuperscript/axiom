@@ -106,12 +106,11 @@ final class BinaryOperatorResolver
     }
 
     /**
-     * Resolution is two-staged. The rules are consulted with the operand
-     * types as given, and a match there — including a rule that reads
-     * optional operands deliberately, the way equality reads `x == null` —
-     * always wins untouched. Only when every rule refuses and an operand is
-     * optional are the rules consulted again with the operands' present
-     * types; a match there is returned lifted
+     * Overload resolution is two-staged. The rules are consulted with the
+     * operand types as given, and a match there — including a rule that
+     * deliberately reads optional operand pairs — wins untouched.
+     * Only when every rule refuses and an operand is optional are the rules
+     * consulted again with the operands' present types; a match there is returned lifted
      * ({@see ResolvedOperation::liftedOverAbsence()}), so `answer > 0.25`
      * types over an optional answer without any rule knowing about absence.
      * Refusals always report the types as given — the lifted attempt adds
@@ -121,6 +120,24 @@ final class BinaryOperatorResolver
      */
     public function resolve(string $operator, Type $left, Type $right): Result
     {
+        return $this->resolveOr($operator, $left, $right);
+    }
+
+    /**
+     * Resolve an overload, using a typed fallback only when no direct or lifted
+     * rule resolves. Ambiguity refuses: a fallback is the default meaning
+     * of an otherwise-unclaimed judgment, never precedence over two claimants.
+     *
+     * @internal Infix-expression typing supplies structural language theorems
+     *           here after it has classified the operand types.
+     * @return Result<ResolvedOperation, TypeMismatch>
+     */
+    public function resolveOr(
+        string $operator,
+        Type $left,
+        Type $right,
+        ?ResolvedOperation $fallback = null,
+    ): Result {
         $rules = $this->rules[$operator] ?? [];
 
         if ($rules === []) {
@@ -156,6 +173,10 @@ final class BinaryOperatorResolver
             if ($lifted !== []) {
                 return Ok($lifted[0][1]->liftedOverAbsence());
             }
+        }
+
+        if ($fallback !== null) {
+            return Ok($fallback);
         }
 
         if (count($refused) === 1) {

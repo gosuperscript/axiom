@@ -115,6 +115,8 @@ Both methods are sorted, not in registration order — composition carries no pr
 
 Composition has no precedence. Fixed rows that can admit a common operand type are refused when the dialect is constructed. Any remaining case in which multiple computed rules resolve is refused during compilation. Extension order never chooses an evaluation.
 
+Structural null comparison belongs to infix-expression typing, outside that overload composition. `optional === null` elaborates directly to observing the option constructor; it never asks what equality means for the payload, so an extension equality rule may own opaque present values but does not compete for this question. `Option<Unknown>` remains answerable because its option constructor is known, while bare `Unknown` remains inert because no outer constructor is statically visible. A known total value is disjoint from absence: the strict core elaborates equality to constant-false and inequality to constant-true. That theorem is supplied as the fallback of overload resolution, so a compatibility dialect may explicitly retain a published total/null reading; a fallback never hides two competing claimants.
+
 ## Sources and source compilers
 
 ### `Source`

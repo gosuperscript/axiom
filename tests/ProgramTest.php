@@ -151,6 +151,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
+#[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
 final class ProgramTest extends TestCase
 {
     /**

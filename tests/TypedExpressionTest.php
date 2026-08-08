@@ -125,6 +125,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
+#[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function gate(): Expression

@@ -154,6 +154,46 @@ final class BinaryOperatorResolverTest extends TestCase
     }
 
     #[Test]
+    public function a_typed_fallback_applies_only_when_no_overload_resolves(): void
+    {
+        $fallback = new ResolvedOperation(new BooleanType(), static fn(): bool => false);
+        $claimed = new ResolvedOperation(new BooleanType(), static fn(): bool => true);
+        $unclaimed = new BinaryOperatorResolver([
+            self::rule('==', new UnsupportedOperation('No.')),
+        ]);
+        $claimedResolver = new BinaryOperatorResolver([
+            self::rule('==', $claimed),
+        ]);
+
+        self::assertSame(
+            $fallback,
+            $unclaimed->resolveOr('==', new NumberType(), new StringType(), $fallback)->unwrap(),
+        );
+        self::assertSame(
+            $claimed,
+            $claimedResolver->resolveOr('==', new NumberType(), new StringType(), $fallback)->unwrap(),
+        );
+    }
+
+    #[Test]
+    public function a_typed_fallback_never_hides_ambiguity(): void
+    {
+        $resolver = new BinaryOperatorResolver([
+            self::rule('==', new ResolvedOperation(new BooleanType(), static fn(): bool => true)),
+            self::alternativeRule('==', new ResolvedOperation(new BooleanType(), static fn(): bool => false)),
+        ]);
+
+        $refusal = $resolver->resolveOr(
+            '==',
+            new NumberType(),
+            new StringType(),
+            new ResolvedOperation(new BooleanType(), static fn(): bool => false),
+        )->unwrapErr();
+
+        self::assertStringContainsString('is ambiguous', $refusal->message);
+    }
+
+    #[Test]
     public function ambiguity_is_stable_and_has_no_registration_precedence(): void
     {
         $number = self::rule('+', new ResolvedOperation(new NumberType(), fn() => 1));
