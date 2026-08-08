@@ -300,6 +300,8 @@ if (PredicateRelations::implies($gate, $visibleWhen)) {
 
 The relation proves identity and the structural laws of conjunction and disjunction. It deliberately does not evaluate atoms, reason about negation, or solve arbitrary boolean formulae. `false` therefore means **unproved**, never **disproved**. The caller owns the domain conclusion drawn from a proof and must first establish that projected `&&` and `||` expressions are valid boolean predicates.
 
+When a host can decide some atoms, `Predicate::partiallyEvaluate()` applies those values through the same boolean structure. It returns `true` or `false` when the whole predicate is decided, otherwise it returns the residual `Predicate`; call `toSource()` when that residual must return to expression form. The callback returns `null` for an atom it cannot decide.
+
 ## Types and shapes
 
 ### `Type`

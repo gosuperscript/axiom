@@ -164,6 +164,89 @@ final class PredicateRelationsTest extends TestCase
     }
 
     #[Test]
+    public function known_atoms_partially_evaluate_a_predicate_and_leave_a_source_residual(): void
+    {
+        $predicate = Predicate::fromSource(new InfixExpression(
+            new InfixExpression(self::symbol('x'), '&&', self::symbol('y')),
+            '||',
+            self::symbol('z'),
+        ));
+
+        $residual = $predicate->partiallyEvaluate(static function (Atom $atom): ?bool {
+            if (!$atom->source instanceof SymbolSource) {
+                return null;
+            }
+
+            return match ($atom->source->name) {
+                'x' => true,
+                'z' => false,
+                default => null,
+            };
+        });
+
+        self::assertInstanceOf(Atom::class, $residual);
+        self::assertEquals(self::symbol('y'), $residual->toSource());
+    }
+
+    #[Test]
+    public function partial_evaluation_obeys_boolean_identities_and_short_circuits(): void
+    {
+        $xAndY = Predicate::fromSource(new InfixExpression(self::symbol('x'), '&&', self::symbol('y')));
+        $xOrY = Predicate::fromSource(new InfixExpression(self::symbol('x'), '||', self::symbol('y')));
+
+        self::assertTrue($xAndY->partiallyEvaluate(static fn(Atom $atom): bool => true));
+        self::assertFalse($xAndY->partiallyEvaluate(
+            static fn(Atom $atom): bool => $atom->source instanceof SymbolSource && $atom->source->name === 'x',
+        ));
+        self::assertFalse($xOrY->partiallyEvaluate(static fn(Atom $atom): bool => false));
+        self::assertTrue($xOrY->partiallyEvaluate(
+            static fn(Atom $atom): bool => $atom->source instanceof SymbolSource && $atom->source->name === 'y',
+        ));
+    }
+
+    #[Test]
+    public function a_partially_evaluated_composition_rebuilds_the_same_connective(): void
+    {
+        $predicate = Predicate::fromSource(new InfixExpression(
+            new InfixExpression(self::symbol('x'), '&&', self::symbol('y')),
+            '&&',
+            self::symbol('z'),
+        ));
+
+        $residual = $predicate->partiallyEvaluate(
+            static fn(Atom $atom): ?bool => (
+                $atom->source instanceof SymbolSource && $atom->source->name === 'x'
+                    ? true
+                    : null
+            ),
+        );
+
+        self::assertInstanceOf(AllOf::class, $residual);
+        self::assertEquals(
+            new InfixExpression(self::symbol('y'), '&&', self::symbol('z')),
+            $residual->toSource(),
+        );
+
+        $disjunction = Predicate::fromSource(new InfixExpression(
+            new InfixExpression(self::symbol('x'), '||', self::symbol('y')),
+            '||',
+            self::symbol('z'),
+        ))->partiallyEvaluate(
+            static fn(Atom $atom): ?bool => (
+                $atom->source instanceof SymbolSource && $atom->source->name === 'z'
+                    ? false
+                    : null
+            ),
+        );
+
+        self::assertInstanceOf(AnyOf::class, $disjunction);
+        self::assertEquals(
+            new InfixExpression(self::symbol('x'), '||', self::symbol('y')),
+            $disjunction->toSource(),
+        );
+    }
+
+    #[Test]
     public function connective_factories_require_members_and_collapse_a_single_member(): void
     {
         $atom = Predicate::fromSource(self::symbol('x'));

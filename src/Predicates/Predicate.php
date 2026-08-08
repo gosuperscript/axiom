@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Predicates;
 
+use Closure;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 
@@ -31,4 +32,11 @@ abstract readonly class Predicate
     }
 
     abstract public function equals(self $other): bool;
+
+    /**
+     * @param Closure(Atom): ?bool $evaluateAtom null leaves the atom undecided
+     */
+    abstract public function partiallyEvaluate(Closure $evaluateAtom): bool|self;
+
+    abstract public function toSource(): Source;
 }
