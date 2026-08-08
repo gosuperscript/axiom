@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Predicates;
 
+use Closure;
 use InvalidArgumentException;
+use Superscript\Axiom\Source;
 
 /** A conjunction, canonicalized by flattening and deduplicating its members. */
 final readonly class AllOf extends Predicate
@@ -45,6 +47,30 @@ final readonly class AllOf extends Predicate
             $this->members,
             static fn(Predicate $member): bool => self::contains($other->members, $member),
         );
+    }
+
+    public function partiallyEvaluate(Closure $evaluateAtom): bool|Predicate
+    {
+        $remaining = [];
+
+        foreach ($this->members as $member) {
+            $evaluation = $member->partiallyEvaluate($evaluateAtom);
+
+            if ($evaluation === false) {
+                return false;
+            }
+
+            if ($evaluation !== true) {
+                $remaining[] = $evaluation;
+            }
+        }
+
+        return $remaining === [] ? true : self::of(...$remaining);
+    }
+
+    public function toSource(): Source
+    {
+        return self::sourceChain($this->members, '&&');
     }
 
     /**

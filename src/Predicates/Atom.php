@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Predicates;
 
+use Closure;
 use Superscript\Axiom\Source;
 use Throwable;
 
@@ -29,5 +30,15 @@ final readonly class Atom extends Predicate
             // that contract, equality remains conservatively unproved.
             return false;
         }
+    }
+
+    public function partiallyEvaluate(Closure $evaluateAtom): bool|Predicate
+    {
+        return $evaluateAtom($this) ?? $this;
+    }
+
+    public function toSource(): Source
+    {
+        return $this->source;
     }
 }

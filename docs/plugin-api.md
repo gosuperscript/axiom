@@ -300,6 +300,12 @@ if (PredicateRelations::implies($gate, $visibleWhen)) {
 
 The relation proves identity and the structural laws of conjunction and disjunction. It deliberately does not evaluate atoms, reason about negation, or solve arbitrary boolean formulae. `false` therefore means **unproved**, never **disproved**. The caller owns the domain conclusion drawn from a proof and must first establish that projected `&&` and `||` expressions are valid boolean predicates.
 
+When a host can decide some atoms, `Predicate::partiallyEvaluate()` applies those values through the same boolean structure. It returns `true` or `false` when the whole predicate is decided, otherwise it returns the residual `Predicate`; call `toSource()` when that residual must return to expression form. The callback returns `null` for an atom it cannot decide.
+
+Partial evaluation preserves proposition values, not Axiom's ordinary evaluation plan. A compiled infix expression evaluates both operands before applying `&&` or `||`, while partial evaluation may let a dominant known atom discard an undecided branch. The host must therefore know that undecided atoms are total, or deliberately accept suppressing a failure or effect that ordinary runtime evaluation would encounter.
+
+`toSource()` is a semantic projection, not a syntax round trip. Predicate construction flattens connectives and removes duplicate members, and reconstruction emits a left-associated chain. Do not use it where original Source bytes, grouping, or repeated evaluation are observable.
+
 ## Types and shapes
 
 ### `Type`

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Predicates;
 
+use Closure;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\Sources\InfixExpression;
 
@@ -31,4 +32,26 @@ abstract readonly class Predicate
     }
 
     abstract public function equals(self $other): bool;
+
+    /**
+     * @param Closure(Atom): ?bool $evaluateAtom null leaves the atom undecided
+     */
+    abstract public function partiallyEvaluate(Closure $evaluateAtom): bool|self;
+
+    abstract public function toSource(): Source;
+
+    /**
+     * @param non-empty-list<Predicate> $members
+     * @param '&&'|'||' $operator
+     */
+    final protected static function sourceChain(array $members, string $operator): Source
+    {
+        $source = $members[0]->toSource();
+
+        foreach (array_slice($members, 1) as $member) {
+            $source = new InfixExpression($source, $operator, $member->toSource());
+        }
+
+        return $source;
+    }
 }
