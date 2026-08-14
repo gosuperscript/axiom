@@ -498,6 +498,12 @@ final class DiagnosisTest extends TestCase
         $this->assertTrue($program(['turnover' => 2000, 'postcode' => 'SW1'])->unwrap()->unwrap());
     }
 
+    /**
+     * compile() runs the walk with no recovery state; diagnose()'s first
+     * attempt runs it with recovery that has nothing quarantined and nothing
+     * poisoned. This pins the two to one verdict per failure kind, absorbing
+     * judgment sites included.
+     */
     #[Test]
     public function the_first_diagnostic_is_the_refusal_compile_returns(): void
     {
@@ -521,6 +527,8 @@ final class DiagnosisTest extends TestCase
                     'b' => new InfixExpression(new SymbolSource('a'), '+', new StaticSource(1)),
                 ]),
             ),
+            'member' => new Expression(new MemberAccessSource(new SymbolSource('quote'), 'premium')),
+            'ascription' => new Expression(new Ascription(new NumberType(), new SymbolSource('quote'))),
         ];
 
         foreach ($expressions as $name => $expression) {

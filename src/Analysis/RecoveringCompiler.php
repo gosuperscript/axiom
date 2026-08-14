@@ -76,6 +76,13 @@ final readonly class RecoveringCompiler
      * One attempt, certified. The refusal, if any, is the first diagnostic
      * {@see diagnose()} would collect.
      *
+     * There is no recovery to carry, so none is built: compilation runs
+     * without the quarantine check at every node and the reference
+     * bookkeeping behind it. An empty recovery would answer no to every
+     * question it is asked, so this is the same compilation attempt
+     * diagnose() makes first — the same refusal, the same message, the same
+     * path — at the cost of the walk alone.
+     *
      * @return Result<Program, TypeMismatch>
      */
     public function compile(): Result
@@ -86,7 +93,7 @@ final readonly class RecoveringCompiler
             return Err(new TypeMismatch(self::NotWellFounded, $cycles));
         }
 
-        return $this->attempt(new ErrorRecovery())->map(fn(CompiledNode $node) => $this->program($node));
+        return $this->attempt(null)->map(fn(CompiledNode $node) => $this->program($node));
     }
 
     /** Attempts until one succeeds, collecting what each refused. */
@@ -132,8 +139,12 @@ final readonly class RecoveringCompiler
         }
     }
 
-    /** @return Result<CompiledNode, TypeMismatch> */
-    private function attempt(ErrorRecovery $recovery): Result
+    /**
+     * @param ?ErrorRecovery $recovery Null compiles with no recovery state at
+     *                                 all, which is what certification needs.
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    private function attempt(?ErrorRecovery $recovery): Result
     {
         $dialect = $this->expression->dialect;
 
