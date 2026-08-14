@@ -125,6 +125,33 @@ final class DefinitionGraphTest extends TestCase
     }
 
     #[Test]
+    public function a_well_founded_graph_has_no_cyclic_names(): void
+    {
+        $definitions = new Definitions([
+            'a' => new SymbolSource('b'),
+            'b' => new StaticSource(1),
+        ]);
+
+        $this->assertSame([], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
+    public function every_name_on_a_cycle_is_named_once(): void
+    {
+        // Two cycles sharing 'a': a → b → a and a → c → a. Every name a
+        // caller must refuse to descend into appears exactly once, and 'd',
+        // which is on neither, appears not at all.
+        $definitions = new Definitions([
+            'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
+            'b' => new SymbolSource('a'),
+            'c' => new SymbolSource('a'),
+            'd' => new StaticSource(1),
+        ]);
+
+        $this->assertSame(['a', 'b', 'c'], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
     public function references_to_parameters_are_leaves_not_edges(): void
     {
         // turnover is not defined — it is a parameter, satisfied by a

@@ -26,14 +26,48 @@ final class DefinitionGraph
      */
     public static function cycles(Definitions $definitions): array
     {
-        $mismatches = [];
+        return array_map(
+            static fn(array $cycle) => new TypeMismatch(sprintf('Cyclic symbol definition: %s.', implode(' → ', $cycle))),
+            self::detect($definitions),
+        );
+    }
+
+    /**
+     * Every definition name that lies on a cycle. Such a name can never
+     * compile — following its edges is the non-termination {@see cycles()}
+     * reports — so a caller that keeps compiling past that refusal has here
+     * exactly the names it must not descend into.
+     *
+     * @return list<string>
+     */
+    public static function cyclicKeys(Definitions $definitions): array
+    {
+        $keys = [];
+
+        foreach (self::detect($definitions) as $cycle) {
+            foreach ($cycle as $key) {
+                $keys[$key] = $key;
+            }
+        }
+
+        return array_values($keys);
+    }
+
+    /**
+     * Every distinct cycle, as the names on it, closed: `['a', 'b', 'a']`.
+     *
+     * @return list<non-empty-list<string>>
+     */
+    private static function detect(Definitions $definitions): array
+    {
+        $cycles = [];
         $explored = [];
 
         foreach ($definitions->keys() as $key) {
-            self::visit($key, $definitions, [], $explored, $mismatches);
+            self::visit($key, $definitions, [], $explored, $cycles);
         }
 
-        return $mismatches;
+        return $cycles;
     }
 
     /**
@@ -42,17 +76,14 @@ final class DefinitionGraph
      *
      * @param list<string> $path
      * @param array<string, true> $explored
-     * @param list<TypeMismatch> $mismatches
+     * @param list<non-empty-list<string>> $cycles
      */
-    private static function visit(string $key, Definitions $definitions, array $path, array &$explored, array &$mismatches): void
+    private static function visit(string $key, Definitions $definitions, array $path, array &$explored, array &$cycles): void
     {
         $position = array_search($key, $path, strict: true);
 
         if ($position !== false) {
-            $mismatches[] = new TypeMismatch(sprintf(
-                'Cyclic symbol definition: %s.',
-                implode(' → ', [...array_slice($path, $position), $key]),
-            ));
+            $cycles[] = [...array_slice($path, $position), $key];
 
             return;
         }
@@ -70,7 +101,7 @@ final class DefinitionGraph
             // References that are not definitions are parameters — leaves of
             // the graph, satisfied by bindings, never edges.
             if ($definitions->has($referenced)) {
-                self::visit($referenced, $definitions, [...$path, $key], $explored, $mismatches);
+                self::visit($referenced, $definitions, [...$path, $key], $explored, $cycles);
             }
         }
 
