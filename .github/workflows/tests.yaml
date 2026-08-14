@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        php: [8.4]
+        php: [8.4, 8.5]
         stability: [prefer-lowest, prefer-stable]
 
     name: P${{ matrix.php }} - ${{ matrix.stability }}
@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        php: [8.4]
+        php: [8.4, 8.5]
 
     name: Static analysis
 
