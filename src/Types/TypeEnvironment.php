@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Runtime;
@@ -49,14 +50,16 @@ final class TypeEnvironment
     public function __construct(
         private readonly Definitions $definitions = new Definitions(),
         private readonly array $declarations = [],
+        private readonly ?ErrorRecovery $recovery = null,
     ) {}
 
     /**
      * @param string $path Where a defined symbol's source compiles — the edge
      *                     that referenced it. A memoized verdict keeps the path
-     *                     of the first reference that compiled it; harmless
-     *                     while a refusal aborts the whole compilation, since a
-     *                     memoized refusal is then never served twice.
+     *                     of the first reference that compiled it. Compilation
+     *                     that recovers may serve a memoized refusal twice, and
+     *                     wants to: the fault is reported once, at the first
+     *                     reference that ran into it.
      * @return Result<CompiledNode, TypeMismatch>
      */
     public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler, string $path = '$'): Result
@@ -91,6 +94,10 @@ final class TypeEnvironment
         $source = $this->definitions->get($name, $namespace);
 
         if ($source->isNone()) {
+            // Nothing answers for the name, but the expression still depends
+            // on it — which is the fact a broken draft is asked about most.
+            $this->recovery?->reference($key);
+
             return Err(new TypeMismatch(sprintf(
                 'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
                 $key,

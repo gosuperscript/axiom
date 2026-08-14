@@ -6,12 +6,17 @@ namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
+use Superscript\Axiom\Analysis\ErrorRecovery;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Analysis\RecoveringCompiler;
+use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -35,6 +40,15 @@ use function Superscript\Monads\Result\Ok;
  * Operators resolve through the dialect's composed stacks at compile time;
  * the resolutions are bound into the nodes and the compiled program never
  * dispatches on a value again.
+ *
+ * Given an {@see ErrorRecovery}, compilation additionally treats the nodes
+ * and definitions it names as already failed — they compile to
+ * {@see ErrorType} without being visited, and an operation over one resolves
+ * to ErrorType without a rule lookup — and reports every symbol it read,
+ * whether or not the compilation as a whole succeeds. That is what lets
+ * {@see RecoveringCompiler} compile the same expression again and reach past
+ * a refusal it already reported; without one, nothing here behaves
+ * differently.
  */
 final readonly class TypeInference
 {
@@ -57,6 +71,7 @@ final readonly class TypeInference
         array $sourceCompilers,
         array $sourceCompilerExtensions = [],
         ?OpaqueFieldRegistry $opaqueFields = null,
+        private ?ErrorRecovery $recovery = null,
     ) {
         $this->sourceCompilers = $sourceCompilers;
         $this->sourceCompilerExtensions = $sourceCompilerExtensions;
@@ -73,6 +88,10 @@ final readonly class TypeInference
      */
     public function compile(Source $source, TypeEnvironment $environment, string $path = '$'): Result
     {
+        if ($this->recovery?->isQuarantined($path) === true) {
+            return Ok($this->failedNode($source));
+        }
+
         $compiler = $this->sourceCompilers[$source::class] ?? null;
 
         if ($compiler === null) {
@@ -82,17 +101,24 @@ final readonly class TypeInference
             ), path: $path));
         }
 
+        $recorder = new CompilationRecorder($path);
+
         try {
-            $recorder = new CompilationRecorder($path);
             $compiled = $compiler($source, $this->compilation($environment, $source, $recorder));
         } catch (CompilationAborted $aborted) {
             // The one place a node's refusal becomes a returned error, whoever
             // made it: a source compiler, an operator no rule resolves, an
             // unbound symbol, a failed relation. Locating it here locates all
             // of them, and at() keeps an already-located refusal from a child
-            // pointing at the child.
+            // pointing at the child. The names the node had already read
+            // before it refused are kept: a broken draft still knows what it
+            // depends on.
+            $this->recovery?->record($recorder->references());
+
             return Err($aborted->mismatch->at($path));
         }
+
+        $this->recovery?->record($recorder->references());
 
         return Ok($compiled->node()->forSource($source, new CompilationNode(
             $source::class,
@@ -111,9 +137,12 @@ final readonly class TypeInference
     {
         return new SourceCompilation(
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
-            fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))
-                ->resolve($operator, $left, $right),
-            fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
+            fn(Type $left, string $operator, Type $right): Result => $left instanceof ErrorType || $right instanceof ErrorType
+                ? Ok(self::absorbed())
+                : (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
+            fn(string $operator, Type $operand): Result => $operand instanceof ErrorType
+                ? Ok(self::absorbed())
+                : $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
@@ -147,7 +176,44 @@ final readonly class TypeInference
             )));
         }
 
+        $key = SymbolSource::key($symbol->name, $symbol->namespace);
+
+        // A definition on a cycle has already been reported as a property of
+        // the graph, and descending into one would not terminate.
+        if ($this->recovery?->isPoisoned($key) === true) {
+            $this->recovery->reference($key);
+
+            return Ok($this->failedNode($symbol));
+        }
+
         return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path);
+    }
+
+    /**
+     * A node that did not compile: typed {@see ErrorType}, and still a
+     * compiled child so its siblings keep their positions — without one, the
+     * child after a failed child would claim the failed child's index and
+     * every path below it would name the wrong node.
+     */
+    private function failedNode(Source $source): CompiledNode
+    {
+        return new CompiledNode(new ErrorType(), UnreachableEvaluation::refuse(...))
+            ->forSource($source, new CompilationNode(
+                $source::class,
+                new ErrorType(),
+                // No compiler ran, so no extension owns the decisions here.
+                'unattributed',
+            ));
+    }
+
+    /** An operation over an operand that already failed: no rule, no refusal, no value. */
+    private static function absorbed(): ResolvedOperation
+    {
+        return new ResolvedOperation(
+            new ErrorType(),
+            UnreachableEvaluation::refuse(...),
+            new OperatorRuleProvenance('error.absorbed', ErrorType::class, null),
+        );
     }
 
     /**
