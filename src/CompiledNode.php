@@ -53,8 +53,9 @@ final readonly class CompiledNode
      * description, so host nodes cannot forget to participate in observation.
      *
      * @internal
+     *
+     * @param list<string> $references
      */
-    /** @param list<string> $references */
     public function forSource(Source $source, CompilationNode $compilation, array $references = []): self
     {
         return new self($this->returns, $this->evaluation, $source::class, $compilation, $references);

@@ -475,7 +475,7 @@ Use **[the extension guide](docs/extending-axiom.md)** for a progressive tutoria
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
 | Give operators new semantics | fixed rows, typed computed rules, or `BinaryOperatorRule` / `UnaryOperatorRule` for fully custom judgments | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
-| Add a data source | `Source::children()` plus `Extension::sourceCompilers()` and composable `CompiledSource` values; sources stay data-only | Host sources |
+| Add a data source | `Extension::sourceCompilers()` plus composable `CompiledSource` values; sources stay data-only | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |
 | Prove your rules honest | the totality harness + admission-honesty law patterns | Testing your extension |
 

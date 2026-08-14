@@ -14,11 +14,6 @@ final readonly class SymbolSource implements Source, Describable
         public ?string $namespace = null,
     ) {}
 
-    public function children(): iterable
-    {
-        return [];
-    }
-
     /**
      * The flat dotted key a namespaced symbol occupies — the one naming
      * convention every symbol lookup (bindings, definitions, the definition

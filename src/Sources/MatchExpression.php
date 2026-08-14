@@ -15,26 +15,13 @@ final readonly class MatchExpression implements Source, Describable
         public array $arms,
     ) {}
 
-    public function children(): iterable
-    {
-        yield $this->subject;
-
-        foreach ($this->arms as $arm) {
-            if ($arm->pattern instanceof ExpressionPattern) {
-                yield $arm->pattern->source;
-            }
-
-            yield $arm->expression;
-        }
-    }
-
     public function describe(): string
     {
         $subject = $this->subject instanceof Describable
             ? $this->subject->describe()
             : (new \ReflectionClass($this->subject))->getShortName();
 
-        $arms = implode(', ', array_map(fn(MatchArm $arm) => $arm->describe(), $this->arms));
+        $arms = implode(', ', array_map(fn (MatchArm $arm) => $arm->describe(), $this->arms));
 
         return sprintf('match %s { %s }', $subject, $arms);
     }
