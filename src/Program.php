@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use LogicException;
 use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\CompilationNode;
+use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Execution\Observer;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -75,7 +78,32 @@ final readonly class Program
             'unattributed',
         );
 
+        self::certify($compilation, '$');
+
         $this->analysis = new CompilationAnalysis($compilation, $this->declarations, $this->boundary);
+    }
+
+    /**
+     * The one place a program is minted, and so the one place to hold the
+     * line: a node typed {@see ErrorType} is a node error-tolerant
+     * compilation gave up on ({@see Diagnosis}), and a program carrying one
+     * anywhere would present a checked face over an unchecked subtree. The
+     * whole tree is walked, not just the root — a failed match arm is
+     * absorbed into the union of its siblings, so a broken node can sit under
+     * a perfectly ordinary type.
+     */
+    private static function certify(CompilationNode $node, string $path): void
+    {
+        if ($node->returns instanceof ErrorType) {
+            throw new LogicException(sprintf(
+                'The node at [%s] failed to compile; a Program cannot be certified from it. Read Expression::diagnose() for what refused.',
+                $path,
+            ));
+        }
+
+        foreach ($node->children as $index => $child) {
+            self::certify($child->node, sprintf('%s.children[%d].node', $path, $index));
+        }
     }
 
     /**
