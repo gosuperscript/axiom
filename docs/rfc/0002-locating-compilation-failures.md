@@ -123,7 +123,9 @@ Type-relation causes stay `null`, and should. In the worked example the cause is
 
 A symbol that resolves to a definition compiles the definition's source, and the failure is located at the referencing edge (`children[i].node` under the referencing node, the same edge the success-path analysis records with role `definition`). Two references to one definition therefore address it by two paths — exactly as the success path already does, since `toArray()` numbers per occurrence.
 
-One caveat to record: `TypeEnvironment` memoises the compiled definition per key, including a failure, so a memoised `Err` would carry the path of the *first* reference that compiled it. It can never be served twice today, because the first failure aborts the whole compile. If a future partial-compile mode continues past a failure, this becomes real and the memo would need to hold the unlocated mismatch and locate it per reference.
+One caveat to record: `TypeEnvironment` memoises the compiled definition per key, including a failure, so a memoised `Err` carries the path of the *first* reference that compiled it.
+
+Error-tolerant compilation (`Expression::diagnose()`) continues past a failure, but not by reusing that memo: it compiles the whole expression again, and every attempt builds a fresh `TypeEnvironment`, so no memoised verdict outlives the attempt that made it. Within one attempt a memoised refusal still ends that attempt as it propagates, so a second reference reads one only where a source compiler captures the abort instead of letting it through — and is then answered at the first reference's path. Holding the mismatch unlocated in the memo and locating it per reference remains available if that difference ever matters.
 
 ### Path syntax
 

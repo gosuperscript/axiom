@@ -56,10 +56,14 @@ final class TypeEnvironment
     /**
      * @param string $path Where a defined symbol's source compiles — the edge
      *                     that referenced it. A memoized verdict keeps the path
-     *                     of the first reference that compiled it. Compilation
-     *                     that recovers may serve a memoized refusal twice, and
-     *                     wants to: the fault is reported once, at the first
-     *                     reference that ran into it.
+     *                     of the first reference that compiled it, so a second
+     *                     reference to one definition is answered with the
+     *                     first reference's location. The memo is scoped to one
+     *                     environment and an environment to one compilation
+     *                     attempt, so a memoized refusal reaches a second
+     *                     reference only within the attempt that made it, and
+     *                     only if a compiler captured the abort rather than
+     *                     letting it end the attempt.
      * @return Result<CompiledNode, TypeMismatch>
      */
     public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler, string $path = '$'): Result

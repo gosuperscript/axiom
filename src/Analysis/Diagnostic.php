@@ -12,6 +12,12 @@ use Superscript\Axiom\Types\TypeMismatch;
  * `$path` is the node the refusal was stamped with as it left the node that
  * made it (first location wins), and is null for a refusal about the whole
  * program rather than a position in it — a definition cycle.
+ *
+ * It carries no more than the {@see TypeMismatch} it wraps, and is kept
+ * anyway because it is the vocabulary a reader of a diagnosis sees.
+ * Severity, related locations and suggested fixes are things a diagnostic
+ * grows; each would be wrong on a TypeMismatch, which is a verdict the
+ * compiler reaches rather than a report anyone reads.
  */
 final readonly class Diagnostic
 {

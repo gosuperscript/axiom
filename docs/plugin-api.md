@@ -184,6 +184,7 @@ The compiler capability passed to every source compiler.
 | `custom(Type $returns, callable $evaluate): CompiledSource` | Advanced lazy/control-flow evaluation. The callable may accept `SourceEvaluation`. |
 | `within(string $message, callable $compile): mixed` | Add a source-specific parent message around a nested compilation refusal. |
 | `reject(TypeMismatch|string $mismatch): never` | Refuse this source during compilation. The mismatch returns through `Expression::compile()`. |
+| `absorbed(): CompiledSource` | Compile to `ErrorType` making no refusal, for when a child has already failed and a judgment about its type has nothing left to judge. Guard it with `CompiledSource::failed()`. |
 
 `child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
 
@@ -197,6 +198,7 @@ $compiled->returns; // Type
 
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
+| `failed(): bool` | True when this source did not compile and is typed `ErrorType`. Judge nothing about such a child; return `SourceCompilation::absorbed()`. | None; this is a compile-time question. |
 | `expectPresent(Type $expected): CompiledSource` | Checks the present member of an optional type; absence remains allowed and propagates later. | None; this is a compile-time certification. |
 | `mapPresent(Type $returns, callable $evaluate): CompiledSource` | An absent input stays absent and the callback is not invoked. If this source is optional, the result type is automatically `Option<$returns>`. | The present value. |
 | `mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource` | The callback is always invoked. | Present value or `null`. |
