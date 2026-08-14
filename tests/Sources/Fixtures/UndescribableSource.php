@@ -6,10 +6,4 @@ namespace Superscript\Axiom\Tests\Sources\Fixtures;
 
 use Superscript\Axiom\Source;
 
-final readonly class UndescribableSource implements Source
-{
-    public function children(): iterable
-    {
-        return [];
-    }
-}
+final readonly class UndescribableSource implements Source {}

@@ -49,21 +49,10 @@ final readonly class FirstSource implements Source
 {
     /** @param list<Source> $filters */
     public function __construct(public array $filters) {}
-
-    public function children(): iterable
-    {
-        return $this->filters;
-    }
 }
 
 /** @internal Test fixture proving source compiler ownership is exact-class. */
-class ParentHostSource implements Source
-{
-    public function children(): iterable
-    {
-        return [];
-    }
-}
+class ParentHostSource implements Source {}
 
 /** @internal */
 final class ChildHostSource extends ParentHostSource {}
@@ -78,11 +67,6 @@ final readonly class HostInfixSource implements Source
         public Type $rightType,
         public mixed $right,
     ) {}
-
-    public function children(): iterable
-    {
-        return [];
-    }
 }
 
 /** @internal Test fixture for a source compiler that binds a prefix operator. */
@@ -93,22 +77,12 @@ final readonly class HostPrefixSource implements Source
         public Type $operandType,
         public mixed $operand,
     ) {}
-
-    public function children(): iterable
-    {
-        return [];
-    }
 }
 
 /** @internal Test fixture for a source compiler that owns a symbol reference. */
 final readonly class HostSymbolSource implements Source
 {
     public function __construct(public SymbolSource $symbol) {}
-
-    public function children(): iterable
-    {
-        return [$this->symbol];
-    }
 }
 
 /** @internal Test fixture for a source compiler that hides a symbol name. */
@@ -118,22 +92,12 @@ final readonly class HiddenSymbolSource implements Source
         public string $name,
         public SymbolSource $visible,
     ) {}
-
-    public function children(): iterable
-    {
-        return [$this->visible];
-    }
 }
 
 /** @internal Test fixture for a source compiler that types an embedded PHP value. */
 final readonly class HostLiteralSource implements Source
 {
     public function __construct(public mixed $value) {}
-
-    public function children(): iterable
-    {
-        return [];
-    }
 }
 
 #[CoversClass(SourceCompilation::class)]

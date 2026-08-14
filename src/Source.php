@@ -12,12 +12,4 @@ namespace Superscript\Axiom;
  * later; live collaborators belong to the source compiler registered by an
  * Extension, and are captured only in the compiled Program.
  */
-interface Source
-{
-    /**
-     * Every source nested in this node's persisted description.
-     *
-     * @return iterable<Source>
-     */
-    public function children(): iterable;
-}
+interface Source {}
