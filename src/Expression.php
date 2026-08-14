@@ -7,6 +7,8 @@ namespace Superscript\Axiom;
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Spike\SpikeAnalysis;
+use Superscript\Axiom\Spike\TolerantCompiler;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
@@ -161,6 +163,18 @@ final readonly class Expression
         return $this->infer()->andThen(
             fn(Type $actual) => TypeRelations::isTypeAssignableTo($actual, $expected)->map(fn() => $actual),
         );
+    }
+
+    /**
+     * SPIKE ONLY. The error-tolerant twin of compile(): one walk that
+     * accumulates every diagnostic instead of stopping at the first, and still
+     * collects references and partial types out of the broken regions. A
+     * callable Program comes back from {@see SpikeAnalysis::program()} only
+     * when nothing was accumulated.
+     */
+    public function spikeAnalyse(): SpikeAnalysis
+    {
+        return (new TolerantCompiler($this))->analyse();
     }
 
     private function inference(): TypeInference
