@@ -152,6 +152,77 @@ final class DefinitionGraphTest extends TestCase
     }
 
     #[Test]
+    public function a_name_reachable_only_through_an_overlapping_cycle_is_still_named(): void
+    {
+        // a → b, b → a, a → c, c → b. Two cycles overlap: a → b → a and
+        // a → c → b → a. A walk that stops at names an earlier branch
+        // finished never reads c as cyclic, but descending into c does not
+        // terminate either — all three names are one strongly connected
+        // component.
+        $definitions = new Definitions([
+            'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
+            'b' => new SymbolSource('a'),
+            'c' => new SymbolSource('b'),
+        ]);
+
+        $this->assertSame(['a', 'b', 'c'], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
+    public function two_disjoint_cycles_name_every_member_of_both(): void
+    {
+        // 'sound' sits on neither and is walked first, so a walk that gave
+        // up at the first name it cleared would clear the cycles with it.
+        $definitions = new Definitions([
+            'sound' => new StaticSource(1),
+            'a' => new SymbolSource('b'),
+            'b' => new SymbolSource('a'),
+            'c' => new SymbolSource('d'),
+            'd' => new SymbolSource('c'),
+        ]);
+
+        $this->assertSame(['a', 'b', 'c', 'd'], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
+    public function a_name_that_merely_depends_on_a_cycle_is_not_on_one(): void
+    {
+        // dependant → a → b → a. Following dependant's edges terminates —
+        // it reaches the cycle but is not part of it, and it gets its
+        // ErrorType from the poisoned name it references, not from here.
+        $definitions = new Definitions([
+            'dependant' => new SymbolSource('a'),
+            'a' => new SymbolSource('b'),
+            'b' => new SymbolSource('a'),
+        ]);
+
+        $this->assertSame(['a', 'b'], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
+    public function a_self_reference_is_a_cycle_of_one_name(): void
+    {
+        $definitions = new Definitions([
+            'a' => new SymbolSource('a'),
+            'b' => new StaticSource(1),
+        ]);
+
+        $this->assertSame(['a'], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
+    public function a_name_referenced_twice_is_one_edge(): void
+    {
+        // a + a is one edge to a, and a is on no cycle.
+        $definitions = new Definitions([
+            'total' => new InfixExpression(new SymbolSource('a'), '+', new SymbolSource('a')),
+            'a' => new StaticSource(1),
+        ]);
+
+        $this->assertSame([], DefinitionGraph::cyclicKeys($definitions));
+    }
+
+    #[Test]
     public function references_to_parameters_are_leaves_not_edges(): void
     {
         // turnover is not defined — it is a parameter, satisfied by a
@@ -161,5 +232,6 @@ final class DefinitionGraphTest extends TestCase
         ]);
 
         $this->assertSame([], DefinitionGraph::cycles($definitions));
+        $this->assertSame([], DefinitionGraph::cyclicKeys($definitions));
     }
 }

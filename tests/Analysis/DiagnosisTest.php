@@ -243,6 +243,46 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
+    public function a_name_on_an_overlapping_cycle_is_never_descended_into(): void
+    {
+        // a → b, b → a, a → c, c → b. Two cycles overlap and c lies on
+        // a → c → b → a, so reading c must stop at c — descending into its
+        // body would follow the cycle and report a name further along it.
+        $diagnosis = self::diagnose(
+            new SymbolSource('c'),
+            definitions: new Definitions([
+                'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
+                'b' => new SymbolSource('a'),
+                'c' => new SymbolSource('b'),
+            ]),
+        );
+
+        $this->assertSame(['c'], $diagnosis->references);
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_definition_that_merely_depends_on_a_cycle_is_poisoned_where_it_reads_one(): void
+    {
+        // dependant is not on the cycle, so it is compiled like any other
+        // definition; its ErrorType comes from the poisoned name it reads.
+        $diagnosis = self::diagnose(
+            new SymbolSource('dependant'),
+            definitions: new Definitions([
+                'dependant' => new InfixExpression(new SymbolSource('a'), '+', new StaticSource(1)),
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $this->assertSame([
+            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+        ], self::messages($diagnosis));
+        $this->assertSame(['a'], $diagnosis->references);
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
     public function a_broken_match_arm_leaves_its_siblings_checked_and_the_type_recoverable(): void
     {
         $diagnosis = self::diagnose(
