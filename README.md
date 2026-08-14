@@ -117,6 +117,23 @@ $gate->check(new BooleanType()); // certified
 
 Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignable to `String` wherever needed), and `['shop', 'office']` as `List<'shop' | 'office', 2>` — which is what makes enum-style checking precise. The lower-level `TypeInference`/`TypeEnvironment` API remains available for corpus sweeps over stored programs.
 
+### Diagnosing an Expression That Does Not Compile
+
+`compile()` answers "is this program sound?", and stops at the first thing that says no — which is what you want when the answer decides whether to run it. An editor, or a sweep over a stored corpus, wants the other question: everything wrong with it. That is `diagnose()`:
+
+```php
+$diagnosis = $expression->diagnose();
+
+$diagnosis->diagnostics; // list<Diagnostic> — every refusal, in the order compilation met them
+$diagnosis->references;  // symbols read, including ones that failed to resolve
+$diagnosis->returns;     // the root type; ErrorType where the root itself failed
+$diagnosis->program();   // Ok(Program) iff there are no diagnostics
+```
+
+For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports `['mystery', 'postcode']` as the expression's reads. A node that refuses is typed `ErrorType`, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
+
+`compile()` is one attempt of the same walk, so its refusal is always the diagnosis' first diagnostic.
+
 ### Compilation Analysis
 
 Every successful compilation also produces a data-only explanation of the decisions that certify the program. It is available on the compiled program, or directly through `Expression::analyze()`:

@@ -621,6 +621,7 @@ Plugin code is expected to depend on the APIs documented here. The following cla
 - `CoreSourceCompilers` and classes under `SourceCompilers`;
 - direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
-- `TypeInference` and `TypeEnvironment` for implementing source compilers.
+- `TypeInference` and `TypeEnvironment` for implementing source compilers;
+- `Types\ErrorType` as a type to construct — it is the compiler's own mark for a node that failed, minted only by `Expression::diagnose()`, and a `Program` refuses to be built from a tree containing one. Your compiler may *receive* it as a child's type and should treat it like any other; see "Report Failures at the Right Boundary" in the extension guide.
 
 Use `Extension`, `Dialect`, and the capabilities passed to your compiler instead. That keeps persisted sources serializable, plugin code independent of Axiom's execution representation, and compiled programs free of runtime dispatch.

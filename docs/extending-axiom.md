@@ -744,6 +744,8 @@ The outer message becomes a `TypeMismatch` whose cause is the original diagnosti
 
 During evaluation, return `Err($exception)` for an expected value-dependent failure that static types cannot rule out. Return a plain value for success. Let unexpected exceptions propagate: a thrown `TypeError`, service misconfiguration, or impossible branch is a defect, not a normal program result.
 
+One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back typed `ErrorType` — a node that already failed and was already reported. `ErrorType` is `Never`-shaped, so an operation you bind over it absorbs silently and your compiler carries on. If your compiler refuses because of it instead, refuse exactly as you would otherwise: a refusal made above a node that already failed is recognised as its consequence and is not reported twice. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
+
 ### Step 7: Choose Absence Semantics
 
 `null` is Axiom's runtime representation of structural absence. Pick the combinator that states what your source means:
