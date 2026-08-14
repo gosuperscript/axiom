@@ -100,7 +100,7 @@ final readonly class TypeInference
             $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
             $recorder->children(),
             $recorder->operators(),
-        )));
+        ), $recorder->references()));
     }
 
     /**

@@ -14,6 +14,11 @@ final readonly class UnaryExpression implements Source, Describable
         public Source $operand,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->operand];
+    }
+
     public function describe(): string
     {
         $operand = $this->operand instanceof Describable

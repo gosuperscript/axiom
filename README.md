@@ -82,6 +82,7 @@ $area->parameters(); // ['radius']
 
 $program = $area->compile()->unwrap();  // every node resolved and certified
 $program->returns;                      // NumberType — a property, not a query
+$program->references;                   // ['radius'] — declared inputs it reads
 
 $program(['radius' => 5])->unwrap()->unwrap();  // ~78.54
 $program(['radius' => 10])->unwrap()->unwrap(); // ~314.16
@@ -100,8 +101,9 @@ The expression's inputs are its **parameters**, passed at the call site, and the
 ```php
 $program = $expression->compile()->unwrap();
 
-$program->returns;   // the inferred return type
-$program($bindings); // boundary + evaluation; Result<Option<mixed>, Throwable>
+$program->returns;    // the inferred return type
+$program->references; // declared inputs resolved by compilation
+$program($bindings);  // boundary + evaluation; Result<Option<mixed>, Throwable>
 ```
 
 What remains at runtime is semantics, not dispatch: absence short-circuits, match arms try in order, division by zero errs, the admission bridges check what they exist to check. The per-invocation state (`Runtime`) carries the admitted bindings, lazily-memoized definition slots, and an optional execution observer — no dialect, no resolver.
@@ -456,7 +458,7 @@ Use **[the extension guide](docs/extending-axiom.md)** for a progressive tutoria
 | Add a domain type (money, dates, IDs) | `Type` (which includes `Shaped::shape()`) | Custom types |
 | Give operators new semantics | fixed rows, typed computed rules, or `BinaryOperatorRule` / `UnaryOperatorRule` for fully custom judgments | Custom operators |
 | Type your own literal values | `LiteralTypeRegistry` | Literal registration |
-| Add a data source | `Extension::sourceCompilers()` plus composable `CompiledSource` values; sources stay data-only | Host sources |
+| Add a data source | `Source::children()` plus `Extension::sourceCompilers()` and composable `CompiledSource` values; sources stay data-only | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |
 | Prove your rules honest | the totality harness + admission-honesty law patterns | Testing your extension |
 

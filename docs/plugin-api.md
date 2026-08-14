@@ -122,7 +122,7 @@ Structural null comparison belongs to infix-expression typing, outside that over
 
 ### `Source`
 
-`Superscript\Axiom\Source` is the marker interface for a node in a stored program description.
+`Superscript\Axiom\Source` is the interface for a node in a stored program description. Its `children()` method is the complete structural inventory of nested sources.
 
 ```php
 final readonly class ProductSource implements Source
@@ -131,13 +131,18 @@ final readonly class ProductSource implements Source
         public Source $left,
         public Source $right,
     ) {}
+
+    public function children(): iterable
+    {
+        return [$this->left, $this->right];
+    }
 }
 ```
 
 A source should contain only the data needed to describe the operation. In particular:
 
-- store nested sources in public properties, directly or in arrays, so parameter discovery and definition-cycle analysis can walk them;
-- store a `SymbolSource` as a public child when the compiler will resolve that symbol;
+- return every nested source from `children()`, including sources held inside arrays or host-specific value objects;
+- return a stored `SymbolSource` child when the compiler will resolve that symbol;
 - do not store repositories, HTTP clients, filesystems, containers, or other live services;
 - persist the source tree, reconstruct the extension with its services, and then compile;
 - optionally implement `Describable::describe(): string` to provide a human-readable representation of the source.

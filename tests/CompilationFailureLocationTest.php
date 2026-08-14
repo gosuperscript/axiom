@@ -151,7 +151,12 @@ final class CompilationFailureLocationTest extends TestCase
     #[Test]
     public function a_source_no_compiler_claims_is_located_where_it_sits(): void
     {
-        $unregistered = new class implements Source {};
+        $unregistered = new class implements Source {
+            public function children(): iterable
+            {
+                return [];
+            }
+        };
 
         $root = (new Expression($unregistered))->compile()->unwrapErr();
         $nested = (new Expression(new InfixExpression($unregistered, '+', new StaticSource(1))))

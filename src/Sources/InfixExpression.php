@@ -15,6 +15,11 @@ final readonly class InfixExpression implements Source, Describable
         public Source $right,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->left, $this->right];
+    }
+
     public function describe(): string
     {
         $left = $this->describeOperand($this->left);

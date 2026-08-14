@@ -21,6 +21,11 @@ final readonly class DefaultValue implements Source, Describable
         public mixed $default,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->source];
+    }
+
     public function describe(): string
     {
         $source = $this->source instanceof Describable

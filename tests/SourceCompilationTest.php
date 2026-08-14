@@ -49,10 +49,21 @@ final readonly class FirstSource implements Source
 {
     /** @param list<Source> $filters */
     public function __construct(public array $filters) {}
+
+    public function children(): iterable
+    {
+        return $this->filters;
+    }
 }
 
 /** @internal Test fixture proving source compiler ownership is exact-class. */
-class ParentHostSource implements Source {}
+class ParentHostSource implements Source
+{
+    public function children(): iterable
+    {
+        return [];
+    }
+}
 
 /** @internal */
 final class ChildHostSource extends ParentHostSource {}
@@ -67,6 +78,11 @@ final readonly class HostInfixSource implements Source
         public Type $rightType,
         public mixed $right,
     ) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }
 
 /** @internal Test fixture for a source compiler that binds a prefix operator. */
@@ -77,12 +93,22 @@ final readonly class HostPrefixSource implements Source
         public Type $operandType,
         public mixed $operand,
     ) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }
 
 /** @internal Test fixture for a source compiler that owns a symbol reference. */
 final readonly class HostSymbolSource implements Source
 {
     public function __construct(public SymbolSource $symbol) {}
+
+    public function children(): iterable
+    {
+        return [$this->symbol];
+    }
 }
 
 /** @internal Test fixture for a source compiler that hides a symbol name. */
@@ -92,12 +118,22 @@ final readonly class HiddenSymbolSource implements Source
         public string $name,
         public SymbolSource $visible,
     ) {}
+
+    public function children(): iterable
+    {
+        return [$this->visible];
+    }
 }
 
 /** @internal Test fixture for a source compiler that types an embedded PHP value. */
 final readonly class HostLiteralSource implements Source
 {
     public function __construct(public mixed $value) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }
 
 #[CoversClass(SourceCompilation::class)]
@@ -108,11 +144,12 @@ final readonly class HostLiteralSource implements Source
 #[CoversClass(CompilationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\Analysis\CompilationRecorder::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
-#[UsesClass(CompiledNode::class)]
+#[CoversClass(CompiledNode::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
 #[UsesClass(Extension::class)]
@@ -381,8 +418,12 @@ final class SourceCompilationTest extends TestCase
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
-            ->forSource($source, $analysis);
+        $node = (new CompiledNode(
+            new NumberType(),
+            fn(Runtime $runtime) => Ok(Some(1)),
+            references: ['stale'],
+        ))
+            ->forSource($source, $analysis, ['amount']);
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
             compileNode: fn(Source $candidate): Result => Ok($node),
@@ -398,6 +439,7 @@ final class SourceCompilationTest extends TestCase
             fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
             $recorder->children(),
         ));
+        $this->assertSame(['amount'], $recorder->references());
     }
 
     #[Test]
@@ -717,6 +759,7 @@ final class SourceCompilationTest extends TestCase
         $program = $expression->compile()->unwrap();
 
         $this->assertSame(['amount'], $expression->parameters());
+        $this->assertSame(['amount'], $program->references);
         $this->assertInstanceOf(NumberType::class, $program->returns);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
@@ -793,6 +836,7 @@ final class SourceCompilationTest extends TestCase
             declarations: ['amount' => new NumberType()],
         ))->compile()->unwrap();
 
+        $this->assertSame(['amount'], $program->references);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
 

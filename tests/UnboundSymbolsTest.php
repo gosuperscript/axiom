@@ -17,23 +17,28 @@ use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\DefaultValue;
+use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
+use Superscript\Axiom\Source;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(UnboundSymbols::class)]
-#[UsesClass(SymbolSource::class)]
-#[UsesClass(StaticSource::class)]
-#[UsesClass(InfixExpression::class)]
-#[UsesClass(UnaryExpression::class)]
-#[UsesClass(MatchExpression::class)]
+#[CoversClass(SymbolSource::class)]
+#[CoversClass(StaticSource::class)]
+#[CoversClass(InfixExpression::class)]
+#[CoversClass(UnaryExpression::class)]
+#[CoversClass(MatchExpression::class)]
 #[UsesClass(MatchArm::class)]
 #[UsesClass(LiteralPattern::class)]
 #[UsesClass(WildcardPattern::class)]
 #[UsesClass(ExpressionPattern::class)]
-#[UsesClass(MemberAccessSource::class)]
-#[UsesClass(Coerce::class)]
+#[CoversClass(MemberAccessSource::class)]
+#[CoversClass(Coerce::class)]
+#[CoversClass(DefaultValue::class)]
+#[CoversClass(Ascription::class)]
 #[UsesClass(NumberType::class)]
 final class UnboundSymbolsTest extends TestCase
 {
@@ -43,6 +48,7 @@ final class UnboundSymbolsTest extends TestCase
         $symbol = new SymbolSource('radius');
 
         $this->assertSame([$symbol], UnboundSymbols::in($symbol));
+        $this->assertSame([], [...$symbol->children()]);
     }
 
     #[Test]
@@ -159,5 +165,24 @@ final class UnboundSymbolsTest extends TestCase
         );
 
         $this->assertSame([$quote], UnboundSymbols::in($source));
+    }
+
+    #[Test]
+    public function walks_the_children_declared_by_each_source(): void
+    {
+        $amount = new SymbolSource('amount');
+        $source = new class ($amount) implements Source {
+            public function __construct(private SymbolSource $pocket) {}
+
+            public function children(): iterable
+            {
+                yield new DefaultValue(
+                    new Ascription(new NumberType(), $this->pocket),
+                    0,
+                );
+            }
+        };
+
+        $this->assertSame([$amount], UnboundSymbols::in($source));
     }
 }

@@ -14,6 +14,11 @@ final readonly class MemberAccessSource implements Source, Describable
         public string $property,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->object];
+    }
+
     public function describe(): string
     {
         $object = $this->object instanceof Describable

@@ -74,7 +74,7 @@ final class TypeEnvironment
                 $value->inspect(fn(mixed $v) => $runtime->annotate('result', $v));
 
                 return Ok($value);
-            }));
+            }, references: [$key]));
         }
 
         if (isset($this->memo[$key])) {
@@ -112,6 +112,7 @@ final class TypeEnvironment
                 return $result;
             },
             compilation: $node->compilation(),
+            references: $node->references,
         ));
     }
 }

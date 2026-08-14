@@ -286,4 +286,9 @@ final class PredicateRelationsTest extends TestCase
 final readonly class HostSource implements Source
 {
     public function __construct(public Source|Closure $child) {}
+
+    public function children(): iterable
+    {
+        return $this->child instanceof Source ? [$this->child] : [];
+    }
 }

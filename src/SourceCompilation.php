@@ -50,6 +50,8 @@ final readonly class SourceCompilation
     {
         $node = $this->require(($this->compileNode)($source, $this->childPath()));
 
+        $this->recorder?->recordReferences($node->references);
+
         if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {
             $this->recorder->child($compilation, $role);
         }
@@ -97,6 +99,7 @@ final readonly class SourceCompilation
     public function symbol(SymbolSource $symbol): CompiledSource
     {
         $node = $this->require(($this->compileSymbol)($symbol, $this->childPath()));
+        $this->recorder?->recordReferences($node->references);
         $compilation = $node->compilation();
 
         if ($this->recorder !== null && $compilation !== null) {

@@ -30,6 +30,11 @@ final readonly class Coerce implements Source, Describable
         public Source $source,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->source];
+    }
+
     public function describe(): string
     {
         return sprintf('%s (as %s)', $this->describeSource($this->source), $this->describeType($this->type));

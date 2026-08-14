@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use ReflectionObject;
-use ReflectionProperty;
-use Superscript\Axiom\Sources\MatchArm;
-use Superscript\Axiom\Sources\MatchPattern;
 use Superscript\Axiom\Sources\SymbolSource;
 
 /**
@@ -32,7 +28,7 @@ final class UnboundSymbols
     /**
      * @param list<SymbolSource> $symbols
      */
-    private static function walk(mixed $node, array &$symbols): void
+    private static function walk(Source $node, array &$symbols): void
     {
         if ($node instanceof SymbolSource) {
             if (! self::contains($symbols, $node)) {
@@ -42,22 +38,8 @@ final class UnboundSymbols
             return;
         }
 
-        if (is_array($node)) {
-            foreach ($node as $child) {
-                self::walk($child, $symbols);
-            }
-
-            return;
-        }
-
-        if (! ($node instanceof Source || $node instanceof MatchPattern || $node instanceof MatchArm)) {
-            return;
-        }
-
-        $reflection = new ReflectionObject($node);
-
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            self::walk($property->getValue($node), $symbols);
+        foreach ($node->children() as $child) {
+            self::walk($child, $symbols);
         }
     }
 

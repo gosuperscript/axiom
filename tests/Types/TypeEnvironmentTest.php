@@ -105,6 +105,7 @@ final class TypeEnvironmentTest extends TestCase
         $result = $environment->nodeOfSymbol('turnover', null, self::compiler());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
+        $this->assertSame(['turnover'], $result->unwrap()->references);
     }
 
     #[Test]
@@ -179,6 +180,21 @@ final class TypeEnvironmentTest extends TestCase
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
         $this->assertSame(6, $result->unwrap()->evaluate(new Runtime())->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_derived_symbol_keeps_the_declared_inputs_its_definition_reads(): void
+    {
+        $environment = new TypeEnvironment(
+            definitions: new Definitions([
+                'derived' => new SymbolSource('amount'),
+            ]),
+            declarations: ['amount' => new NumberType()],
+        );
+
+        $result = $environment->nodeOfSymbol('derived', null, self::compiler());
+
+        $this->assertSame(['amount'], $result->unwrap()->references);
     }
 
     #[Test]

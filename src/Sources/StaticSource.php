@@ -21,6 +21,11 @@ final readonly class StaticSource implements Source, Describable
         public mixed $value,
     ) {}
 
+    public function children(): iterable
+    {
+        return [];
+    }
+
     public function describe(): string
     {
         return (new Exporter())->shortenedExport($this->value);

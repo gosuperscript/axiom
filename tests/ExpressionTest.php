@@ -102,6 +102,45 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
+    public function a_compiled_program_reports_the_declared_inputs_it_reads(): void
+    {
+        $expression = new Expression(
+            source: new InfixExpression(
+                new SymbolSource('amount'),
+                '+',
+                new SymbolSource('adjustment'),
+            ),
+            definitions: new Definitions([
+                'adjustment' => new InfixExpression(
+                    new SymbolSource('rate'),
+                    '*',
+                    new SymbolSource('amount'),
+                ),
+            ]),
+            declarations: [
+                'amount' => new NumberType(),
+                'rate' => new NumberType(),
+                'unused' => new NumberType(),
+            ],
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertSame(['amount', 'rate'], $program->references);
+    }
+
+    #[Test]
+    public function a_program_without_symbol_reads_reports_no_references(): void
+    {
+        $program = (new Expression(
+            new StaticSource(42),
+            declarations: ['unused' => new NumberType()],
+        ))->compile()->unwrap();
+
+        $this->assertSame([], $program->references);
+    }
+
+    #[Test]
     public function an_unbound_symbol_does_not_compile(): void
     {
         // Under value-directed evaluation an unbound symbol quietly

@@ -505,6 +505,11 @@ use Superscript\Axiom\Source;
 final readonly class ValueSource implements Source
 {
     public function __construct(public mixed $value) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }
 
 final class ArithmeticExtension extends Extension
@@ -544,6 +549,11 @@ use Superscript\Axiom\Types\NumberType;
 final readonly class DoubleSource implements Source
 {
     public function __construct(public Source $value) {}
+
+    public function children(): iterable
+    {
+        return [$this->value];
+    }
 }
 
 private function compileDouble(
@@ -582,6 +592,11 @@ final readonly class ProductSource implements Source
         public Source $left,
         public Source $right,
     ) {}
+
+    public function children(): iterable
+    {
+        return [$this->left, $this->right];
+    }
 }
 
 private function compileProduct(
@@ -661,6 +676,11 @@ final readonly class ExchangeRateSource implements Source
         public string $base,
         public string $quote,
     ) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }
 
 final class RatesExtension extends Extension
@@ -744,6 +764,11 @@ final readonly class DefaultNumberSource implements Source
         public Source $value,
         public int|float $default,
     ) {}
+
+    public function children(): iterable
+    {
+        return [$this->value];
+    }
 }
 
 private function compileDefaultNumber(
@@ -779,6 +804,11 @@ final readonly class FirstAvailableSource implements Source
         public Type $type,
         public array $candidates,
     ) {}
+
+    public function children(): iterable
+    {
+        return $this->candidates;
+    }
 }
 
 private function compileFirstAvailable(
@@ -819,7 +849,7 @@ Catch only domain exceptions your callback owns. A broad `catch (RuntimeExceptio
 
 ### Symbols Must Stay Visible
 
-When a host source owns a symbol reference, store the actual `SymbolSource` as a public persisted child and compile it through `symbol()`:
+When a host source owns a symbol reference, store the actual `SymbolSource`, return it from `children()`, and compile it through `symbol()`:
 
 ```php
 use Superscript\Axiom\Sources\SymbolSource;
@@ -827,6 +857,11 @@ use Superscript\Axiom\Sources\SymbolSource;
 final readonly class NamedValueSource implements Source
 {
     public function __construct(public SymbolSource $symbol) {}
+
+    public function children(): iterable
+    {
+        return [$this->symbol];
+    }
 }
 
 private function compileNamedValue(
@@ -837,7 +872,7 @@ private function compileNamedValue(
 }
 ```
 
-This preserves ordinary declared-input, definition, and per-invocation memoization semantics. More importantly, parameter discovery and definition-cycle analysis can see the dependency. Constructing a new `SymbolSource` from a hidden string inside the compiler is refused because the stored source tree would no longer describe the program's real dependencies.
+This preserves ordinary declared-input, definition, and per-invocation memoization semantics. More importantly, parameter discovery and definition-cycle analysis can see the dependency. Constructing a new `SymbolSource` from a hidden string inside the compiler is refused because `children()` would no longer describe the program's real dependencies.
 
 The extension map simply grows as the package gains source kinds:
 

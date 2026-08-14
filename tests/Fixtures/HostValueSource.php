@@ -14,4 +14,9 @@ final readonly class HostValueSource implements Source
         public Type $claims,
         public mixed $value,
     ) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }

@@ -998,7 +998,12 @@ final class TypeInferenceTest extends TestCase
     #[Test]
     public function an_unhandled_node_is_an_error_not_a_silent_unknown(): void
     {
-        $source = new class implements Source {};
+        $source = new class implements Source {
+            public function children(): iterable
+            {
+                return [];
+            }
+        };
 
         $result = self::inference()->infer($source, self::env());
 

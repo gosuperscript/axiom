@@ -10,4 +10,9 @@ use Superscript\Axiom\Source;
 final readonly class CountingSource implements Source
 {
     public function __construct(public int|float $value) {}
+
+    public function children(): iterable
+    {
+        return [];
+    }
 }

@@ -34,6 +34,11 @@ final readonly class Ascription implements Source, Describable
         public Source $source,
     ) {}
 
+    public function children(): iterable
+    {
+        return [$this->source];
+    }
+
     public function describe(): string
     {
         return sprintf('%s (is %s)', $this->describeSource($this->source), $this->describeType($this->type));
