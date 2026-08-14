@@ -32,21 +32,33 @@ use function Superscript\Monads\Result\Err;
  * names — the deepest path in the refusal's cause chain, the node that
  * actually made it — is **quarantined**: the next attempt hands that node
  * back as {@see \Superscript\Axiom\Types\ErrorType} without visiting it, and
- * so gets past it to whatever else is wrong. Attempts stop when one
- * succeeds, which is guaranteed: every attempt quarantines a node no earlier
- * attempt had, and a quarantined node cannot refuse.
+ * so gets past it to whatever else is wrong.
  *
  * ## What the retry does *not* do: report twice
  *
- * ErrorType absorbs. An operation over one resolves to ErrorType with no
- * rule lookup and no refusal, so `mystery > 1000 && postcode == 'SW1'` costs
- * exactly one diagnostic — the unbound `mystery` — while the right-hand
- * comparison is still fully checked and `postcode` is still collected as a
- * reference. Where a node refuses on its own account instead of absorbing
- * (member access needs a record, and ErrorType is not one), the refusal is
- * recognised by position: a node with a quarantined node below it is
- * repeating a failure already reported, so it is quarantined silently.
- * One fault, one diagnostic — see {@see Diagnosis} for what that costs.
+ * ErrorType absorbs, and absorption is total: every judgment a compiler
+ * makes about a child's type is taken only over a child that compiled
+ * ({@see \Superscript\Axiom\SourceCompilation::absorbed()}). An operation
+ * over an ErrorType resolves to ErrorType with no rule lookup and no
+ * refusal, an ascription over one claims nothing, a member access on one
+ * certifies nothing — so `mystery > 1000 && postcode == 'SW1'` costs exactly
+ * one diagnostic, the unbound `mystery`, while the right-hand comparison is
+ * still fully checked and `postcode` is still collected as a reference. One
+ * fault, one diagnostic — see {@see Diagnosis} for what that costs.
+ *
+ * A refusal an attempt meets after quarantining something is therefore a
+ * fault of its own, not an echo of the one below it, and it is recorded.
+ * The single exception is a refusal whose deepest path is *already*
+ * quarantined: a quarantined node is never visited and so cannot refuse, so
+ * such a refusal is one a compiler kept from an earlier attempt, and it was
+ * reported when it was first met.
+ *
+ * That is also the termination argument. Every attempt that refuses
+ * quarantines either a node no earlier attempt had, or — in the exception
+ * above — the root; the root is not yet quarantined whenever an attempt
+ * refuses, because a quarantined root compiles to ErrorType without being
+ * visited and the attempt would have succeeded. Attempts are therefore
+ * bounded by the number of nodes, and the last one succeeds.
  *
  * ## Definition cycles
  *
@@ -103,13 +115,20 @@ final readonly class RecoveringCompiler
             }
 
             $refusal = $attempt->unwrapErr();
-            $node = self::deepestPath($refusal) ?? '$';
+            $failedPath = self::deepestPath($refusal) ?? '$';
 
-            if (!$recovery->quarantinedBelow($node)) {
-                $diagnostics[] = new Diagnostic($refusal);
+            if ($recovery->isQuarantined($failedPath)) {
+                // A quarantined node is never visited, so it cannot have
+                // refused: this is a refusal about it kept by a compiler
+                // that met it earlier, and it was reported then. Set the
+                // root aside so the next attempt ends.
+                $recovery->quarantine('$');
+
+                continue;
             }
 
-            $recovery->quarantine($node);
+            $diagnostics[] = new Diagnostic($refusal);
+            $recovery->quarantine($failedPath);
         }
     }
 

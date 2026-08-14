@@ -7,10 +7,12 @@ namespace Superscript\Axiom;
 use Closure;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\OperatorSelection;
+use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
@@ -107,6 +109,31 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * The compilation of a source whose judgment has no subject: a child of
+     * it already failed ({@see CompiledSource::failed()}), so this source is
+     * {@see ErrorType} too, and makes no refusal of its own.
+     *
+     * Absorbing rather than refusing is what keeps one fault to one
+     * diagnostic. A failed child's type is a placeholder, so a judgment over
+     * it has no honest answer, and a refusal made on it would report the
+     * fault below a second time — under a second message, at a second node.
+     * Every judgment a compiler makes about a child's type therefore belongs
+     * behind a `failed()` check:
+     *
+     * ```php
+     * $inner = $compilation->child($source->source, 'source');
+     *
+     * if ($inner->failed()) {
+     *     return $compilation->absorbed();
+     * }
+     * ```
+     */
+    public function absorbed(): CompiledSource
+    {
+        return new CompiledSource(new CompiledNode(new ErrorType(), UnreachableEvaluation::refuse(...)));
     }
 
     /** Infer the literal-first type of an embedded PHP value. */

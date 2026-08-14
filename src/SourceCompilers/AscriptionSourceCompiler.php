@@ -24,6 +24,14 @@ final readonly class AscriptionSourceCompiler
         // overlaps(Unknown, T) always holds, which is the admission this
         // bridge exists to provide.
         $inner = $compilation->child($source->source, 'source');
+
+        // Overlap is a claim about two inhabited types, and a source that
+        // failed to compile inhabits nothing — asking would refuse for a
+        // reason that has nothing to do with this claim.
+        if ($inner->failed()) {
+            return $compilation->absorbed();
+        }
+
         $overlap = TypeRelations::overlaps($inner->returns, $source->type);
 
         if ($overlap->isErr()) {

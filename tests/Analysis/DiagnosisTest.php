@@ -14,10 +14,17 @@ use Superscript\Axiom\Analysis\Diagnostic;
 use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Analysis\UnreachableEvaluation;
+use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Extension;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler;
+use Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler;
+use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -30,9 +37,54 @@ use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeInference;
+use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\UnknownType;
+
+/**
+ * A host source whose compiler judges twice: once about its child, and once
+ * about the source itself. The second judgment is configured here rather
+ * than derived, so it stands or falls independently of what the child
+ * compiled to — which is what makes it a second fault when both are wrong.
+ */
+final readonly class JudgingSource implements Source
+{
+    /**
+     * @param ?string $refusal What the compiler refuses after compiling the
+     *                         child, or null to make no second judgment.
+     * @param ?string $blaming The node the refusal names. Null leaves it
+     *                         unlocated, so the compiler's own node is
+     *                         stamped on it, as on any refusal.
+     */
+    public function __construct(
+        public Source $source,
+        public ?string $refusal = null,
+        public ?string $blaming = null,
+    ) {}
+}
+
+/** @internal The dialect contribution that compiles a {@see JudgingSource}. */
+final class JudgingExtension extends Extension
+{
+    public function sourceCompilers(): array
+    {
+        return [JudgingSource::class => $this->compileJudging(...)];
+    }
+
+    private function compileJudging(JudgingSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        $inner = $compilation->child($source->source, 'source');
+
+        if ($source->refusal !== null) {
+            $compilation->reject(new TypeMismatch($source->refusal, path: $source->blaming));
+        }
+
+        return $inner;
+    }
+}
 
 /**
  * Error-tolerant compilation: what a broken expression tells you, and the
@@ -45,6 +97,10 @@ use Superscript\Axiom\Types\TypeInference;
 #[CoversClass(UnreachableEvaluation::class)]
 #[CoversClass(TypeInference::class)]
 #[CoversClass(Expression::class)]
+#[CoversClass(SourceCompilation::class)]
+#[CoversClass(CompiledSource::class)]
+#[CoversClass(AscriptionSourceCompiler::class)]
+#[CoversClass(MemberAccessSourceCompiler::class)]
 #[UsesNamespace('Superscript\\Axiom')]
 final class DiagnosisTest extends TestCase
 {
@@ -54,6 +110,12 @@ final class DiagnosisTest extends TestCase
     private static function diagnose(Source $source, array $declarations = [], ?Definitions $definitions = null): Diagnosis
     {
         return new Expression($source, $definitions ?? new Definitions(), declarations: $declarations)->diagnose();
+    }
+
+    /** Diagnose against a dialect that knows {@see JudgingSource}. */
+    private static function diagnoseJudging(Source $source): Diagnosis
+    {
+        return new Expression($source, dialect: Dialect::core()->with(new JudgingExtension()))->diagnose();
     }
 
     /** @return list<string> */
@@ -343,13 +405,82 @@ final class DiagnosisTest extends TestCase
     #[Test]
     public function a_node_that_refuses_because_of_a_fault_below_it_is_not_a_second_diagnostic(): void
     {
-        // Member access does not absorb — it needs a record and ErrorType is
-        // not one — so the refusal is recognised by position instead.
+        // Member access needs a structural claim and a failed source makes
+        // none, so it absorbs rather than blaming `.premium` for `quote`.
         $diagnosis = self::diagnose(new MemberAccessSource(new SymbolSource('quote'), 'premium'));
 
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function an_ascription_over_a_failed_source_claims_nothing_rather_than_refusing(): void
+    {
+        // The claim is checked by overlap, and a failed source inhabits
+        // nothing — so overlap would refuse for a reason that is the fault
+        // below, not a false claim.
+        $diagnosis = self::diagnose(new Ascription(new NumberType(), new SymbolSource('quote')));
+
+        $this->assertSame([
+            'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_judgment_over_a_child_that_compiled_is_still_made(): void
+    {
+        // Absorption is for failed children only: the ascription's claim is
+        // checked and the field it promises is certified.
+        $diagnosis = self::diagnose(
+            new MemberAccessSource(
+                new Ascription(new RecordType(['premium' => new NumberType()]), new SymbolSource('quote')),
+                'premium',
+            ),
+            ['quote' => new UnknownType()],
+        );
+
+        $this->assertSame([], $diagnosis->diagnostics);
+        $this->assertInstanceOf(NumberType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_fault_beside_a_broken_child_is_its_own_diagnostic(): void
+    {
+        // The host compiler compiles its child and then judges itself. The
+        // second judgment says nothing about the child's type, so silencing
+        // it because a node below was quarantined would lose a real fault.
+        $diagnosis = self::diagnoseJudging(
+            new JudgingSource(new SymbolSource('mystery'), refusal: 'This source is not configured.'),
+        );
+
+        $this->assertSame([
+            'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            'This source is not configured.',
+        ], self::messages($diagnosis));
+        $this->assertSame(['$.children[0].node', '$'], array_map(
+            fn(Diagnostic $diagnostic) => $diagnostic->path,
+            $diagnosis->diagnostics,
+        ));
+    }
+
+    #[Test]
+    public function a_refusal_naming_a_node_already_set_aside_is_the_same_fault_again(): void
+    {
+        // This compiler blames its child by path. Once that node is
+        // quarantined it compiles to ErrorType and never refuses, so the
+        // refusal arriving a second time is the one already reported — and
+        // diagnosis must record it once and still terminate.
+        $diagnosis = self::diagnoseJudging(new JudgingSource(
+            new StaticSource(1),
+            refusal: 'This source may not be a constant.',
+            blaming: '$.children[0].node',
+        ));
+
+        $this->assertSame(['This source may not be a constant.'], self::messages($diagnosis));
+        $this->assertSame('$.children[0].node', $diagnosis->diagnostics[0]->path);
         $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
     }
 

@@ -7,6 +7,7 @@ namespace Superscript\Axiom;
 use Closure;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\PresentType;
@@ -34,6 +35,19 @@ final readonly class CompiledSource
     public function __construct(private CompiledNode $node)
     {
         $this->returns = $node->returns;
+    }
+
+    /**
+     * Did the source this came from fail to compile? Error-tolerant
+     * compilation types such a source {@see ErrorType} so the walk can carry
+     * on around it, which leaves a compiler holding a child whose type is a
+     * placeholder rather than a claim. A compiler about to judge that child
+     * has nothing to judge and absorbs instead — see
+     * {@see SourceCompilation::absorbed()}.
+     */
+    public function failed(): bool
+    {
+        return $this->returns instanceof ErrorType;
     }
 
     /**

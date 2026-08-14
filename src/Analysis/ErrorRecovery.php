@@ -43,23 +43,6 @@ final class ErrorRecovery
         $this->quarantined[$path] = true;
     }
 
-    /**
-     * Does a quarantined node sit below this one? A refusal made at such a
-     * node is a consequence of the failure already reported below it, not a
-     * second fault.
-     *
-     * Paths nest as prefixes, and this is only ever asked about a node that
-     * has just refused — which a quarantined node cannot do — so a prefix
-     * match is a node strictly below.
-     */
-    public function quarantinedBelow(string $path): bool
-    {
-        return array_any(
-            array_keys($this->quarantined),
-            static fn(string $quarantined) => str_starts_with($quarantined, $path),
-        );
-    }
-
     /** A definition on a cycle: unusable, and already reported as a property of the graph. */
     public function isPoisoned(string $key): bool
     {
