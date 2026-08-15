@@ -58,6 +58,28 @@ final readonly class TypeMismatch
             : $this;
     }
 
+    /**
+     * The node that actually refused. Where {@see at()} decides which stamp
+     * one verdict keeps — the first, the deepest node that refused — this
+     * decides which stamp in a whole chain names it: a refusal travels up
+     * through the ancestors that add context, each wrapping it and stamping
+     * its own path, so the chain reads outermost-first and the last path in
+     * it is the deepest node.
+     *
+     * Null when no link in the chain is about a node at all, which is what a
+     * refusal about the whole program looks like.
+     */
+    public function deepestPath(): ?string
+    {
+        $deepest = $this->path;
+
+        foreach ($this->causes as $cause) {
+            $deepest = $cause->deepestPath() ?? $deepest;
+        }
+
+        return $deepest;
+    }
+
     public function describe(): string
     {
         return $this->render(0);

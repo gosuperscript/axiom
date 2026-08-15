@@ -77,8 +77,8 @@ final readonly class RecoveringCompiler
      * {@see diagnose()} would collect.
      *
      * There is no recovery to carry, so none is built: compilation runs
-     * without the quarantine check at every node and the reference
-     * bookkeeping behind it. An empty recovery would answer no to every
+     * without the quarantine check at every node, and nothing keeps what the
+     * attempt read. An empty recovery would answer no to every
      * question it is asked, so this is the same compilation attempt
      * diagnose() makes first — the same refusal, the same message, the same
      * path — at the cost of the walk alone.
@@ -126,7 +126,14 @@ final readonly class RecoveringCompiler
             }
 
             $refusal = $attempt->unwrapErr();
-            $failedPath = self::deepestPath($refusal) ?? '$';
+            $failedPath = $refusal->deepestPath();
+
+            // Every refusal an attempt returns is located: TypeInference
+            // stamps the compiling node's path onto whatever refused, and an
+            // already-located refusal keeps its own. Only a whole-program
+            // refusal is unlocated, and those are diagnosed before any
+            // attempt runs.
+            assert($failedPath !== null);
 
             if ($recovery->isQuarantined($failedPath)) {
                 // A quarantined node is never visited, so it cannot have
@@ -181,23 +188,5 @@ final readonly class RecoveringCompiler
     private function program(CompiledNode $node): Program
     {
         return new Program($node, $this->expression->declarations, $this->expression->boundary);
-    }
-
-    /**
-     * The node that actually refused. A refusal travels up through the
-     * ancestors that add context, each stamping its own path onto a fresh
-     * wrapper, so the chain reads outermost-first and the last path in it is
-     * the deepest node — the one to set aside. Null when nothing in the chain
-     * is about a node at all.
-     */
-    private static function deepestPath(TypeMismatch $mismatch): ?string
-    {
-        $deepest = $mismatch->path;
-
-        foreach ($mismatch->causes as $cause) {
-            $deepest = self::deepestPath($cause) ?? $deepest;
-        }
-
-        return $deepest;
     }
 }
