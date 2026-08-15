@@ -140,6 +140,44 @@ final class ProgramCertificationTest extends TestCase
         new Program(CompiledNode::failed());
     }
 
+    /**
+     * A compiler abandons a child and never a root, so this shape is not one
+     * compilation produces — it is a host handing {@see CompiledNode} a
+     * position where a compilation belongs. It is also the one state that
+     * slips past the failure question: an abandoned node carries no failure,
+     * because the parent that abandoned it compiled without it.
+     */
+    #[Test]
+    public function a_program_cannot_be_minted_from_an_abandoned_root(): void
+    {
+        $abandoned = CompilationNode::abandoned(StaticSource::class);
+
+        $this->assertFalse($abandoned->containsFailure);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('The root of this compilation was abandoned');
+
+        new Program(CompiledNode::returning(new NumberType(), static fn() => Ok(null), compilation: $abandoned));
+    }
+
+    /**
+     * An abandoned child is ordinary, and certification says so: it is the
+     * failed sibling beside it that stops the program, named at its own path.
+     */
+    #[Test]
+    public function an_abandoned_child_is_not_what_certification_refuses(): void
+    {
+        $root = CompilationNode::certified('Root', new NumberType(), 'core', [
+            new CompilationChild(CompilationNode::abandoned(StaticSource::class), 'arm.0'),
+            new CompilationChild(CompilationNode::failed('Broken'), 'arm.1'),
+        ]);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('The node at [$.children[1].node] failed to compile');
+
+        new Program(CompiledNode::returning(new NumberType(), static fn() => Ok(null), compilation: $root));
+    }
+
     #[Test]
     public function the_whole_tree_is_checked_not_only_the_root(): void
     {

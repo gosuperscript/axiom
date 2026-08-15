@@ -30,24 +30,39 @@ final readonly class CompilationAnalysis implements JsonSerializable
     ) {}
 
     /**
-     * The explanation of a compilation in which nothing failed.
+     * The explanation of a compilation the compiler certified, root and all.
      *
-     * A failed node claims no type and no owning compiler, so an analysis
-     * holding one could not be rendered: {@see toArray()} would refuse
-     * partway through, on the path where an analysis is usually already
-     * being written to a log or a build artifact. The root is refused here
-     * instead, where the caller still has somewhere to put the answer —
-     * and {@see CompilationNode::$containsFailure} answers for the whole
-     * subtree, so a failure absorbed under an ordinary type is caught too.
+     * Two roots are refused. Neither claims a type or an owning compiler, so
+     * an analysis holding one could not be rendered: {@see toArray()} would
+     * refuse partway through, on the path where an analysis is usually
+     * already being written to a log or a build artifact. The root is
+     * answered for here instead, where the caller still has somewhere to put
+     * the answer. They are different mistakes and say so.
+     *
+     * A **failed** root, or one with a failure anywhere beneath it: nothing
+     * was certified there. {@see CompilationNode::$containsFailure} answers
+     * for the whole subtree, so a failure absorbed under an ordinary type is
+     * caught with it.
+     *
+     * An **abandoned** root: a position a compiler declined to fill. It
+     * carries no failure — the parent that abandoned it compiled without it —
+     * so the failure question alone lets it through, and only its state
+     * catches it. Abandonment befalls a child and never a root, so an
+     * abandoned root is a caller handing over a position where a compilation
+     * belongs.
      *
      * @param array<string, Type> $declarations
      */
     public static function certified(CompilationNode $root, array $declarations, Boundary $boundary): self
     {
+        // Checked rather than asserted: production runs with assertions
+        // compiled out, and these are the invariants every reader of an
+        // analysis relies on.
+        if ($root->state === CompilationState::Abandoned) {
+            throw new InvalidArgumentException('An analysis explains a compilation the compiler certified, and this root was abandoned: it is a position held so paths stay stable, claiming no type and no owning compiler for an analysis to report.');
+        }
+
         if ($root->containsFailure) {
-            // Checked here rather than asserted: production runs with
-            // assertions compiled out, and this is the invariant every
-            // reader of an analysis relies on.
             throw new InvalidArgumentException('An analysis explains a compilation the compiler certified, and something under this root failed to compile. Read Expression::diagnose() for what refused.');
         }
 

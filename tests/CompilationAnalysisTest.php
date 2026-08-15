@@ -422,4 +422,24 @@ final class CompilationAnalysisTest extends TestCase
 
         CompilationAnalysis::certified($absorbed, [], \Superscript\Axiom\Boundary::Coerce);
     }
+
+    /**
+     * The other root that has nothing to explain. An abandoned position
+     * carries no failure — the parent that abandoned it compiled without
+     * it — so the failure question lets it through, and it claims neither a
+     * type nor an owning compiler for {@see CompilationAnalysis::toArray()}
+     * to render.
+     */
+    #[Test]
+    public function no_construction_path_admits_an_abandoned_root(): void
+    {
+        $abandoned = CompilationNode::abandoned(StaticSource::class);
+
+        $this->assertFalse($abandoned->containsFailure);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('this root was abandoned');
+
+        CompilationAnalysis::certified($abandoned, [], \Superscript\Axiom\Boundary::Coerce);
+    }
 }

@@ -75,7 +75,7 @@ final readonly class Program
             ? CompilationNode::failed(CompiledNode::class)
             : CompilationNode::certified(CompiledNode::class, $node->returns, 'unattributed'));
 
-        self::certify($compilation, '$');
+        self::certify($compilation);
 
         $this->returns = $node->returns;
         $this->references = $node->references;
@@ -99,11 +99,34 @@ final readonly class Program
      *
      * The answer costs one boolean read: {@see CompilationNode::$containsFailure}
      * carries it for a whole subtree, so a sound program — every program
-     * `compile()` mints — pays for the guard once, not once per node. The
-     * walk below runs only to name the offending node, on the path where no
-     * program is minted anyway.
+     * `compile()` mints — pays for the guard once, not once per node.
+     * {@see locateFailure()} runs only to name the offending node, on the
+     * path where no program is minted anyway.
+     *
+     * The root additionally answers for its own state, because one state
+     * carries no failure and is still nothing to run: an
+     * {@see CompilationState::Abandoned} node is a position a compiler
+     * declined to fill, with no type and no evaluation under it. A compiler
+     * abandons a child and never a root, so this is not something compilation
+     * reaches — it is a caller building a {@see CompiledNode} around a
+     * position instead of a compilation. Only the root is asked: an abandoned
+     * child is ordinary, and the parent that abandoned it compiled without it.
      */
-    private static function certify(CompilationNode $node, string $path): void
+    private static function certify(CompilationNode $root): void
+    {
+        if ($root->state === CompilationState::Abandoned) {
+            throw new LogicException('The root of this compilation was abandoned: it is a position no compiler filled, with no type and no evaluation, so a Program cannot be certified from it.');
+        }
+
+        self::locateFailure($root, '$');
+    }
+
+    /**
+     * Name the failed node under a root that carries a failure — the first
+     * one the walk reaches, in the same `$`-rooted path language the analysis
+     * and every refusal use.
+     */
+    private static function locateFailure(CompilationNode $node, string $path): void
     {
         if (!$node->containsFailure) {
             return;
@@ -119,7 +142,7 @@ final readonly class Program
         // A node carrying a failure that is not itself failed has a failed
         // child, so this loop always reaches one and throws.
         foreach ($node->children as $index => $child) {
-            self::certify($child->node, CompilationNode::childPath($path, $index));
+            self::locateFailure($child->node, CompilationNode::childPath($path, $index));
         }
     }
 
