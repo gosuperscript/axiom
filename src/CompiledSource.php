@@ -90,9 +90,8 @@ final class CompiledSource
 
     /**
      * Did the source this came from fail to compile? Error-tolerant
-     * compilation types such a source {@see ErrorType} so the walk can carry
-     * on around it, which leaves a compiler holding a child with no type to
-     * judge. A compiler about to judge that child absorbs instead, which the
+     * compilation marks such a source and carries on around it, which leaves
+     * a compiler holding a child with no type to judge. A compiler about to judge that child absorbs instead, which the
      * judgments on {@see SourceCompilation} do for it — this is the question
      * they ask.
      */

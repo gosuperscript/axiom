@@ -181,8 +181,8 @@ final readonly class SourceCompilation
 
     /**
      * Give up on this source without refusing: a child of it already failed
-     * ({@see CompiledSource::failed()}), so this source compiles to
-     * {@see ErrorType} too and makes no refusal of its own.
+     * ({@see CompiledSource::failed()}), so this source compiles to a failed
+     * source too and makes no refusal of its own.
      *
      * Absorbing rather than refusing is what keeps one fault to one
      * diagnostic — a refusal made over a placeholder type would report the

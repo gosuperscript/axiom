@@ -50,11 +50,12 @@ use function Superscript\Monads\Result\Ok;
  *    reported too — which is the difference from `Program::$references`,
  *    the same reads minus the ones that never resolved.
  *
- * Diagnostics **converge**: a refusal an ErrorType absorbs is not reported,
- * so fixing one fault can reveal the next. `match postcode { 'SW1' => 1 }`
- * over an unbound `postcode` reports only the unbound symbol; the missing
- * wildcard is reported once `postcode` is declared, because until then the
- * subject is ErrorType and any set of patterns covers it. This is the usual
+ * Diagnostics **converge**: a refusal a failed source absorbs is not
+ * reported, so fixing one fault can reveal the next.
+ * `match postcode { 'SW1' => 1 }` over an unbound `postcode` reports only the
+ * unbound symbol; the missing wildcard is reported once `postcode` is
+ * declared, because until then the subject is uninhabited and any set of
+ * patterns covers it. This is the usual
  * behaviour of a checker that recovers — one fault produces one diagnostic,
  * and the ones it hides are the ones it made unanswerable.
  */
