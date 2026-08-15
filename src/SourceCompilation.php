@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Analysis\OperatorSelection;
@@ -50,7 +51,7 @@ final readonly class SourceCompilation
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
-        $node = $this->require(($this->compileNode)($source, $this->childPath()));
+        $node = $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role);
 
         $this->recorder?->recordReferences($node->references);
 
@@ -100,7 +101,7 @@ final readonly class SourceCompilation
     /** Compile a persisted symbol child in the current type environment. */
     public function symbol(SymbolSource $symbol): CompiledSource
     {
-        $node = $this->require(($this->compileSymbol)($symbol, $this->childPath()));
+        $node = $this->compiled(($this->compileSymbol)($symbol, $this->childPath()), $symbol, 'definition');
         $this->recorder?->recordReferences($node->references);
         $compilation = $node->compilation();
 
@@ -197,6 +198,25 @@ final readonly class SourceCompilation
         throw new CompilationAborted(
             is_string($mismatch) ? new TypeMismatch($mismatch) : $mismatch,
         );
+    }
+
+    /**
+     * The node a child compilation produced, or the refusal it made — after
+     * marking the child's position either way. Recording a child that refused
+     * is what keeps an index naming one child: without it, the next sibling
+     * would take the index of a child that refused, and take a different one
+     * in an attempt where that child is set aside instead.
+     *
+     * @param Result<CompiledNode, TypeMismatch> $result
+     */
+    private function compiled(Result $result, Source $source, ?string $role): CompiledNode
+    {
+        if ($result->isErr()) {
+            $this->recorder?->child(CompilationNode::abandoned($source::class), $role);
+            $this->reject($result->unwrapErr());
+        }
+
+        return $result->unwrap();
     }
 
     /**

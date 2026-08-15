@@ -17,6 +17,7 @@ use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Program;
@@ -87,6 +88,41 @@ final class JudgingExtension extends Extension
 }
 
 /**
+ * A host source whose compiler abandons its first child: it catches the
+ * child's refusal and compiles the second one in its place. This is the
+ * documented catch-the-abort pattern, and the reason a child that refuses
+ * must still hold the index it claimed.
+ */
+final readonly class AbandoningSource implements Source
+{
+    public function __construct(
+        public Source $abandoned,
+        public Source $kept,
+    ) {}
+}
+
+/** @internal The dialect contribution that compiles an {@see AbandoningSource}. */
+final class AbandoningExtension extends Extension
+{
+    public function sourceCompilers(): array
+    {
+        return [AbandoningSource::class => $this->compileAbandoning(...)];
+    }
+
+    private function compileAbandoning(AbandoningSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        try {
+            $compilation->child($source->abandoned, 'abandoned');
+        } catch (CompilationAborted) {
+            // Whatever the first child refused is this compiler's own
+            // business, and it compiles the second child regardless.
+        }
+
+        return $compilation->child($source->kept, 'kept');
+    }
+}
+
+/**
  * Error-tolerant compilation: what a broken expression tells you, and the
  * line between telling you and pretending to have compiled.
  */
@@ -116,6 +152,20 @@ final class DiagnosisTest extends TestCase
     private static function diagnoseJudging(Source $source): Diagnosis
     {
         return new Expression($source, dialect: Dialect::core()->with(new JudgingExtension()))->diagnose();
+    }
+
+    /**
+     * Diagnose against a dialect that knows {@see AbandoningSource}.
+     *
+     * @param array<string, Type> $declarations
+     */
+    private static function diagnoseAbandoning(Source $source, array $declarations = []): Diagnosis
+    {
+        return new Expression(
+            $source,
+            dialect: Dialect::core()->with(new AbandoningExtension()),
+            declarations: $declarations,
+        )->diagnose();
     }
 
     /** @return list<string> */
@@ -482,6 +532,28 @@ final class DiagnosisTest extends TestCase
         $this->assertSame(['This source may not be a constant.'], self::messages($diagnosis));
         $this->assertSame('$.children[0].node', $diagnosis->diagnostics[0]->path);
         $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_child_a_compiler_abandons_still_holds_its_position_across_attempts(): void
+    {
+        // The first child refuses and its compiler carries on without it, so
+        // the second child is the third node compiled but the second child
+        // recorded. Its own fault is met at `children[1]` in the attempt that
+        // reports it, and the next attempt — which sets that node aside and
+        // meets the first child's refusal again — must address the same node
+        // by the same path, or the fault is reported twice.
+        $diagnosis = self::diagnoseAbandoning(
+            new AbandoningSource(
+                new SymbolSource('mystery'),
+                new InfixExpression(new SymbolSource('turnover'), '+', new SymbolSource('postcode')),
+            ),
+            ['turnover' => new NumberType(), 'postcode' => new StringType()],
+        );
+
+        $this->assertSame(['[+] expects Number and Number; got Number and String.'], self::messages($diagnosis));
+        $this->assertSame('$.children[1].node', $diagnosis->diagnostics[0]->path);
+        $this->assertSame(['mystery', 'turnover', 'postcode'], $diagnosis->references);
     }
 
     #[Test]

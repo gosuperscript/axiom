@@ -24,11 +24,16 @@ final class CompilationRecorder
      * recorded so far — the same counting {@see CompilationNode::toArray()}
      * does when it derives paths for a finished tree, so a path a failure
      * reports and a path the analysis reports for one node are the same
-     * string. A child that records no compilation advances neither count.
+     * string.
      *
-     * Compilation stops at the first failure, so a child that fails before it
-     * is recorded may safely claim the index it would have had: no sibling
-     * ever comes to claim it too.
+     * Every child compilation records, whether it produced a node or refused
+     * ({@see CompilationNode::abandoned()}), and that is the invariant paths
+     * rely on: an index names the same child in every attempt, so a
+     * quarantine entry written in one attempt still names the node that
+     * refused in the next. Were a refusing child to record nothing, the
+     * sibling after it would slide into its index in the attempts where it
+     * refuses and out of it in the attempts where it is set aside — and a
+     * path would name two different nodes.
      */
     public function childPath(): string
     {

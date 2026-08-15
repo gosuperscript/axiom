@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Analysis;
 
 use Superscript\Axiom\Types\ErrorType;
+use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\Type;
 
 /** One certified source node and the compile-time decisions made for it. */
@@ -33,6 +34,23 @@ final readonly class CompilationNode
     ) {
         $this->failed = $returns instanceof ErrorType
             || array_any($children, static fn(CompilationChild $child): bool => $child->node->failed);
+    }
+
+    /**
+     * A child whose compilation was abandoned: it refused, and its parent
+     * caught the refusal and carried on without it. No node was built, so
+     * this stands in the child's place to hold its index — the position is
+     * what every path below the parent is numbered from.
+     *
+     * It returns {@see NeverType} rather than {@see ErrorType} because it is
+     * not part of the program: the parent that caught the refusal compiled
+     * without this child, and a program is certified over the nodes it runs.
+     *
+     * @param class-string $source
+     */
+    public static function abandoned(string $source): self
+    {
+        return new self($source, new NeverType(), 'unattributed');
     }
 
     /**
