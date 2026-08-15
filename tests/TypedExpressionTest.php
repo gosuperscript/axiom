@@ -12,6 +12,8 @@ use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
+use Superscript\Axiom\Exceptions\InadmissibleBinding;
+use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
@@ -58,6 +60,8 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[CoversClass(Extension::class)]
 #[CoversClass(Boundary::class)]
 #[CoversClass(BoundaryViolation::class)]
+#[CoversClass(InadmissibleBinding::class)]
+#[CoversClass(MissingRequiredInput::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
@@ -164,8 +168,10 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function boundary_violations_are_aggregated_and_named(): void
     {
+        // Both inputs are read: the boundary demands what the program reads,
+        // so a second violation needs a second read.
         $program = (new Expression(
-            source: new SymbolSource('a'),
+            source: new InfixExpression(new SymbolSource('a'), '+', new SymbolSource('b')),
             declarations: ['a' => new NumberType(), 'b' => new NumberType()],
         ))->compile()->unwrap();
 
@@ -176,6 +182,10 @@ final class TypedExpressionTest extends TestCase
         $this->assertCount(2, $violation->violations);
         $this->assertStringContainsString('binding [a]:', $violation->violations[0]);
         $this->assertStringContainsString('required input [b] is missing', $violation->violations[1]);
+        $this->assertSame(['a', 'b'], $violation->inputs);
+
+        // A supplied value that is wrong is a fault whatever else is absent.
+        $this->assertInstanceOf(InadmissibleBinding::class, $violation);
     }
 
     #[Test]
@@ -215,7 +225,150 @@ final class TypedExpressionTest extends TestCase
         // '' coerces to absence — required-but-missing at the boundary.
         $result = $program(['name' => '']);
 
-        $this->assertStringContainsString('reads as missing, but String is required', $result->unwrapErr()->getMessage());
+        $violation = $result->unwrapErr();
+        $this->assertStringContainsString('reads as missing, but String is required', $violation->getMessage());
+
+        // A value was supplied and does not inhabit String: a fault, not a
+        // call still waiting for its inputs.
+        $this->assertInstanceOf(InadmissibleBinding::class, $violation);
+    }
+
+    #[Test]
+    public function the_boundary_demands_only_the_inputs_the_program_reads(): void
+    {
+        // One scope types a whole page of questions; this program speaks one
+        // word of it. Binding the word it reads is binding everything it can
+        // observe, whatever the rest of the page has been answered.
+        $scope = ['name' => new StringType(), 'employees' => new NumberType()];
+
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: $scope,
+        ))->compile()->unwrap();
+
+        $this->assertSame(['name'], $program->references);
+        $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_unread_declaration_is_ignored_even_when_it_is_bound(): void
+    {
+        // Nothing but a symbol node reads an admitted binding, and a symbol
+        // node exists only where the compiler recorded a read — so a value
+        // under an unread name is unobservable, and passing it through the
+        // declared type would only manufacture a refusal nothing could act on.
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: ['name' => new StringType(), 'employees' => new NumberType()],
+        ))->compile()->unwrap();
+
+        $this->assertSame('Ada', $program(['name' => 'Ada', 'employees' => 'not a number'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_read_input_with_no_binding_is_a_missing_required_input(): void
+    {
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: ['name' => new StringType(), 'employees' => new NumberType()],
+        ))->compile()->unwrap();
+
+        $violation = $program([])->unwrapErr();
+
+        $this->assertInstanceOf(MissingRequiredInput::class, $violation);
+        $this->assertSame(['name'], $violation->inputs);
+
+        // The unread declaration is absent too, and nothing is said about it.
+        $this->assertSame(['required input [name] is missing'], $violation->violations);
+    }
+
+    #[Test]
+    public function a_bound_read_input_at_the_wrong_type_is_an_inadmissible_binding(): void
+    {
+        $program = (new Expression(
+            source: new SymbolSource('employees'),
+            declarations: ['employees' => new NumberType()],
+        ))->compile()->unwrap();
+
+        $violation = $program(['employees' => 'a dozen'])->unwrapErr();
+
+        // The two kinds are distinguishable by class, which is what a host
+        // telling "not answerable yet" from "something upstream is wrong"
+        // reaches for.
+        $this->assertInstanceOf(InadmissibleBinding::class, $violation);
+        $this->assertNotInstanceOf(MissingRequiredInput::class, $violation);
+        $this->assertInstanceOf(BoundaryViolation::class, $violation);
+        $this->assertSame(['employees'], $violation->inputs);
+    }
+
+    #[Test]
+    public function a_definition_read_demands_the_inputs_under_it(): void
+    {
+        // The program names `headcount`, a definition; the input it demands
+        // is the one that definition reads. `employees` is declared, read by
+        // nothing, and demanded by nothing.
+        $expression = new Expression(
+            source: new SymbolSource('headcount'),
+            definitions: new Definitions([
+                'headcount' => new InfixExpression(new SymbolSource('staff'), '+', new StaticSource(1)),
+            ]),
+            declarations: ['staff' => new NumberType(), 'employees' => new NumberType()],
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertSame(['staff'], $program->references);
+        $this->assertSame(4, $program(['staff' => 3])->unwrap()->unwrap());
+
+        $violation = $program([])->unwrapErr();
+        $this->assertInstanceOf(MissingRequiredInput::class, $violation);
+        $this->assertSame(['staff'], $violation->inputs);
+    }
+
+    #[Test]
+    public function an_unread_option_declaration_is_ignored_like_any_other(): void
+    {
+        // A read Option with no binding is None; an unread one is not even
+        // that, because nothing can ask.
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: ['name' => new StringType(), 'note' => new OptionType(new StringType())],
+        ))->compile()->unwrap();
+
+        $this->assertSame(['name'], $program->references);
+        $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function assert_mode_demands_the_reads_and_admits_them_strictly(): void
+    {
+        // The demand set is what changed; per-input admission is untouched,
+        // so a strict host still refuses a stringly number it reads and still
+        // ignores one it does not.
+        $strict = (new Expression(
+            source: new SymbolSource('turnover'),
+            declarations: ['turnover' => new NumberType(), 'staff' => new NumberType()],
+            boundary: Boundary::Assert,
+        ))->compile()->unwrap();
+
+        $this->assertSame(600000, $strict(['turnover' => 600000, 'staff' => '3'])->unwrap()->unwrap());
+        $this->assertInstanceOf(InadmissibleBinding::class, $strict(['turnover' => '600000'])->unwrapErr());
+        $this->assertInstanceOf(MissingRequiredInput::class, $strict(['staff' => 3])->unwrapErr());
+    }
+
+    #[Test]
+    public function a_program_certified_by_a_diagnosis_has_the_same_boundary(): void
+    {
+        $expression = new Expression(
+            source: new SymbolSource('name'),
+            declarations: ['name' => new StringType(), 'employees' => new NumberType()],
+        );
+
+        $diagnosed = $expression->diagnose()->program()->unwrap();
+
+        $this->assertSame($expression->compile()->unwrap()->references, $diagnosed->references);
+        $this->assertSame('Ada', $diagnosed(['name' => 'Ada'])->unwrap()->unwrap());
+        $this->assertInstanceOf(MissingRequiredInput::class, $diagnosed([])->unwrapErr());
     }
 
     #[Test]
@@ -452,9 +605,11 @@ final class TypedExpressionTest extends TestCase
     public function violations_after_a_skipped_optional_input_are_still_reported(): void
     {
         $program = (new Expression(
-            source: new SymbolSource('b'),
+            source: new MatchExpression(new SymbolSource('a'), [
+                new MatchArm(new WildcardPattern(), new SymbolSource('b')),
+            ]),
             declarations: [
-                'a' => new OptionType(new StringType()),   // missing, fine — must not end the sweep
+                'a' => new OptionType(new StringType()),   // read, missing, fine — must not end the sweep
                 'b' => new NumberType(),
             ],
         ))->compile()->unwrap();
@@ -468,7 +623,9 @@ final class TypedExpressionTest extends TestCase
     public function violations_after_a_reads_as_missing_input_are_still_reported(): void
     {
         $program = (new Expression(
-            source: new SymbolSource('a'),
+            source: new MatchExpression(new SymbolSource('a'), [
+                new MatchArm(new WildcardPattern(), new SymbolSource('b')),
+            ]),
             declarations: [
                 'a' => new StringType(),   // '' reads as missing → violation, sweep continues
                 'b' => new NumberType(),   // absent → violation

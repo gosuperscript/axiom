@@ -9,6 +9,8 @@ use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
+use Superscript\Axiom\Exceptions\InadmissibleBinding;
+use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -36,11 +38,21 @@ use function Superscript\Monads\Result\Ok;
  *
  * Certification is conditional — "if inputs inhabit their declared types" —
  * and compile() cannot prove future inputs, so the boundary is the one
- * runtime type check that survives compilation, by design: every declared
- * binding passes through its declared type (coerce by default, assert for
- * strict hosts) before evaluation, with violations aggregated and named;
- * every undeclared binding key is stripped. Declared inputs cannot deliver
- * garbage past the boundary; undeclared inputs cannot touch anything at all.
+ * runtime type check that survives compilation, by design: every binding the
+ * program reads passes through its declared type (coerce by default, assert
+ * for strict hosts) before evaluation, with violations aggregated, named, and
+ * sorted into the two kinds {@see BoundaryViolation} describes; every other
+ * key is stripped. Inputs the program reads cannot deliver garbage past the
+ * boundary; the rest cannot touch anything at all.
+ *
+ * What the boundary demands is what the program reads — `$references` — and
+ * not the declaration list. Declarations type a vocabulary, and a vocabulary
+ * is routinely wider than any one program that speaks it: a host compiling
+ * every condition on a page against the page's questions gives each program
+ * the same declarations, and each runs on the inputs it reads however much of
+ * the rest is still unanswered. A declaration this program never reads is
+ * ignored whether or not it is bound — reads are settled at compile time, so
+ * no evaluation can observe a symbol the compiler did not record.
  */
 final readonly class Program
 {
@@ -52,7 +64,16 @@ final readonly class Program
     public array $references;
 
     /**
-     * Required-ness per declaration, fixed at compile time. It is a
+     * The declarations this program reads, in declaration order — the
+     * boundary's entire subject. Every other declaration types a name the
+     * program never mentions, and so has nothing to demand or admit.
+     *
+     * @var array<string, Type>
+     */
+    private array $demanded;
+
+    /**
+     * Required-ness per demanded declaration, fixed at compile time. It is a
      * property of the projection, not the concrete class:
      * Union(Option<Number>, String) has shape (Number | String)? and a
      * missing binding is legal absence.
@@ -79,7 +100,8 @@ final readonly class Program
 
         $this->returns = $node->returns;
         $this->references = $node->references;
-        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
+        $this->demanded = array_intersect_key($this->declarations, array_flip($this->references));
+        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->demanded);
         $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
     }
 
@@ -174,24 +196,32 @@ final readonly class Program
     }
 
     /**
-     * The boundary: every declared binding passes through its declared type
-     * (coerce or assert, per policy), and every undeclared key is stripped —
-     * the declaration list is the program's complete public signature.
-     * Violations aggregate, named by binding. Callers bind keys exactly as
-     * declared — symbol lookup has no other reading.
+     * The boundary: every binding this program reads passes through its
+     * declared type (coerce or assert, per policy), and every other key is
+     * stripped — the reads are the program's complete runtime signature, and
+     * a declaration nothing reads is neither demanded nor admitted. Callers
+     * bind keys exactly as declared — symbol lookup has no other reading.
+     *
+     * Violations aggregate, named by binding, and are sorted into the kinds
+     * {@see BoundaryViolation} describes: a fault dominates absence, so the
+     * refusal is a {@see MissingRequiredInput} only when every violation is
+     * an input the call did not supply.
      *
      * @param array<string, mixed> $raw
      * @return Result<Bindings, BoundaryViolation>
      */
     private function admit(array $raw): Result
     {
+        // Keyed by input: an input is answered for once, so a violation
+        // replaces nothing and the keys are the inputs at fault, in order.
         $violations = [];
         $overlay = [];
+        $fault = false;
 
-        foreach ($this->declarations as $key => $type) {
+        foreach ($this->demanded as $key => $type) {
             if (!array_key_exists($key, $raw)) {
                 if (!$this->optional[$key]) {
-                    $violations[] = sprintf('required input [%s] is missing', $key);
+                    $violations[$key] = sprintf('required input [%s] is missing', $key);
                 }
 
                 continue;
@@ -205,16 +235,19 @@ final readonly class Program
             };
 
             if ($admitted->isErr()) {
-                $violations[] = sprintf('binding [%s]: %s', $key, $admitted->unwrapErr()->getMessage());
+                $violations[$key] = sprintf('binding [%s]: %s', $key, $admitted->unwrapErr()->getMessage());
+                $fault = true;
 
                 continue;
             }
 
             // An absence reading ('' → None). OptionType never produces one —
             // it wraps absence as a present null — so this is always a
-            // required input that dissolved at the boundary.
+            // required input that dissolved at the boundary: a value was
+            // supplied, and it does not inhabit the type it was declared at.
             if ($admitted->unwrap()->isNone()) {
-                $violations[] = sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type));
+                $violations[$key] = sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type));
+                $fault = true;
 
                 continue;
             }
@@ -223,7 +256,9 @@ final readonly class Program
         }
 
         if ($violations !== []) {
-            return Err(new BoundaryViolation($violations));
+            return Err($fault
+                ? new InadmissibleBinding(array_values($violations), array_keys($violations))
+                : new MissingRequiredInput(array_values($violations), array_keys($violations)));
         }
 
         return Ok(new Bindings($overlay));
