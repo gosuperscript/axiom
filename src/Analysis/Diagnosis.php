@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Analysis;
 
 use Superscript\Axiom\Program;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
@@ -42,9 +41,9 @@ use function Superscript\Monads\Result\Ok;
  *    to find once that node is set aside.
  *  - **A failed root has no type.** `$returns` is null exactly when the root
  *    node itself did not compile; a type there is one compilation certified.
- *    The compiler's internal mark for a node it gave up on ({@see ErrorType})
- *    appears nowhere in this library's public surface, and `Program`'s
- *    constructor independently refuses any node tree containing one.
+ *    Failure is a compilation state rather than a type, so there is no marker
+ *    to appear here in a type's place, and `Program`'s constructor
+ *    independently refuses any node tree in which something failed.
  *  - **References survive broken regions.** A symbol read before a sibling
  *    failed is still reported, and a symbol that failed to resolve is
  *    reported too — which is the difference from `Program::$references`,

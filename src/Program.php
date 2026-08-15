@@ -10,7 +10,7 @@ use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Execution\Observer;
-use Superscript\Axiom\Types\ErrorType;
+use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -69,30 +69,35 @@ final readonly class Program
         private array $declarations = [],
         private Boundary $boundary = Boundary::Coerce,
     ) {
-        $this->returns = $node->returns;
-        $this->references = $node->references;
-        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
-        $compilation = $node->compilation() ?? CompilationNode::certified(
-            CompiledNode::class,
-            $node->returns,
-            'unattributed',
-        );
+        // Certification comes first: past it every node has a type to read,
+        // and before it the root may be one that has none.
+        $compilation = $node->compilation() ?? ($node->failed
+            ? CompilationNode::failed(CompiledNode::class)
+            : CompilationNode::certified(CompiledNode::class, $node->returns, 'unattributed'));
 
         self::certify($compilation, '$');
 
+        $this->returns = $node->returns;
+        $this->references = $node->references;
+        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
         $this->analysis = new CompilationAnalysis($compilation, $this->declarations, $this->boundary);
     }
 
     /**
      * The one place a program is minted, and so the one place to hold the
-     * line: a node typed {@see ErrorType} is a node error-tolerant
-     * compilation gave up on ({@see Diagnosis}), and a program carrying one
-     * anywhere would present a checked face over an unchecked subtree. The
-     * whole tree is answered for, not just the root — a failed match arm is
-     * absorbed into the union of its siblings, so a broken node can sit under
-     * a perfectly ordinary type.
+     * line: a node error-tolerant compilation gave up on ({@see Diagnosis})
+     * is in the {@see CompilationState::Failed} state, and a program carrying
+     * one anywhere would present a checked face over an unchecked subtree.
+     * The whole tree is answered for, not just the root — a failed match arm
+     * is absorbed into the union of its siblings, so a broken node can sit
+     * under a perfectly ordinary type.
      *
-     * The answer costs one boolean read: {@see CompilationNode::$failed}
+     * It is the state that is read, never a type: a type is host data this
+     * library cannot see inside, and any question asked of one would be a
+     * question a host could answer wrongly. The state is the compiler's own
+     * record of what it did.
+     *
+     * The answer costs one boolean read: {@see CompilationNode::$containsFailure}
      * carries it for a whole subtree, so a sound program — every program
      * `compile()` mints — pays for the guard once, not once per node. The
      * walk below runs only to name the offending node, on the path where no
@@ -100,18 +105,18 @@ final readonly class Program
      */
     private static function certify(CompilationNode $node, string $path): void
     {
-        if (!$node->failed) {
+        if (!$node->containsFailure) {
             return;
         }
 
-        if ($node->returns instanceof ErrorType) {
+        if ($node->state === CompilationState::Failed) {
             throw new LogicException(sprintf(
                 'The node at [%s] failed to compile; a Program cannot be certified from it. Read Expression::diagnose() for what refused.',
                 $path,
             ));
         }
 
-        // A node that failed without being ErrorType itself has a failed
+        // A node carrying a failure that is not itself failed has a failed
         // child, so this loop always reaches one and throws.
         foreach ($node->children as $index => $child) {
             self::certify($child->node, CompilationNode::childPath($path, $index));

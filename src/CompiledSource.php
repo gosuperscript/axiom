@@ -8,7 +8,6 @@ use Closure;
 use LogicException;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\PresentType;
@@ -24,8 +23,7 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The source-compiler-facing form of a compiled source, in one of two kinds —
- * the same two a {@see \Superscript\Axiom\Analysis\CompilationNode} comes in.
+ * The source-compiler-facing form of a compiled source, in one of two states.
  * Axiom keeps Runtime, Result<Option<...>>, node construction, and observation
  * scopes behind this interface.
  *
@@ -33,12 +31,12 @@ use function Superscript\Monads\Result\Ok;
  * to composable evaluation.
  *
  * A **failed** source is one whose compilation was refused, with that refusal
- * recorded as a diagnostic. It carries no type — there is no value for a type
- * to be about — so {@see $returns} refuses, {@see failed()} is the question to
- * ask instead, and the capabilities absorb it rather than judging it. Only
- * error-tolerant compilation produces one: {@see \Superscript\Axiom\Expression::compile()}
- * stops at the first refusal, so a compiler it calls is only ever handed
- * children that compiled.
+ * recorded as a diagnostic. It carries no type and no evaluation — there is no
+ * value for a type to be about — so {@see $returns} refuses, {@see failed()}
+ * is the question to ask instead, and the capabilities absorb it rather than
+ * judging it. Only error-tolerant compilation produces one:
+ * {@see \Superscript\Axiom\Expression::compile()} stops at the first refusal,
+ * so a compiler it calls is only ever handed children that compiled.
  *
  * ## Absorption
  *
@@ -61,27 +59,24 @@ use function Superscript\Monads\Result\Ok;
  * perform, and it is machinery for the same reason: a compiler must not have
  * to remember.
  *
- * ## The mark is not handed out
+ * ## Failure is a state, not a type
  *
- * A failed source is marked internally with {@see ErrorType}, which is the
- * compiler's own and appears nowhere in this library's public surface. A
- * failed child's type was the one channel through which a host could come to
- * hold one, so {@see $returns} refuses rather than answering with the mark.
- * Nothing a compiler legitimately wants is lost: {@see failed()} asks whether
- * it failed, and the judgments on {@see SourceCompilation} answer for it.
+ * There is no type standing for failure — nothing to hand out, nothing to
+ * wrap in a type of one's own, nothing to claim back on a later expression.
+ * A failed source simply has no type, and {@see $returns} says so. Nothing a
+ * compiler legitimately wants is lost: {@see failed()} asks whether it
+ * failed, and the judgments on {@see SourceCompilation} answer for it.
  */
 final class CompiledSource
 {
     /**
      * What this source returns — for a source that compiled. A source that
-     * did not has no type to give: error-tolerant compilation marks it with
-     * {@see ErrorType}, minted only alongside the diagnostic that explains
-     * it, so answering with the mark would let a compiler claim a failure
-     * nothing diagnosed. Reading it refuses instead.
+     * did not has no type to give, so reading this refuses rather than
+     * inventing one.
      */
     public Type $returns {
-        get => $this->failed()
-            ? throw new LogicException('A source that did not compile has no return type to read; the compiler marks it with a type of its own, which nothing outside compilation may hold. Ask failed() before reading it, or let the compilation capability answer for it: typeOf(), shapeOf() and overlaps() absorb a failed child, and claiming() composes over one.')
+        get => $this->node->failed
+            ? throw new LogicException('A source that did not compile has no return type to read; compilation records the failure as a state, not as a type anything may hold. Ask failed() before reading it, or let the compilation capability answer for it: typeOf(), shapeOf() and overlaps() absorb a failed child, and claiming() composes over one.')
             : $this->node->returns;
     }
 
@@ -97,7 +92,7 @@ final class CompiledSource
      */
     public function failed(): bool
     {
-        return $this->node->returns instanceof ErrorType;
+        return $this->node->failed;
     }
 
     /**
@@ -147,16 +142,18 @@ final class CompiledSource
      * Certify the value seen by mapPresent(). For an optional child this
      * checks its present member; absence remains structural and propagates.
      *
-     * A failed child needs no branch of its own here. {@see ErrorType} is
-     * Never-shaped, so the check passes without judging anything, and the
-     * certification is only ever a precondition for a claim made by the door
-     * that follows — which absorbs. A guard here would change nothing an
-     * expression can observe. That is why it reads the node's type rather
-     * than {@see $returns}: passing vacuously is the behaviour, and the
-     * property refuses instead of answering.
+     * A failed child is passed through rather than judged, for the reason
+     * every judgment absorbs one: it has no type to put the question to, and
+     * a refusal made over it would report the fault below a second time. The
+     * claim this certification is a precondition for absorbs too, so nothing
+     * an expression can observe turns on the pass.
      */
     public function expectPresent(Type $expected): self
     {
+        if ($this->node->failed) {
+            return $this;
+        }
+
         $present = PresentType::of($this->node->returns);
         $admitted = TypeRelations::admits($present, $expected);
 
@@ -220,11 +217,10 @@ final class CompiledSource
     }
 
     /**
-     * A source that inherits a child's failure — the compiled-source twin of
-     * {@see \Superscript\Axiom\Operators\ResolvedOperation::absorbed()}. It carries the same pair a
-     * node the compiler gave up on carries — {@see ErrorType} and an
-     * evaluation that refuses to run — so a compiler that composed over a
-     * broken child produces a node no {@see Program} can be certified from.
+     * A source that inherits a child's failure. It is in the same state a
+     * node the compiler gave up on is in — no type, no evaluation — so a
+     * compiler that composed over a broken child produces a node no
+     * {@see Program} can be certified from.
      *
      * Nothing outside this class mints one: {@see claiming()} is where the
      * decision to absorb is made, and it is the only caller.

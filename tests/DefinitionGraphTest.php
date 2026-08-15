@@ -188,8 +188,8 @@ final class DefinitionGraphTest extends TestCase
     public function a_name_that_merely_depends_on_a_cycle_is_not_on_one(): void
     {
         // dependant → a → b → a. Following dependant's edges terminates —
-        // it reaches the cycle but is not part of it, and it gets its
-        // ErrorType from the poisoned name it references, not from here.
+        // it reaches the cycle but is not part of it, and it takes
+        // its failure from the poisoned name it references, not from here.
         $definitions = new Definitions([
             'dependant' => new SymbolSource('a'),
             'a' => new SymbolSource('b'),

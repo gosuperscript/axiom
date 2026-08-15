@@ -14,7 +14,6 @@ use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -84,30 +83,22 @@ final readonly class SourceCompilation
     }
 
     /**
-     * Bind one binary operation once from certified operand types. Absorbs
-     * over an operand that did not compile, for the reason {@see overlaps()}
-     * does: no rule can be selected from a placeholder type, and a refusal
-     * saying so would blame this source for the fault below it.
+     * Bind one binary operation once from certified operand types. Every
+     * operand type a compiler can hold is one {@see typeOf()} answered with,
+     * and that door absorbs a failed child before answering — so an operand
+     * here is certified by construction and there is nothing to guard.
      */
     public function infix(Type $left, string $operator, Type $right): BoundOperation
     {
-        if ($left instanceof ErrorType || $right instanceof ErrorType) {
-            $this->absorb();
-        }
-
         $resolved = $this->require(($this->compileInfix)($left, $operator, $right));
         $this->recordOperator('infix', $operator, [$left, $right], $resolved);
 
         return new BoundOperation($resolved);
     }
 
-    /** Bind one unary operation once from a certified operand type; absorbs over a failed operand, as {@see infix()} does. */
+    /** Bind one unary operation once from a certified operand type, which by {@see infix()}'s reasoning is the only kind there is. */
     public function prefix(string $operator, Type $operand): BoundOperation
     {
-        if ($operand instanceof ErrorType) {
-            $this->absorb();
-        }
-
         $resolved = $this->require(($this->compilePrefix)($operator, $operand));
         $this->recordOperator('prefix', $operator, [$operand], $resolved);
 
@@ -130,30 +121,29 @@ final readonly class SourceCompilation
 
     /**
      * Could a value inhabit both of these types? The overlap relation, asked
-     * through the capability so it absorbs: a type that failed to compile is
-     * a placeholder rather than a claim, and no honest answer exists about
-     * it, so the question is not put and this compilation is
-     * {@see absorb()}ed instead.
+     * through the capability so a compiler has one place to ask every
+     * judgment. Both operands are types {@see typeOf()} answered with, and a
+     * failed child is absorbed there rather than typed, so the question is
+     * only ever put about types compilation certified.
      *
      * @return Result<bool, TypeMismatch>
      */
     public function overlaps(Type $left, Type $right): Result
     {
-        if ($left instanceof ErrorType || $right instanceof ErrorType) {
-            $this->absorb();
-        }
-
         return TypeRelations::overlaps($left, $right);
     }
 
     /**
      * The certified type of a compiled child, for a compiler that needs the
      * type itself — to bind an operation from, to claim over, to name in a
-     * message. Absorbs for the same reason {@see overlaps()} does: a child
-     * that did not compile has no type, and {@see CompiledSource::$returns}
-     * refuses rather than hand out the compiler's mark, so this is how a
+     * message. A child that did not compile has no type, so reading it is
+     * absorption: this compilation gives up rather than judging over an
+     * answer that does not exist. {@see CompiledSource::$returns} refuses
+     * outright, and this is how a
      * compiler asks for a child's type without first asking whether there is
-     * one.
+     * one. It is the only door through which a compiler comes to hold a
+     * child's type at all, which is what makes the judgments below safe
+     * without guards of their own.
      */
     public function typeOf(CompiledSource $child): Type
     {
@@ -185,8 +175,9 @@ final readonly class SourceCompilation
      * source too and makes no refusal of its own.
      *
      * Absorbing rather than refusing is what keeps one fault to one
-     * diagnostic — a refusal made over a placeholder type would report the
-     * fault below a second time, under a second message, at a second node.
+     * diagnostic — a refusal made over a child that already failed would
+     * report the fault below a second time, under a second message, at a
+     * second node.
      * The judgments this capability offers absorb on their own, so a compiler
      * that judges through them never has to remember; call this directly only
      * for a judgment of your own that it cannot make for you.

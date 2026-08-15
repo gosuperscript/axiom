@@ -8,7 +8,6 @@ use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\DefinitionGraph;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -32,19 +31,20 @@ use function Superscript\Monads\Result\Err;
  * Each attempt is an ordinary compilation. When one refuses, the node it
  * names — the deepest path in the refusal's cause chain, the node that
  * actually made it — is **quarantined**: the next attempt hands that node
- * back as {@see \Superscript\Axiom\Types\ErrorType} without visiting it, and
- * so gets past it to whatever else is wrong.
+ * back as a failed node without visiting it, and so gets past it to whatever
+ * else is wrong.
  *
  * ## What the retry does *not* do: report twice
  *
- * ErrorType absorbs, and absorption is total: every judgment about a child's
- * type is made through {@see \Superscript\Axiom\SourceCompilation}, which
- * takes it only over a child that compiled. An operation over an ErrorType
- * resolves to ErrorType with no rule lookup and no refusal, an ascription
- * over one claims nothing, a member access on one certifies nothing — so `mystery > 1000 && postcode == 'SW1'` costs exactly
- * one diagnostic, the unbound `mystery`, while the right-hand comparison is
- * still fully checked and `postcode` is still collected as a reference. One
- * fault, one diagnostic — see {@see Diagnosis} for what that costs.
+ * A failed node absorbs, and absorption is total: every judgment about a
+ * child's type is made through {@see \Superscript\Axiom\SourceCompilation},
+ * which takes it only over a child that compiled. An operation over a failed
+ * operand is never bound, an ascription over one claims nothing, a member
+ * access on one certifies nothing — so `mystery > 1000 && postcode == 'SW1'`
+ * costs exactly one diagnostic, the unbound `mystery`, while the right-hand
+ * comparison is still fully checked and `postcode` is still collected as a
+ * reference. One fault, one diagnostic — see {@see Diagnosis} for what that
+ * costs.
  *
  * A refusal an attempt meets after quarantining something is therefore a
  * fault of its own, not an echo of the one below it, and it is recorded.
@@ -56,7 +56,7 @@ use function Superscript\Monads\Result\Err;
  * That is also the termination argument. Every attempt that refuses
  * quarantines either a node no earlier attempt had, or — in the exception
  * above — the root; the root is not yet quarantined whenever an attempt
- * refuses, because a quarantined root compiles to ErrorType without being
+ * refuses, because a quarantined root compiles to a failed node without being
  * visited and the attempt would have succeeded. Attempts are therefore
  * bounded by the number of nodes, and the last one succeeds.
  *
@@ -64,7 +64,7 @@ use function Superscript\Monads\Result\Err;
  *
  * A cycle is a property of the graph, not of a node, so it is diagnosed
  * before any attempt and every name on a cycle is *poisoned*: it resolves to
- * ErrorType, reported once, and never descended into.
+ * a failed node, reported once, and never descended into.
  */
 final readonly class RecoveringCompiler
 {
@@ -117,13 +117,12 @@ final readonly class RecoveringCompiler
             if ($attempt->isOk()) {
                 $root = $attempt->unwrap();
 
-                // A root the compiler gave up on returns nothing, and the mark
-                // it wears is the compiler's own: the diagnosis reports the
-                // absence rather than handing the mark out.
+                // A root the compiler gave up on has no type at all, so the
+                // diagnosis reports the absence.
                 return new Diagnosis(
                     $diagnostics,
                     $recovery->references(),
-                    $root->returns instanceof ErrorType ? null : $root->returns,
+                    $root->failed ? null : $root->returns,
                     $diagnostics === [] ? $this->program($root) : null,
                 );
             }

@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests;
 
-use InvalidArgumentException;
 use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\CompilationChild;
 use Superscript\Axiom\Analysis\CompilationNode;
-use Superscript\Axiom\Analysis\UnreachableEvaluation;
+use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Dialect;
@@ -29,21 +26,20 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\WildcardPattern;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\Types\Shapes\NeverShape;
+use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Ok;
 
 /**
  * A host source whose compiler keeps the type of the child it compiled and
  * claims it back for the next source it is given. A plugin that caches by
- * shape, or memoizes a claim per source class, does exactly this — and once
- * one of those children has failed, what it kept is the compiler's mark for
- * a node that failed.
+ * shape, or memoizes a claim per source class, does exactly this — and the
+ * question is what it keeps once one of those children has failed.
  */
 final readonly class RetainingSource implements Source
 {
@@ -89,13 +85,47 @@ final class ClaimingExtension extends Extension
 }
 
 /**
- * The line error-tolerant compilation must not cross: a node it gave up on
- * is typed {@see ErrorType}, and a {@see Program} is where a type stops
- * being a claim and starts being a promise.
+ * A type of the host's own, wrapping another. Axiom cannot see inside it and
+ * does not try to: certification reads the compiler's record of what it did,
+ * never the types a host authored.
+ *
+ * @implements Type<mixed>
+ */
+final readonly class HostBox implements Type
+{
+    public function __construct(private Type $inner) {}
+
+    public function assert(mixed $value): Result
+    {
+        return $this->inner->assert($value);
+    }
+
+    public function coerce(mixed $value): Result
+    {
+        return $this->inner->coerce($value);
+    }
+
+    public function format(mixed $value): string
+    {
+        return $this->inner->format($value);
+    }
+
+    public function shape(): Shape
+    {
+        return $this->inner->shape();
+    }
+}
+
+/**
+ * The line error-tolerant compilation must not cross. A {@see Program} is
+ * where a type stops being a claim and starts being a promise, and what it
+ * checks is {@see CompilationState}: failure is a state the compiler records,
+ * never a type, so there is nothing for a host to obtain and nothing for
+ * certification to search a type for.
  */
 #[CoversClass(Program::class)]
 #[CoversClass(CompilationNode::class)]
-#[CoversClass(ErrorType::class)]
+#[CoversClass(CompilationState::class)]
 #[CoversClass(Expression::class)]
 #[CoversClass(CompiledNode::class)]
 #[UsesNamespace('Superscript\\Axiom')]
@@ -116,7 +146,7 @@ final class ProgramCertificationTest extends TestCase
         // A failed match arm is absorbed into the union of its siblings, so a
         // broken node sits under an ordinary Number.
         $sound = CompilationNode::certified('Sound', new NumberType(), 'core');
-        $broken = CompilationNode::certified('Broken', ErrorType::shared(), 'core');
+        $broken = CompilationNode::failed('Broken');
         $root = CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'arm.0'),
             new CompilationChild($broken, 'arm.1'),
@@ -125,7 +155,7 @@ final class ProgramCertificationTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('The node at [$.children[1].node] failed to compile');
 
-        new Program(CompiledNode::returning(new NumberType(), UnreachableEvaluation::refuse(...), compilation: $root));
+        new Program(CompiledNode::returning(new NumberType(), static fn() => Ok(null), compilation: $root));
     }
 
     #[Test]
@@ -134,17 +164,17 @@ final class ProgramCertificationTest extends TestCase
         // The bit is cumulative, and that is what lets the root answer for
         // the whole tree without anyone walking it.
         $sound = CompilationNode::certified('Sound', new NumberType(), 'core');
-        $broken = CompilationNode::certified('Broken', ErrorType::shared(), 'core');
+        $broken = CompilationNode::failed('Broken');
 
-        $this->assertFalse($sound->failed);
-        $this->assertTrue($broken->failed);
+        $this->assertFalse($sound->containsFailure);
+        $this->assertTrue($broken->containsFailure);
         $this->assertFalse(CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'left'),
-        ])->failed);
+        ])->containsFailure);
         $this->assertTrue(CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'left'),
             new CompilationChild($broken, 'right'),
-        ])->failed);
+        ])->containsFailure);
     }
 
     #[Test]
@@ -160,69 +190,88 @@ final class ProgramCertificationTest extends TestCase
     }
 
     /**
-     * In a process of its own, because the mark is minted once and this is
-     * the test that watches it happen: any earlier compilation in the same
-     * process would have minted it already.
+     * The state is the whole of what a node that failed carries. There is no
+     * type standing for failure — no class a host could be handed, wrap, and
+     * claim back on a later, blameless expression — which is why the guards
+     * that used to hunt for one are gone rather than multiplied.
      */
     #[Test]
-    #[RunInSeparateProcess]
-    public function every_node_that_failed_wears_the_same_error_type(): void
+    public function failure_is_a_state_and_no_type_stands_for_it(): void
     {
-        // The mark is stateless and recognised by class, so one instance
-        // serves however many nodes the compiler gives up on.
-        $this->assertSame(ErrorType::shared(), ErrorType::shared());
-    }
+        $this->assertFalse(class_exists('Superscript\\Axiom\\Types\\ErrorType'));
 
-    #[Test]
-    public function the_error_type_is_bottom(): void
-    {
-        // Never-shaped is what lets a broken subtree sit anywhere without a
-        // second refusal: it is assignable everywhere and covers every match.
-        $this->assertInstanceOf(NeverShape::class, ErrorType::shared()->shape());
+        $failed = CompilationNode::failed('Broken');
+
+        $this->assertSame(CompilationState::Failed, $failed->state);
+        $this->assertTrue($failed->containsFailure);
     }
 
     /**
-     * The other three questions on {@see ErrorType} are unreachable, and say
-     * so rather than inventing an answer. Only a certified program holds a
-     * value to put to a type, and no program is certified from a tree
-     * containing an ErrorType — so each of these is a defect in that guard.
-     *
-     * @return iterable<string, array{callable(ErrorType): mixed}>
+     * The two things a node that failed never settled. Reading either is a
+     * reader treating the states alike, and it says so rather than answering
+     * with something invented.
      */
-    public static function valueQuestions(): iterable
-    {
-        yield 'assert' => [static fn(ErrorType $error) => $error->assert(1)];
-        yield 'coerce' => [static fn(ErrorType $error) => $error->coerce(1)];
-        yield 'format' => [static fn(ErrorType $error) => $error->format(1)];
-    }
-
     #[Test]
-    #[DataProvider('valueQuestions')]
-    public function the_error_type_answers_nothing_about_a_value(callable $question): void
+    public function a_node_that_failed_claims_neither_a_type_nor_a_compiler(): void
     {
+        $failed = CompilationNode::failed('Broken');
+
+        try {
+            $failed->returns;
+            $this->fail('A node that failed has no return type to read.');
+        } catch (LogicException $refused) {
+            $this->assertStringContainsString('so it has no return type', $refused->getMessage());
+        }
+
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('A type that marks a node that failed to compile answers nothing about a value; this program was never certified.');
+        $this->expectExceptionMessage('so it has no owning compiler');
 
-        $question(ErrorType::shared());
+        $failed->extension;
     }
 
     /**
-     * The claim a source compiler makes is not authored through any of those
-     * doors, and it was the one way a host could come by the mark at all: a
-     * compiler is handed a child for every source it compiles, and reading
-     * the type of one that failed used to answer with the mark itself. It
-     * refuses instead, so there is nothing to keep and nothing to claim
-     * back.
+     * A host may compile to any type it likes, including a composite of its
+     * own that Axiom cannot see inside. Certification never inspects one: it
+     * reads the state the compiler recorded, so there is no containment walk
+     * to write and no host type shape that can defeat it.
      */
     #[Test]
-    public function the_mark_cannot_be_taken_from_a_child_that_failed(): void
+    public function an_arbitrary_host_type_certifies_without_being_inspected(): void
+    {
+        $boxed = new HostBox(new NumberType());
+
+        $produced = new Expression(
+            new ClaimingSource(),
+            dialect: Dialect::core()->with(new ClaimingExtension($boxed)),
+        )->diagnose();
+
+        $this->assertSame([], $produced->diagnostics);
+        $this->assertSame($boxed, $produced->returns);
+        $this->assertTrue($produced->program()->isOk());
+
+        // The other door a type is claimed through, with a host type nested
+        // two deep, which a walk looking for a marker would have to descend.
+        $nested = new HostBox(new HostBox(new NumberType()));
+
+        $this->assertSame($nested, new Program(
+            CompiledSource::constant($nested, 1)->node(),
+        )->returns);
+    }
+
+    /**
+     * The claim a source compiler makes was the one way a host could come by
+     * a failure at all: a compiler is handed a child for every source it
+     * compiles, and reading the type of one that failed would have to answer
+     * with something. It refuses instead, so there is nothing to keep and
+     * nothing to claim back.
+     */
+    #[Test]
+    public function the_type_of_a_child_that_failed_cannot_be_taken(): void
     {
         // A compiler that keeps the type of the child it compiled — a plugin
         // caching a claim per source class does exactly this — over an
-        // expression whose child does not compile. Without the refusal it
-        // would keep the mark and claim it back for the next, blameless
-        // expression; the read is where that goes wrong, so the read is
-        // where it is stopped.
+        // expression whose child does not compile. The read is where that
+        // goes wrong, so the read is where it is stopped.
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('A source that did not compile has no return type to read');
 
@@ -233,10 +282,8 @@ final class ProgramCertificationTest extends TestCase
     }
 
     /**
-     * The mark has no public appearance at all. An expression whose root
-     * failed returns nothing, and its diagnosis says nothing rather than
-     * handing out the one instance a caller could otherwise wrap in a type
-     * of its own and claim back.
+     * An expression whose root failed returns nothing: `null`, rather than
+     * some type standing in for the failure.
      */
     #[Test]
     public function a_diagnosis_of_a_failed_root_carries_no_type(): void
@@ -244,13 +291,15 @@ final class ProgramCertificationTest extends TestCase
         $diagnosis = new Expression(new SymbolSource('missing'))->diagnose();
 
         $this->assertNull($diagnosis->returns);
+        $this->assertTrue($diagnosis->program()->isErr());
     }
 
     /**
      * A diagnosis carries a real type whenever the root itself compiled,
      * which a non-empty diagnostics list does not rule out: a broken match
      * arm is absorbed into the union of its siblings, so the expression is
-     * refused and the root type is sound at the same time.
+     * refused and the root type is sound at the same time. What it never
+     * carries alongside a diagnostic is a program.
      */
     #[Test]
     public function a_root_that_compiled_keeps_its_type_alongside_a_diagnostic(): void
@@ -266,25 +315,6 @@ final class ProgramCertificationTest extends TestCase
         $this->assertCount(1, $diagnosis->diagnostics);
         $this->assertInstanceOf(LiteralType::class, $diagnosis->returns);
         $this->assertTrue($diagnosis->program()->isErr());
-    }
-
-    /**
-     * The one gate left, and the only way left to reach it: the mark taken
-     * from the library's internal mint, standing in for an instance obtained
-     * by a route this library does not support. A claim made with it is
-     * refused where the claim is made, rather than as a certification that
-     * refuses a later, blameless expression.
-     */
-    #[Test]
-    public function a_claimed_mark_is_refused_where_the_node_claims_it(): void
-    {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('the type this compiled node returns is one');
-
-        new Expression(
-            new ClaimingSource(),
-            dialect: Dialect::core()->with(new ClaimingExtension(ErrorType::shared())),
-        )->diagnose();
     }
 
     #[Test]

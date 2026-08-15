@@ -11,8 +11,8 @@ use RuntimeException;
  * channel, raised when a judgment is asked about a child that already failed.
  *
  * It is not a refusal and carries no message: TypeInference turns it into a
- * node typed {@see \Superscript\Axiom\Types\ErrorType}, so the fault below is
- * reported once and this source inherits it silently.
+ * failed node, so the fault below is reported once and this source inherits
+ * it silently.
  *
  * ## The two internal control-flow exceptions
  *
@@ -31,8 +31,8 @@ use RuntimeException;
  *
  * Neither escapes {@see \Superscript\Axiom\Types\TypeInference::compile()},
  * which turns both into ordinary values: an abort becomes an `Err` carrying
- * the {@see \Superscript\Axiom\Types\TypeMismatch}, an absorb becomes a node
- * typed ErrorType. What a caller of {@see \Superscript\Axiom\Expression} sees
- * is a `Result`.
+ * the {@see \Superscript\Axiom\Types\TypeMismatch}, an absorb becomes a
+ * failed node. What a caller of {@see \Superscript\Axiom\Expression} sees is
+ * a `Result`.
  */
 final class CompilationAbsorbed extends RuntimeException {}

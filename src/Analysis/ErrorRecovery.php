@@ -10,8 +10,8 @@ namespace Superscript\Axiom\Analysis;
  * and every symbol the attempts touched.
  *
  * A compiler handed one of these treats a quarantined path as already
- * failed — it compiles to {@see \Superscript\Axiom\Types\ErrorType} without
- * being visited — and a poisoned definition name the same way. Both are how
+ * failed — it compiles to a failed node without being visited — and a
+ * poisoned definition name the same way. Both are how
  * the next attempt gets past a failure the previous one stopped at.
  */
 final class ErrorRecovery

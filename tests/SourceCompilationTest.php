@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Tests;
 
 use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -26,6 +27,7 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceCompilers\AdmissionNode;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -33,8 +35,8 @@ use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
@@ -151,6 +153,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(ResolvedOperation::class)]
+#[UsesClass(AdmissionNode::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
@@ -159,7 +162,6 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
-#[UsesClass(ErrorType::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(StringType::class)]
@@ -199,130 +201,104 @@ final class SourceCompilationTest extends TestCase
         );
     }
 
-    #[Test]
-    public function a_judgment_is_absorbed_over_a_failed_type_from_either_side(): void
+    /**
+     * Every judgment a compiler puts through the capability, over a child
+     * that failed. None of them is guarded: each takes its operands from
+     * {@see SourceCompilation::typeOf()}, and a child that failed has no type
+     * for that door to answer with, so it absorbs there and the question is
+     * never asked. A compiler that judges through the capability therefore
+     * gets absorption as machinery rather than as something to remember.
+     *
+     * @return iterable<string, array{Closure(SourceCompilation, CompiledSource): mixed}>
+     */
+    public static function judgmentsOverAChildThatFailed(): iterable
     {
-        // Overlap is symmetric, so a compiler may hold the failed child on
-        // either side of the question and neither side may be judged.
-        $compilation = self::compilation();
-
-        foreach ([
-            'left' => [ErrorType::shared(), new NumberType()],
-            'right' => [new NumberType(), ErrorType::shared()],
-        ] as $position => [$left, $right]) {
-            try {
-                $compilation->overlaps($left, $right);
-                $this->fail("An overlap judgment with a failed {$position} operand must absorb.");
-            } catch (CompilationAbsorbed) {
-                $this->addToAssertionCount(1);
-            }
-        }
-
-        $this->assertTrue($compilation->overlaps(new NumberType(), new NumberType())->unwrap());
-    }
-
-    #[Test]
-    public function no_operation_is_bound_from_a_failed_operand(): void
-    {
-        // No rule can be selected from the mark, and a refusal saying so
-        // would blame this source for the fault below it. Both operand
-        // positions absorb, on either kind of operation.
-        $compilation = self::compilation();
-        $error = ErrorType::shared();
         $number = new NumberType();
 
-        foreach ([
-            'infix left' => static fn() => $compilation->infix($error, '+', $number),
-            'infix right' => static fn() => $compilation->infix($number, '+', $error),
-            'prefix operand' => static fn() => $compilation->prefix('-', $error),
-        ] as $position => $bind) {
-            try {
-                $bind();
-                $this->fail("Binding an operation over a failed {$position} must absorb.");
-            } catch (CompilationAbsorbed) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        yield 'typeOf' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->typeOf($failed)];
+        yield 'shapeOf' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->shapeOf($failed)];
+        yield 'overlaps left' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->overlaps($c->typeOf($failed), $number)];
+        yield 'overlaps right' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->overlaps($number, $c->typeOf($failed))];
+        yield 'infix left' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->infix($c->typeOf($failed), '+', $number)];
+        yield 'infix right' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->infix($number, '+', $c->typeOf($failed))];
+        yield 'prefix' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->prefix('-', $c->typeOf($failed))];
     }
 
     #[Test]
-    public function the_type_of_a_failed_child_is_not_a_type_to_claim(): void
+    #[DataProvider('judgmentsOverAChildThatFailed')]
+    public function every_judgment_absorbs_a_child_that_failed(Closure $judge): void
     {
-        // The one way a compiler asks a child for its type. A child that did
-        // not compile has none — reading CompiledSource::$returns refuses
-        // rather than answering with the mark — so the question is not put
-        // and this source inherits the failure instead.
-        $compilation = self::compilation();
-
-        $this->assertInstanceOf(
-            NumberType::class,
-            $compilation->typeOf(CompiledSource::constant(new NumberType(), 1)),
-        );
-
         $this->expectException(CompilationAbsorbed::class);
 
-        $compilation->typeOf(new CompiledSource(CompiledNode::failed()));
+        $judge(self::compilation(), new CompiledSource(CompiledNode::failed()));
     }
 
     #[Test]
-    public function the_shape_of_a_failed_child_is_not_a_promise_to_judge(): void
+    public function the_same_judgments_answer_for_a_child_that_compiled(): void
     {
+        // Absorption is about the child, not about the question: over a child
+        // that compiled every one of them answers as it always did.
         $compilation = self::compilation();
+        $sound = CompiledSource::constant(new NumberType(), 1);
 
-        $this->assertInstanceOf(
-            \Superscript\Axiom\Types\Shapes\NumberShape::class,
-            $compilation->shapeOf(CompiledSource::constant(new NumberType(), 1)),
-        );
-
-        $this->expectException(CompilationAbsorbed::class);
-
-        $compilation->shapeOf(new CompiledSource(CompiledNode::failed()));
+        $this->assertInstanceOf(NumberType::class, $compilation->typeOf($sound));
+        $this->assertInstanceOf(NumberShape::class, $compilation->shapeOf($sound));
+        $this->assertTrue($compilation->overlaps($compilation->typeOf($sound), new NumberType())->unwrap());
     }
 
-    #[Test]
-    public function no_door_that_claims_a_type_claims_one_over_a_child_that_failed(): void
+    /**
+     * Every door that claims a type, over a child that failed. A claim is
+     * pinned to a value the child produces and a child that did not compile
+     * produces none, so each answers a failed source instead of the claim.
+     *
+     * @return iterable<string, array{Closure(CompiledSource): CompiledSource}>
+     */
+    public static function doorsThatClaimAType(): iterable
     {
-        // A claim is pinned to a value the child produces, and a child that
-        // did not compile produces none. ErrorType is Never-shaped, so every
-        // presence and assignability check along the way passes vacuously —
-        // the doors themselves are the only thing keeping a claimed type off
-        // a subtree that never compiled.
         $number = new NumberType();
-        $failed = static fn(): CompiledSource => new CompiledSource(CompiledNode::failed());
-        $double = new BoundOperation(new ResolvedOperation($number, fn(int $value) => $value * 2));
-        $sum = new BoundOperation(new ResolvedOperation($number, fn(?int ...$values) => array_sum($values)));
         $sound = CompiledSource::constant($number, 1);
+        $double = new BoundOperation(new ResolvedOperation($number, static fn(int $value) => $value * 2));
+        $sum = new BoundOperation(new ResolvedOperation($number, static fn(?int ...$values) => array_sum($values)));
 
-        foreach ([
-            'mapPresent' => static fn(): CompiledSource => $failed()->mapPresent($number, static fn() => 1),
-            'expectPresent then mapPresent' => static fn(): CompiledSource => $failed()
-                ->expectPresent($number)
-                ->mapPresent($number, static fn() => 1),
-            'mapIncludingAbsent' => static fn(): CompiledSource => $failed()->mapIncludingAbsent($number, static fn() => 1),
-            'apply' => static fn(): CompiledSource => $failed()->apply($double),
-            'sources mapPresent' => static fn(): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed()])
-                ->mapPresent($number, static fn() => 1),
-            'sources mapIncludingAbsent' => static fn(): CompiledSource => new CompiledSources(['broken' => $failed(), 'sound' => $sound])
-                ->mapIncludingAbsent($number, static fn() => 1),
-            'sources applyIncludingAbsent' => static fn(): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed()])
-                ->applyIncludingAbsent($sum),
-        ] as $door => $claim) {
-            $absorbed = $claim();
+        yield 'mapPresent' => [static fn(CompiledSource $failed): CompiledSource => $failed->mapPresent($number, static fn() => 1)];
+        yield 'expectPresent then mapPresent' => [static fn(CompiledSource $failed): CompiledSource => $failed
+            ->expectPresent($number)
+            ->mapPresent($number, static fn() => 1)];
+        yield 'mapIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => $failed->mapIncludingAbsent($number, static fn() => 1)];
+        yield 'apply' => [static fn(CompiledSource $failed): CompiledSource => $failed->apply($double)];
+        yield 'sources mapPresent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed])
+            ->mapPresent($number, static fn() => 1)];
+        yield 'sources mapIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['broken' => $failed, 'sound' => $sound])
+            ->mapIncludingAbsent($number, static fn() => 1)];
+        yield 'sources applyIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed])
+            ->applyIncludingAbsent($sum)];
+        yield 'admission bridge' => [static fn(CompiledSource $failed): CompiledSource => AdmissionNode::from(
+            $failed,
+            $number,
+            static fn(mixed $value): Result => Ok(Some($value)),
+            'missing %s, or %s',
+            'coerce',
+        )];
+    }
 
-            // Asked, never read: a failed source refuses to hand out the mark
-            // it wears, so failed() is the whole of what a door answers with.
-            $this->assertTrue($absorbed->failed(), $door);
-            $this->assertInstanceOf(ErrorType::class, $absorbed->node()->returns, $door);
+    #[Test]
+    #[DataProvider('doorsThatClaimAType')]
+    public function no_door_claims_a_type_over_a_child_that_failed(Closure $claim): void
+    {
+        $absorbed = $claim(new CompiledSource(CompiledNode::failed()));
 
-            // ErrorType and an evaluation that refuses are one pair: a node
-            // that wears the type must also carry the refusal, or a broken
-            // subtree would still have something to run.
-            try {
-                $absorbed->node()->evaluate(new Runtime());
-                $this->fail("The node [{$door}] answered must have no evaluation.");
-            } catch (\LogicException $refused) {
-                $this->assertStringContainsString('this program was never certified', $refused->getMessage(), $door);
-            }
+        // Asked, never read: failed() is the whole of what a door answers
+        // with, and there is no type behind it to read instead.
+        $this->assertTrue($absorbed->failed());
+        $this->assertTrue($absorbed->node()->failed);
+
+        // No type and no evaluation are one state, not two: a node with
+        // nothing to run cannot present something to check.
+        try {
+            $absorbed->node()->evaluate(new Runtime());
+            $this->fail('A node a door answered over a failed child must have no evaluation.');
+        } catch (\LogicException $refused) {
+            $this->assertStringContainsString('this program was never certified', $refused->getMessage());
         }
     }
 

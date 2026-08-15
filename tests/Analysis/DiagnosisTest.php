@@ -16,7 +16,7 @@ use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Analysis\References;
-use Superscript\Axiom\Analysis\UnreachableEvaluation;
+use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Definitions;
@@ -26,6 +26,7 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler;
@@ -163,7 +164,6 @@ final class AbandoningExtension extends Extension
 #[CoversClass(RecoveringCompiler::class)]
 #[CoversClass(ErrorRecovery::class)]
 #[CoversClass(References::class)]
-#[CoversClass(UnreachableEvaluation::class)]
 #[CoversClass(TypeInference::class)]
 #[CoversClass(CompilationNode::class)]
 #[CoversClass(CompiledNode::class)]
@@ -272,8 +272,8 @@ final class DiagnosisTest extends TestCase
     {
         $diagnosis = self::diagnose(self::gate('mystery'), ['postcode' => new StringType()]);
 
-        // One fault: `>` and `&&` both absorb the ErrorType silently, and the
-        // right-hand comparison is compiled on its own merits.
+        // One fault: `>` and `&&` both absorb the failed operand silently,
+        // and the right-hand comparison is compiled on its own merits.
         $this->assertCount(1, $diagnosis->diagnostics);
         $this->assertStringStartsWith('Unbound symbol [mystery]', $diagnosis->diagnostics[0]->message);
         $this->assertSame(['mystery', 'postcode'], $diagnosis->references);
@@ -283,9 +283,9 @@ final class DiagnosisTest extends TestCase
     public function an_operation_over_a_broken_operand_is_itself_broken(): void
     {
         // Not merely "no second diagnostic": the operation must not resolve.
-        // ErrorType is Never-shaped and Never is admissible everywhere, so a
-        // rule asked about it would answer — `mystery > 1000` would certify
-        // as Boolean and a fault would compile away into a sound-looking type.
+        // A failed operand has no type to bind a rule from, and inventing one
+        // — anything a rule would answer about — would certify `mystery > 1000`
+        // as Boolean and compile a fault away into a sound-looking type.
         foreach ([
             'left' => new InfixExpression(new SymbolSource('mystery'), '>', new StaticSource(1000)),
             'right' => new InfixExpression(new StaticSource(1000), '>', new SymbolSource('mystery')),
@@ -423,7 +423,7 @@ final class DiagnosisTest extends TestCase
     public function a_definition_that_merely_depends_on_a_cycle_is_poisoned_where_it_reads_one(): void
     {
         // dependant is not on the cycle, so it is compiled like any other
-        // definition; its ErrorType comes from the poisoned name it reads.
+        // definition; it fails because the name it reads is poisoned.
         $diagnosis = self::diagnose(
             new SymbolSource('dependant'),
             definitions: new Definitions([
@@ -491,7 +491,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame(['This match over String may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.'], self::messages($sound));
 
         // The same match over a subject that failed reports only the subject:
-        // ErrorType is Never, and any set of patterns covers Never. The
+        // a subject with no type is put to no coverage question at all. The
         // exhaustiveness refusal surfaces when the subject is declared.
         $broken = self::diagnose(
             new MatchExpression(new SymbolSource('band'), [new MatchArm(new LiteralPattern('a'), new StaticSource(1))]),
@@ -530,9 +530,9 @@ final class DiagnosisTest extends TestCase
     #[Test]
     public function a_compiler_that_maps_a_failed_child_claims_nothing_about_the_result(): void
     {
-        // ErrorType is Never-shaped, so expectPresent() certifies vacuously.
-        // Nothing but absorption at the door that follows keeps the claimed
-        // NumberType off a subtree that never compiled.
+        // expectPresent() passes a failed child through rather than judging
+        // it. Nothing but absorption at the door that follows keeps the
+        // claimed NumberType off a subtree that never compiled.
         $diagnosis = self::diagnoseClaiming(new ClaimingSource(new SymbolSource('mystery')));
 
         $this->assertSame([
@@ -622,7 +622,7 @@ final class DiagnosisTest extends TestCase
     public function a_refusal_naming_a_node_already_set_aside_is_the_same_fault_again(): void
     {
         // This compiler blames its child by path. Once that node is
-        // quarantined it compiles to ErrorType and never refuses, so the
+        // quarantined it compiles to a failed node and never refuses, so the
         // refusal arriving a second time is the one already reported — and
         // diagnosis must record it once and still terminate.
         $diagnosis = self::diagnoseJudging(new JudgingSource(
@@ -778,8 +778,8 @@ final class DiagnosisTest extends TestCase
         // certifying one: the parent compiled without it.
         $abandoned = CompilationNode::abandoned(StaticSource::class);
 
-        $this->assertTrue($abandoned->abandoned);
-        $this->assertFalse($abandoned->failed);
+        $this->assertSame(CompilationState::Abandoned, $abandoned->state);
+        $this->assertFalse($abandoned->containsFailure);
     }
 
     /**
@@ -805,11 +805,11 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
-    public function an_evaluation_that_never_certified_refuses_to_run(): void
+    public function a_node_that_failed_has_no_evaluation_to_run(): void
     {
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('A node that failed to compile has no evaluation; this program was never certified.');
 
-        UnreachableEvaluation::refuse();
+        CompiledNode::failed()->evaluate(new Runtime());
     }
 }

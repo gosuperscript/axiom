@@ -40,10 +40,10 @@ use function Superscript\Monads\Result\Ok;
  * dispatches on a value again.
  *
  * Given an {@see ErrorRecovery}, compilation additionally treats the nodes
- * and definitions it names as already failed — they compile to
- * {@see ErrorType} without being visited, and an operation over one resolves
- * to ErrorType without a rule lookup — and reports every symbol it read,
- * whether or not the compilation as a whole succeeds. That is what lets
+ * and definitions it names as already failed — they compile to a failed node
+ * without being visited, and everything above one absorbs rather than judging
+ * it — and reports every symbol it read, whether or not the compilation as a
+ * whole succeeds. That is what lets
  * {@see RecoveringCompiler} compile the same expression again and reach past
  * a refusal it already reported; without one, nothing here behaves
  * differently.
@@ -130,17 +130,20 @@ final readonly class TypeInference
         }
 
         // The node, not the compiled source: the walk records what every node
-        // was typed as, the mark on a node the compiler gave up on included,
-        // and {@see CompiledSource::$returns} refuses to hand that out.
+        // was typed as, and a node that failed has no type to record — it is
+        // recorded as failed, keeping the children and operators the compiler
+        // got through before it gave up.
         $node = $compiled->node();
 
-        return Ok($node->forSource($source, CompilationNode::certified(
-            $source::class,
-            $node->returns,
-            $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
-            $recorder->children(),
-            $recorder->operators(),
-        ), $recorder->references()));
+        return Ok($node->forSource($source, $node->failed
+            ? CompilationNode::failed($source::class, $recorder->children(), $recorder->operators())
+            : CompilationNode::certified(
+                $source::class,
+                $node->returns,
+                $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
+                $recorder->children(),
+                $recorder->operators(),
+            ), $recorder->references()));
     }
 
     /**
@@ -200,20 +203,14 @@ final readonly class TypeInference
     }
 
     /**
-     * A node that did not compile: typed {@see ErrorType}, and still a
-     * compiled child so its siblings keep their positions — without one, the
-     * child after a failed child would claim the failed child's index and
-     * every path below it would name the wrong node.
+     * A node that did not compile, and still a compiled child so its siblings
+     * keep their positions — without one, the child after a failed child
+     * would claim the failed child's index and every path below it would name
+     * the wrong node.
      */
     private function failedNode(Source $source): CompiledNode
     {
-        return CompiledNode::failed()
-            ->forSource($source, CompilationNode::certified(
-                $source::class,
-                ErrorType::shared(),
-                // No compiler ran, so no extension owns the decisions here.
-                'unattributed',
-            ));
+        return CompiledNode::failed()->forSource($source, CompilationNode::failed($source::class));
     }
 
     /**
