@@ -101,8 +101,11 @@ final readonly class RecoveringCompiler
     {
         $definitions = $this->expression->definitions;
         $cycles = DefinitionGraph::cycles($definitions);
-        $recovery = new ErrorRecovery(DefinitionGraph::cyclicKeys($definitions));
         $diagnostics = [];
+
+        // A graph whose walk closes no cycle has no name lying on one, so
+        // the component pass is only worth running once there is damage.
+        $recovery = new ErrorRecovery($cycles === [] ? [] : DefinitionGraph::cyclicKeys($definitions));
 
         if ($cycles !== []) {
             $diagnostics[] = new Diagnostic(new TypeMismatch(self::NotWellFounded, $cycles));

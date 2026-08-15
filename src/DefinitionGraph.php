@@ -16,6 +16,18 @@ use Superscript\Axiom\Types\TypeMismatch;
  * must never terminate the cycle walk — an in-progress set inside
  * inference misses exactly the cycles a declaration short-circuit
  * truncates, self-cycles and mutual cycles alike.
+ *
+ * Both questions the graph answers read the same adjacency list, derived
+ * once by {@see edges()}: what counts as an edge is stated in one place, and
+ * the reflective walk over every definition's source is paid once per
+ * question rather than once per pass.
+ *
+ * The two passes over that list answer different questions and neither
+ * subsumes the other. {@see cyclicKeys()} asks which names lie on a cycle —
+ * a strongly-connected-component question. {@see cycles()} asks for one
+ * witness per cycle a depth-first walk closes, which is finer than "one per
+ * component": in `a → b, b → a, a → c, c → a` all four names form a single
+ * component, yet the walk closes two distinct cycles and names both.
  */
 final class DefinitionGraph
 {
@@ -30,7 +42,7 @@ final class DefinitionGraph
     {
         return array_map(
             static fn(array $cycle) => new TypeMismatch(sprintf('Cyclic symbol definition: %s.', implode(' → ', $cycle))),
-            self::detect($definitions),
+            self::detect(self::edges($definitions)),
         );
     }
 
@@ -69,7 +81,7 @@ final class DefinitionGraph
             }
         }
 
-        return array_values(array_filter($definitions->keys(), static fn(string $key) => isset($cyclic[$key])));
+        return array_values(array_filter(array_keys($edges), static fn(string $key) => isset($cyclic[$key])));
     }
 
     /**
@@ -190,15 +202,16 @@ final class DefinitionGraph
     /**
      * Every distinct cycle, as the names on it, closed: `['a', 'b', 'a']`.
      *
+     * @param array<string, list<string>> $edges
      * @return list<non-empty-list<string>>
      */
-    private static function detect(Definitions $definitions): array
+    private static function detect(array $edges): array
     {
         $cycles = [];
         $explored = [];
 
-        foreach ($definitions->keys() as $key) {
-            self::visit($key, $definitions, [], $explored, $cycles);
+        foreach (array_keys($edges) as $key) {
+            self::visit($key, $edges, [], $explored, $cycles);
         }
 
         return $cycles;
@@ -208,11 +221,12 @@ final class DefinitionGraph
      * Depth-first walk: a key already on the current path is a cycle; a key
      * fully explored on an earlier walk cannot start a new one.
      *
+     * @param array<string, list<string>> $edges
      * @param list<string> $path
      * @param array<string, true> $explored
      * @param list<non-empty-list<string>> $cycles
      */
-    private static function visit(string $key, Definitions $definitions, array $path, array &$explored, array &$cycles): void
+    private static function visit(string $key, array $edges, array $path, array &$explored, array &$cycles): void
     {
         $position = array_search($key, $path, strict: true);
 
@@ -226,17 +240,8 @@ final class DefinitionGraph
             return;
         }
 
-        // Keys come from the definitions themselves, so the source exists.
-        $source = $definitions->get($key)->unwrap();
-
-        foreach (UnboundSymbols::in($source) as $reference) {
-            $referenced = SymbolSource::key($reference->name, $reference->namespace);
-
-            // References that are not definitions are parameters — leaves of
-            // the graph, satisfied by bindings, never edges.
-            if ($definitions->has($referenced)) {
-                self::visit($referenced, $definitions, [...$path, $key], $explored, $cycles);
-            }
+        foreach ($edges[$key] as $referenced) {
+            self::visit($referenced, $edges, [...$path, $key], $explored, $cycles);
         }
 
         $explored[$key] = true;
