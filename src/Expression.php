@@ -61,9 +61,7 @@ final readonly class Expression
     ) {
         $this->dialect = $dialect ?? Dialect::core();
 
-        foreach ($this->declarations as $key => $type) {
-            ErrorType::refuseAuthored($type, sprintf('the declaration of [%s]', $key));
-        }
+        ErrorType::refuseAuthoredDeclarations($this->declarations);
 
         // Symbol lookup is exact-key only (no descent), so declared and
         // defined names can only collide literally: Symbol('turnover',

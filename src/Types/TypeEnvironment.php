@@ -57,9 +57,7 @@ final class TypeEnvironment
         private readonly Definitions $definitions = new Definitions(),
         private readonly array $declarations = [],
     ) {
-        foreach ($this->declarations as $key => $type) {
-            ErrorType::refuseAuthored($type, sprintf('the declaration of [%s]', $key));
-        }
+        ErrorType::refuseAuthoredDeclarations($this->declarations);
     }
 
     /**

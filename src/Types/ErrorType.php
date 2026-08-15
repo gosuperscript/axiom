@@ -135,6 +135,23 @@ final class ErrorType implements Type
     }
 
     /**
+     * Refuse every declaration in a set of them, naming the one at fault. A
+     * declaration is the type its symbol compiles to, and the two doors that
+     * take a whole set — {@see \Superscript\Axiom\Expression} and
+     * {@see TypeEnvironment} — ask exactly this question of it.
+     *
+     * @internal
+     *
+     * @param array<string, Type> $declarations
+     */
+    public static function refuseAuthoredDeclarations(array $declarations): void
+    {
+        foreach ($declarations as $key => $type) {
+            self::refuseAuthored($type, sprintf('the declaration of [%s]', $key));
+        }
+    }
+
+    /**
      * Refuse a type claimed as a compiled node's return. This one is not
      * walked into, because nothing can be hidden inside it: the mark cannot
      * be obtained, so a composite built around one cannot be built either.
