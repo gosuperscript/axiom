@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Analysis;
 
+use InvalidArgumentException;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\Type;
@@ -61,23 +62,20 @@ use function Superscript\Monads\Result\Ok;
 final readonly class Diagnosis
 {
     /**
-     * @param list<TypeMismatch> $diagnostics
+     * Construction goes through {@see certified()} and {@see refused()}, and
+     * is private so no third shape exists: the two states this can be in are
+     * "a program, nothing reported" and "at least one diagnostic, no
+     * program". A value holding neither would be a verdict with nothing
+     * behind it, and {@see program()} would have nothing to answer with.
+     *
+     * @param non-empty-list<TypeMismatch>|array{} $diagnostics
      * @param list<string> $references
      * @param ?Type $returns What the expression returns, or null when the root
      *                      node itself did not compile and so returns nothing.
-     *                      A type here is one compilation certified, which is
-     *                      not the same as an expression that is accepted: a
-     *                      fault under a node that recovers — a broken match
-     *                      arm, absorbed into the union of its siblings —
-     *                      leaves a real root type alongside the diagnostic
-     *                      that refuses the expression.
      * @param ?Program $program The program the compiler certified, or null
-     *                      when something refused. Null and a non-empty
-     *                      $diagnostics are the same verdict seen from two
-     *                      sides: the compiler mints a program exactly when
-     *                      the attempt that succeeded reported nothing.
+     *                      when something refused.
      */
-    public function __construct(
+    private function __construct(
         public array $diagnostics,
         public array $references,
         public ?Type $returns,
@@ -85,7 +83,44 @@ final readonly class Diagnosis
     ) {}
 
     /**
-     * The certified program, or everything that stands in its way.
+     * An expression the compiler certified: the program, and the type it
+     * returns read from the program itself rather than carried alongside it.
+     * Nothing refused, so there is nothing to report.
+     *
+     * @param list<string> $references
+     */
+    public static function certified(Program $program, array $references): self
+    {
+        return new self([], $references, $program->returns, $program);
+    }
+
+    /**
+     * An expression something refused: every refusal, and no program.
+     *
+     * A root type may still be present. A fault under a node that recovers —
+     * a broken match arm, absorbed into the union of its siblings — leaves a
+     * type the compilation genuinely certified beside the diagnostic that
+     * refuses the expression; null means the root itself did not compile.
+     *
+     * @param non-empty-list<TypeMismatch> $diagnostics
+     * @param list<string> $references
+     */
+    public static function refused(array $diagnostics, array $references, ?Type $returns): self
+    {
+        if ($diagnostics === []) {
+            // Checked here rather than asserted: production runs with
+            // assertions compiled out, and this is the invariant program()
+            // answers with an Err on. Without it a caller reads Err([]) from
+            // a return type that promises at least one refusal.
+            throw new InvalidArgumentException('A diagnosis without a program reports what stands in the way of one, and this one reports nothing. Certify it with Diagnosis::certified() instead.');
+        }
+
+        return new self($diagnostics, $references, $returns, null);
+    }
+
+    /**
+     * The certified program, or everything that stands in its way. The two
+     * are exclusive by construction, so this reads which one it holds.
      *
      * @return Result<Program, non-empty-list<TypeMismatch>>
      */
@@ -95,10 +130,9 @@ final readonly class Diagnosis
             return Ok($this->program);
         }
 
-        // The compiler mints a program exactly when nothing refused, so a
-        // missing program means at least one diagnostic explains it.
-        assert($this->diagnostics !== []);
+        /** @var non-empty-list<TypeMismatch> */
+        $diagnostics = $this->diagnostics;
 
-        return Err($this->diagnostics);
+        return Err($diagnostics);
     }
 }

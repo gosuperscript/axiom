@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests\Analysis;
 
+use Closure;
+use InvalidArgumentException;
 use LogicException;
+use ReflectionFunction;
+use ReflectionProperty;
 use stdClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use ReflectionMethod;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\Diagnosis;
@@ -153,6 +158,43 @@ final class AbandoningExtension extends Extension
         }
 
         return $compilation->child($source->kept, 'kept');
+    }
+}
+
+/**
+ * A host source whose compiler keeps the compilation capability it was
+ * handed, so a test can ask what state the compiler behind it was carrying.
+ */
+final readonly class CapturingSource implements Source {}
+
+/** @internal The dialect contribution that compiles a {@see CapturingSource}. */
+final class CapturingExtension extends Extension
+{
+    public ?SourceCompilation $captured = null;
+
+    public function sourceCompilers(): array
+    {
+        return [CapturingSource::class => $this->compileCapturing(...)];
+    }
+
+    /** The compiler that ran this compilation, reached through the door it compiles children with. */
+    public function compiler(): TypeInference
+    {
+        $compilation = $this->captured ?? throw new LogicException('Nothing was compiled.');
+        $door = new ReflectionProperty(SourceCompilation::class, 'compileNode')->getValue($compilation);
+
+        assert($door instanceof Closure);
+        $compiler = new ReflectionFunction($door)->getClosureThis();
+        assert($compiler instanceof TypeInference);
+
+        return $compiler;
+    }
+
+    private function compileCapturing(CapturingSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        $this->captured = $compilation;
+
+        return $compilation->produces(new NumberType(), static fn(): int => 1);
     }
 }
 
@@ -726,6 +768,74 @@ final class DiagnosisTest extends TestCase
 
         $this->assertTrue($broken->program()->isErr());
         $this->assertSame($broken->diagnostics, $broken->program()->unwrapErr());
+    }
+
+
+    /**
+     * The two shapes a diagnosis comes in, and the only two ways to build
+     * one. Construction is private, so nothing can assemble a verdict with
+     * nothing behind it — a missing program and an empty diagnostics list,
+     * which {@see Diagnosis::program()} would answer with `Err([])` against
+     * a return type promising at least one refusal.
+     */
+    #[Test]
+    public function no_construction_path_reports_nothing_without_a_program(): void
+    {
+        $this->assertTrue(new ReflectionMethod(Diagnosis::class, '__construct')->isPrivate());
+
+        // A real throw, not an assert(): production runs with assertions
+        // compiled out, and this invariant holds there too.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('reports what stands in the way of one, and this one reports nothing');
+
+        Diagnosis::refused([], [], new NumberType());
+    }
+
+    #[Test]
+    public function a_certified_diagnosis_reads_its_type_from_the_program(): void
+    {
+        // Nothing carries the root type alongside the program: the program
+        // already answers for it, and two copies could disagree.
+        $program = new Expression(new StaticSource(1))->compile()->unwrap();
+        $diagnosis = Diagnosis::certified($program, ['turnover']);
+
+        $this->assertSame([], $diagnosis->diagnostics);
+        $this->assertSame(['turnover'], $diagnosis->references);
+        $this->assertSame($program->returns, $diagnosis->returns);
+        $this->assertSame($program, $diagnosis->program()->unwrap());
+    }
+
+    #[Test]
+    public function a_refused_diagnosis_never_carries_a_program(): void
+    {
+        // A root that recovered exposes its real type beside the refusal —
+        // and still no program, because the expression is refused.
+        $refused = Diagnosis::refused([new TypeMismatch('Refused.')], [], new NumberType());
+
+        $this->assertInstanceOf(NumberType::class, $refused->returns);
+        $this->assertTrue($refused->program()->isErr());
+        $this->assertCount(1, $refused->program()->unwrapErr());
+    }
+
+    /**
+     * What certification does not pay for. Recovery state is a diagnosis's
+     * own: an ordinary compilation builds none, so it carries no quarantine
+     * to consult at every node and no reference set to accumulate into
+     * across attempts it never makes.
+     */
+    #[Test]
+    public function an_ordinary_compilation_carries_no_recovery_state(): void
+    {
+        $extension = new CapturingExtension();
+        $expression = new Expression(new CapturingSource(), dialect: Dialect::core()->with($extension));
+
+        $expression->compile()->unwrap();
+        $this->assertNull(new ReflectionProperty(TypeInference::class, 'recovery')->getValue($extension->compiler()));
+
+        // The same walk under diagnose() carries one, which is the whole of
+        // the difference between the two.
+        $expression->diagnose();
+        $this->assertInstanceOf(ErrorRecovery::class, new ReflectionProperty(TypeInference::class, 'recovery')->getValue($extension->compiler()));
     }
 
     #[Test]

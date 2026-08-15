@@ -119,11 +119,14 @@ final readonly class RecoveringCompiler
 
                 // A root the compiler gave up on has no type at all, so the
                 // diagnosis reports the absence.
-                return new Diagnosis(
+                if ($diagnostics === []) {
+                    return Diagnosis::certified($this->program($root), $recovery->references());
+                }
+
+                return Diagnosis::refused(
                     $diagnostics,
                     $recovery->references(),
                     $root->failed ? null : $root->returns,
-                    $diagnostics === [] ? $this->program($root) : null,
                 );
             }
 
