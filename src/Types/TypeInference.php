@@ -6,9 +6,12 @@ namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
+use Superscript\Axiom\Analysis\ErrorRecovery;
+use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
@@ -35,6 +38,15 @@ use function Superscript\Monads\Result\Ok;
  * Operators resolve through the dialect's composed stacks at compile time;
  * the resolutions are bound into the nodes and the compiled program never
  * dispatches on a value again.
+ *
+ * Given an {@see ErrorRecovery}, compilation additionally treats the nodes
+ * and definitions it names as already failed — they compile to a failed node
+ * without being visited, and everything above one absorbs rather than judging
+ * it — and reports every symbol it read, whether or not the compilation as a
+ * whole succeeds. That is what lets
+ * {@see RecoveringCompiler} compile the same expression again and reach past
+ * a refusal it already reported; without one, nothing here behaves
+ * differently.
  */
 final readonly class TypeInference
 {
@@ -57,6 +69,7 @@ final readonly class TypeInference
         array $sourceCompilers,
         array $sourceCompilerExtensions = [],
         ?OpaqueFieldRegistry $opaqueFields = null,
+        private ?ErrorRecovery $recovery = null,
     ) {
         $this->sourceCompilers = $sourceCompilers;
         $this->sourceCompilerExtensions = $sourceCompilerExtensions;
@@ -69,10 +82,20 @@ final readonly class TypeInference
      *                     refusal made here is stamped with it, so a failed
      *                     compile names the node that failed in the same terms
      *                     a successful one names the nodes that passed.
+     * @param ?CompilationRecorder $parent The recorder of the node this source
+     *                     compiles under. Reads travel up it: a source that
+     *                     compiles hands its reads to the parent as it
+     *                     finishes, and a source that refuses hands up what it
+     *                     had read before it did, so the names a broken region
+     *                     touched survive it in the order they were read.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function compile(Source $source, TypeEnvironment $environment, string $path = '$'): Result
+    public function compile(Source $source, TypeEnvironment $environment, string $path = '$', ?CompilationRecorder $parent = null): Result
     {
+        if ($this->recovery?->isQuarantined($path) === true) {
+            return Ok($this->failedNode($source));
+        }
+
         $compiler = $this->sourceCompilers[$source::class] ?? null;
 
         if ($compiler === null) {
@@ -82,8 +105,9 @@ final readonly class TypeInference
             ), path: $path));
         }
 
+        $recorder = new CompilationRecorder($path);
+
         try {
-            $recorder = new CompilationRecorder($path);
             $compiled = $compiler($source, $this->compilation($environment, $source, $recorder));
         } catch (CompilationAborted $aborted) {
             // The one place a node's refusal becomes a returned error, whoever
@@ -91,16 +115,42 @@ final readonly class TypeInference
             // unbound symbol, a failed relation. Locating it here locates all
             // of them, and at() keeps an already-located refusal from a child
             // pointing at the child.
+            //
+            // Carrying up what the node read before it refused is error
+            // recovery's alone: recovery is what compiles on past a refusal
+            // and reports the reads of a broken region, so it is the only
+            // compilation in which they are read again. Without it a refusal
+            // aborts every compilation above it and the tree being recorded
+            // is discarded, so recording into it is work nobody collects.
+            if ($this->recovery !== null && $parent !== null) {
+                $parent->recordReferences($recorder->references());
+            }
+
             return Err($aborted->mismatch->at($path));
+        } catch (CompilationAbsorbed) {
+            // A judgment with no subject: a child of this source already
+            // failed and was already reported, so this source inherits the
+            // failure instead of refusing over a placeholder type. What it
+            // compiled and read before the judgment is kept, so the reads
+            // survive and the node still describes what it got through.
+            $compiled = new CompiledSource(CompiledNode::failed());
         }
 
-        return Ok($compiled->node()->forSource($source, new CompilationNode(
-            $source::class,
-            $compiled->returns,
-            $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
-            $recorder->children(),
-            $recorder->operators(),
-        ), $recorder->references()));
+        // The node, not the compiled source: the walk records what every node
+        // was typed as, and a node that failed has no type to record — it is
+        // recorded as failed, keeping the children and operators the compiler
+        // got through before it gave up.
+        $node = $compiled->node();
+
+        return Ok($node->forSource($source, $node->failed
+            ? CompilationNode::failed($source::class, $recorder->children(), $recorder->operators())
+            : CompilationNode::certified(
+                $source::class,
+                $node->returns,
+                $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
+                $recorder->children(),
+                $recorder->operators(),
+            ), $recorder->references()));
     }
 
     /**
@@ -110,11 +160,10 @@ final readonly class TypeInference
     private function compilation(TypeEnvironment $environment, Source $owner, CompilationRecorder $recorder): SourceCompilation
     {
         return new SourceCompilation(
-            fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
-            fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))
-                ->resolve($operator, $left, $right),
+            fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
+            fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
+            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
@@ -134,7 +183,7 @@ final readonly class TypeInference
      *                     success path already does.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path): Result
+    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path, CompilationRecorder $reads): Result
     {
         if (!array_any(
             UnboundSymbols::in($owner),
@@ -147,7 +196,28 @@ final readonly class TypeInference
             )));
         }
 
-        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path);
+        $key = SymbolSource::key($symbol->name, $symbol->namespace);
+
+        // A definition on a cycle has already been reported as a property of
+        // the graph, and descending into one would not terminate.
+        if ($this->recovery?->isPoisoned($key) === true) {
+            $reads->recordReferences([$key]);
+
+            return Ok($this->failedNode($symbol));
+        }
+
+        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $reads);
+    }
+
+    /**
+     * A node that did not compile, and still a compiled child so its siblings
+     * keep their positions — without one, the child after a failed child
+     * would claim the failed child's index and every path below it would name
+     * the wrong node.
+     */
+    private function failedNode(Source $source): CompiledNode
+    {
+        return CompiledNode::failed()->forSource($source, CompilationNode::failed($source::class));
     }
 
     /**

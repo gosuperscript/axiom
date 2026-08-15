@@ -34,6 +34,12 @@ final readonly class MatchExpressionCompiler
      * The type of a match is the union of its arm types. Exhaustiveness is
      * mandatory: unprovable coverage is a compile error.
      *
+     * Both judgments are made over the parts that compiled: an arm that
+     * failed is left out of the union, and a subject that failed is not put
+     * to the coverage question at all. That keeps one fault to one
+     * diagnostic — the match reports what is wrong with the match — and the
+     * failure below is answered for where a type stops being a claim, by
+     * {@see \Superscript\Axiom\Program}'s certification of the whole tree.
      */
     public static function compile(MatchExpression $source, SourceCompilation $compilation): CompiledSource
     {
@@ -65,11 +71,22 @@ final readonly class MatchExpressionCompiler
                 fn() => $compilation->child($arm->expression, "arm.{$index}.expression"),
             );
 
-            $armTypes[] = $body->returns;
+            // An arm that did not compile contributes no type. The match is
+            // still typed, from the arms that did — an honest lower bound on
+            // what it can produce — and the broken arm is answered for by
+            // certification, which reads the whole tree and not the root
+            // type.
+            if (!$body->failed()) {
+                $armTypes[] = $body->returns;
+            }
+
             $arms[] = [$pattern, $body];
         }
 
-        if (!$wildcard && !self::covers($subject->returns->shape(), $literals)) {
+        // A subject that did not compile promises no values, so any set of
+        // patterns covers it and there is no exhaustiveness to judge;
+        // refusing here would blame this match for the fault below it.
+        if (!$wildcard && !$subject->failed() && !self::covers($subject->returns->shape(), $literals)) {
             $compilation->reject(new TypeMismatch(sprintf(
                 'This match over %s may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.',
                 TypeDescriber::describe($subject->returns),

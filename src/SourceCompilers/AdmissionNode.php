@@ -25,28 +25,38 @@ final readonly class AdmissionNode
      * Evaluate the inner node, convert present values through the bridge,
      * guard absence, and normalize the admitted value.
      *
+     * A bridge claims $type over the value the inner node produces, and a node
+     * that did not compile produces none — so it is built through
+     * {@see CompiledSource::claiming()} like every other door that claims a
+     * type, and inherits the failure instead of presenting the claim over it.
+     * Ascription never reaches here with a failed inner node, because its
+     * overlap judgment absorbs first; coercion makes no type judgment at all,
+     * by design, so this is its only door.
+     *
      * @param Closure(mixed, SourceEvaluation): Result<Option<mixed>, \Throwable> $convert
      */
     public static function from(CompiledSource $inner, Type $type, Closure $convert, string $missing, string $label): CompiledSource
     {
-        $optional = $type->shape() instanceof OptionShape;
-        $missing = sprintf($missing, TypeDescriber::describe($type), TypeDescriber::describe(new OptionType($type)));
+        return CompiledSource::claiming([$inner], static function () use ($inner, $type, $convert, $missing, $label): CompiledSource {
+            $optional = $type->shape() instanceof OptionShape;
+            $missing = sprintf($missing, TypeDescriber::describe($type), TypeDescriber::describe(new OptionType($type)));
 
-        return CompiledSource::custom($type, static function (SourceEvaluation $evaluation) use ($inner, $convert, $optional, $missing, $label) {
-            try {
-                $value = $evaluation->value($inner);
+            return CompiledSource::custom($type, static function (SourceEvaluation $evaluation) use ($inner, $convert, $optional, $missing, $label) {
+                try {
+                    $value = $evaluation->value($inner);
 
-                if ($value === null) {
-                    return $optional ? null : Err(new RuntimeException($missing));
+                    if ($value === null) {
+                        return $optional ? null : Err(new RuntimeException($missing));
+                    }
+
+                    return $convert($value, $evaluation)
+                        ->andThen(fn(Option $converted) => $converted->isNone() && !$optional
+                            ? Err(new RuntimeException($missing))
+                            : Ok($converted->unwrapOr(null)));
+                } finally {
+                    $evaluation->annotate('label', $label);
                 }
-
-                return $convert($value, $evaluation)
-                    ->andThen(fn(Option $converted) => $converted->isNone() && !$optional
-                        ? Err(new RuntimeException($missing))
-                        : Ok($converted->unwrapOr(null)));
-            } finally {
-                $evaluation->annotate('label', $label);
-            }
+            });
         });
     }
 }

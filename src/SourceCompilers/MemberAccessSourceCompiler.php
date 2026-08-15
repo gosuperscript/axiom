@@ -43,7 +43,8 @@ final readonly class MemberAccessSourceCompiler
     public static function compile(MemberAccessSource $source, SourceCompilation $compilation): CompiledSource
     {
         $object = $compilation->child($source->object, 'object');
-        $access = self::resolveAccess($object->returns->shape(), $source->property, $compilation);
+
+        $access = self::resolveAccess($compilation->shapeOf($object), $source->property, $compilation);
 
         if ($access->isErr()) {
             $compilation->reject($access->unwrapErr());

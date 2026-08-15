@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Analysis\OperatorSelection;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
 
 /**
@@ -48,7 +53,7 @@ final readonly class SourceCompilation
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
-        $node = $this->require(($this->compileNode)($source, $this->childPath()));
+        $node = $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role);
 
         $this->recorder?->recordReferences($node->references);
 
@@ -77,7 +82,12 @@ final readonly class SourceCompilation
         return new CompiledSources($sources);
     }
 
-    /** Bind one binary operation once from certified operand types. */
+    /**
+     * Bind one binary operation once from certified operand types. Every
+     * operand type a compiler can hold is one {@see typeOf()} answered with,
+     * and that door absorbs a failed child before answering — so an operand
+     * here is certified by construction and there is nothing to guard.
+     */
     public function infix(Type $left, string $operator, Type $right): BoundOperation
     {
         $resolved = $this->require(($this->compileInfix)($left, $operator, $right));
@@ -86,7 +96,7 @@ final readonly class SourceCompilation
         return new BoundOperation($resolved);
     }
 
-    /** Bind one unary operation once from a certified operand type. */
+    /** Bind one unary operation once from a certified operand type, which by {@see infix()}'s reasoning is the only kind there is. */
     public function prefix(string $operator, Type $operand): BoundOperation
     {
         $resolved = $this->require(($this->compilePrefix)($operator, $operand));
@@ -98,7 +108,7 @@ final readonly class SourceCompilation
     /** Compile a persisted symbol child in the current type environment. */
     public function symbol(SymbolSource $symbol): CompiledSource
     {
-        $node = $this->require(($this->compileSymbol)($symbol, $this->childPath()));
+        $node = $this->compiled(($this->compileSymbol)($symbol, $this->childPath()), $symbol, 'definition');
         $this->recorder?->recordReferences($node->references);
         $compilation = $node->compilation();
 
@@ -107,6 +117,74 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * Could a value inhabit both of these types? The overlap relation, asked
+     * through the capability so a compiler has one place to ask every
+     * judgment. Both operands are types {@see typeOf()} answered with, and a
+     * failed child is absorbed there rather than typed, so the question is
+     * only ever put about types compilation certified.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    public function overlaps(Type $left, Type $right): Result
+    {
+        return TypeRelations::overlaps($left, $right);
+    }
+
+    /**
+     * The certified type of a compiled child, for a compiler that needs the
+     * type itself — to bind an operation from, to claim over, to name in a
+     * message. A child that did not compile has no type, so reading it is
+     * absorption: this compilation gives up rather than judging over an
+     * answer that does not exist. {@see CompiledSource::$returns} refuses
+     * outright, and this is how a
+     * compiler asks for a child's type without first asking whether there is
+     * one. It is the only door through which a compiler comes to hold a
+     * child's type at all, which is what makes the judgments below safe
+     * without guards of their own.
+     */
+    public function typeOf(CompiledSource $child): Type
+    {
+        if ($child->failed()) {
+            $this->absorb();
+        }
+
+        // The node, not the property: the question the property asks before
+        // it answers has just been asked here, and this runs once per operand
+        // of every operation in every program.
+        return $child->node()->returns;
+    }
+
+    /**
+     * The structural projection of a compiled child — what it promises, for a
+     * compiler about to certify something against it (a field, a member, a
+     * case). Absorbs for the same reason {@see overlaps()} does: a child that
+     * did not compile promises nothing, and refusing on that would blame this
+     * source for the fault below it.
+     */
+    public function shapeOf(CompiledSource $child): Shape
+    {
+        return $this->typeOf($child)->shape();
+    }
+
+    /**
+     * Give up on this source without refusing: a child of it already failed
+     * ({@see CompiledSource::failed()}), so this source compiles to a failed
+     * source too and makes no refusal of its own.
+     *
+     * Absorbing rather than refusing is what keeps one fault to one
+     * diagnostic — a refusal made over a child that already failed would
+     * report the fault below a second time, under a second message, at a
+     * second node.
+     * The judgments this capability offers absorb on their own, so a compiler
+     * that judges through them never has to remember; call this directly only
+     * for a judgment of your own that it cannot make for you.
+     */
+    public function absorb(): never
+    {
+        throw new CompilationAbsorbed();
     }
 
     /** Infer the literal-first type of an embedded PHP value. */
@@ -173,6 +251,25 @@ final readonly class SourceCompilation
     }
 
     /**
+     * The node a child compilation produced, or the refusal it made — after
+     * marking the child's position either way. Recording a child that refused
+     * is what keeps an index naming one child: without it, the next sibling
+     * would take the index of a child that refused, and take a different one
+     * in an attempt where that child is set aside instead.
+     *
+     * @param Result<CompiledNode, TypeMismatch> $result
+     */
+    private function compiled(Result $result, Source $source, ?string $role): CompiledNode
+    {
+        if ($result->isErr()) {
+            $this->recorder?->child(CompilationNode::abandoned($source::class), $role);
+            $this->reject($result->unwrapErr());
+        }
+
+        return $result->unwrap();
+    }
+
+    /**
      * @template T
      * @param Result<T, TypeMismatch> $result
      * @return T
@@ -209,9 +306,9 @@ final readonly class SourceCompilation
             $operator,
             $operands,
             $resolved->returns,
-            $resolved->provenance ?? new \Superscript\Axiom\Analysis\OperatorRuleProvenance(
+            $resolved->provenance ?? new OperatorRuleProvenance(
                 'unattributed',
-                \Superscript\Axiom\Operators\ResolvedOperation::class,
+                ResolvedOperation::class,
                 null,
             ),
         ));

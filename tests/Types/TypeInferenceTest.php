@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Extension;
@@ -311,6 +312,31 @@ final class TypeInferenceTest extends TestCase
         $result = self::inference()->infer(new StaticSource(fopen('php://memory', 'r')), self::env());
 
         $this->assertStringContainsString('No literal type exists for a value of type', $result->unwrapErr()->message);
+    }
+
+    /**
+     * A refusal hands the names it read up to the node above it so error
+     * recovery can report what a broken region depends on. Plain compilation
+     * has no reader for them: the refusal aborts every compilation above it
+     * and the tree being recorded is discarded with them in it.
+     */
+    #[Test]
+    public function a_refusal_without_recovery_hands_no_reads_to_the_node_above(): void
+    {
+        $parent = new CompilationRecorder();
+
+        // The symbol resolves and is recorded as read, and then the operation
+        // over it refuses — so there is something to hand up at the moment the
+        // node gives up.
+        $result = self::inference()->compile(
+            new InfixExpression(new SymbolSource('turnover'), '+', new StaticSource('text')),
+            self::env(declarations: ['turnover' => new NumberType()]),
+            '$.children[0].node',
+            $parent,
+        );
+
+        $this->assertTrue($result->isErr());
+        $this->assertSame([], $parent->references());
     }
 
     #[Test]

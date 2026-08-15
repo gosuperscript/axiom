@@ -172,12 +172,12 @@ final class ProgramTest extends TestCase
     public function program_preserves_attached_compilation_analysis_and_falls_back_only_for_bare_nodes(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',
         );
-        $attached = (new CompiledNode(
+        $attached = (CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
         ))->forSource($source, $analysis);
@@ -185,7 +185,7 @@ final class ProgramTest extends TestCase
         $this->assertSame(StaticSource::class, (new Program($attached))->analysis->root->source);
         $this->assertSame(
             CompiledNode::class,
-            (new Program(new CompiledNode(
+            (new Program(CompiledNode::returning(
                 new NumberType(),
                 fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
             )))->analysis->root->source,

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
+use LogicException;
 use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\CompilationNode;
+use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Execution\Observer;
+use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -66,16 +69,81 @@ final readonly class Program
         private array $declarations = [],
         private Boundary $boundary = Boundary::Coerce,
     ) {
+        // Certification comes first: past it every node has a type to read,
+        // and before it the root may be one that has none.
+        $compilation = $node->compilation() ?? ($node->failed
+            ? CompilationNode::failed(CompiledNode::class)
+            : CompilationNode::certified(CompiledNode::class, $node->returns, 'unattributed'));
+
+        self::certify($compilation);
+
         $this->returns = $node->returns;
         $this->references = $node->references;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
-        $compilation = $node->compilation() ?? new CompilationNode(
-            CompiledNode::class,
-            $node->returns,
-            'unattributed',
-        );
+        $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
+    }
 
-        $this->analysis = new CompilationAnalysis($compilation, $this->declarations, $this->boundary);
+    /**
+     * The one place a program is minted, and so the one place to hold the
+     * line: a node error-tolerant compilation gave up on ({@see Diagnosis})
+     * is in the {@see CompilationState::Failed} state, and a program carrying
+     * one anywhere would present a checked face over an unchecked subtree.
+     * The whole tree is answered for, not just the root — a failed match arm
+     * is absorbed into the union of its siblings, so a broken node can sit
+     * under a perfectly ordinary type.
+     *
+     * It is the state that is read, never a type: a type is host data this
+     * library cannot see inside, and any question asked of one would be a
+     * question a host could answer wrongly. The state is the compiler's own
+     * record of what it did.
+     *
+     * The answer costs one boolean read: {@see CompilationNode::$containsFailure}
+     * carries it for a whole subtree, so a sound program — every program
+     * `compile()` mints — pays for the guard once, not once per node.
+     * {@see locateFailure()} runs only to name the offending node, on the
+     * path where no program is minted anyway.
+     *
+     * The root additionally answers for its own state, because one state
+     * carries no failure and is still nothing to run: an
+     * {@see CompilationState::Abandoned} node is a position a compiler
+     * declined to fill, with no type and no evaluation under it. A compiler
+     * abandons a child and never a root, so this is not something compilation
+     * reaches — it is a caller building a {@see CompiledNode} around a
+     * position instead of a compilation. Only the root is asked: an abandoned
+     * child is ordinary, and the parent that abandoned it compiled without it.
+     */
+    private static function certify(CompilationNode $root): void
+    {
+        if ($root->state === CompilationState::Abandoned) {
+            throw new LogicException('The root of this compilation was abandoned: it is a position no compiler filled, with no type and no evaluation, so a Program cannot be certified from it.');
+        }
+
+        self::locateFailure($root, '$');
+    }
+
+    /**
+     * Name the failed node under a root that carries a failure — the first
+     * one the walk reaches, in the same `$`-rooted path language the analysis
+     * and every refusal use.
+     */
+    private static function locateFailure(CompilationNode $node, string $path): void
+    {
+        if (!$node->containsFailure) {
+            return;
+        }
+
+        if ($node->state === CompilationState::Failed) {
+            throw new LogicException(sprintf(
+                'The node at [%s] failed to compile; a Program cannot be certified from it. Read Expression::diagnose() for what refused.',
+                $path,
+            ));
+        }
+
+        // A node carrying a failure that is not itself failed has a failed
+        // child, so this loop always reaches one and throws.
+        foreach ($node->children as $index => $child) {
+            self::locateFailure($child->node, CompilationNode::childPath($path, $index));
+        }
     }
 
     /**

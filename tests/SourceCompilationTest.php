@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Tests;
 
 use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -15,6 +16,7 @@ use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\CompiledSources;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
@@ -25,6 +27,7 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\SourceCompilers\AdmissionNode;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -33,6 +36,7 @@ use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
@@ -106,6 +110,7 @@ final readonly class HostLiteralSource implements Source
 #[CoversClass(SourceEvaluation::class)]
 #[CoversClass(BoundOperation::class)]
 #[CoversClass(CompilationAborted::class)]
+#[CoversClass(CompilationAbsorbed::class)]
 #[CoversClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[CoversClass(\Superscript\Axiom\Analysis\CompilationRecorder::class)]
@@ -114,6 +119,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
 #[UsesClass(Extension::class)]
@@ -147,6 +153,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\Intersects::class)]
 #[UsesClass(\Superscript\Axiom\Operators\Operator::class)]
 #[UsesClass(ResolvedOperation::class)]
+#[UsesClass(AdmissionNode::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRule::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
@@ -194,6 +201,117 @@ final class SourceCompilationTest extends TestCase
         );
     }
 
+    /**
+     * Every judgment a compiler puts through the capability, over a child
+     * that failed. None of them is guarded: each takes its operands from
+     * {@see SourceCompilation::typeOf()}, and a child that failed has no type
+     * for that door to answer with, so it absorbs there and the question is
+     * never asked. A compiler that judges through the capability therefore
+     * gets absorption as machinery rather than as something to remember.
+     *
+     * @return iterable<string, array{Closure(SourceCompilation, CompiledSource): mixed}>
+     */
+    public static function judgmentsOverAChildThatFailed(): iterable
+    {
+        $number = new NumberType();
+
+        yield 'typeOf' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->typeOf($failed)];
+        yield 'shapeOf' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->shapeOf($failed)];
+        yield 'overlaps left' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->overlaps($c->typeOf($failed), $number)];
+        yield 'overlaps right' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->overlaps($number, $c->typeOf($failed))];
+        yield 'infix left' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->infix($c->typeOf($failed), '+', $number)];
+        yield 'infix right' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->infix($number, '+', $c->typeOf($failed))];
+        yield 'prefix' => [static fn(SourceCompilation $c, CompiledSource $failed): mixed => $c->prefix('-', $c->typeOf($failed))];
+    }
+
+    #[Test]
+    #[DataProvider('judgmentsOverAChildThatFailed')]
+    public function every_judgment_absorbs_a_child_that_failed(Closure $judge): void
+    {
+        $this->expectException(CompilationAbsorbed::class);
+
+        $judge(self::compilation(), new CompiledSource(CompiledNode::failed()));
+    }
+
+    #[Test]
+    public function the_same_judgments_answer_for_a_child_that_compiled(): void
+    {
+        // Absorption is about the child, not about the question: over a child
+        // that compiled every one of them answers as it always did.
+        $compilation = self::compilation();
+        $sound = CompiledSource::constant(new NumberType(), 1);
+
+        $this->assertInstanceOf(NumberType::class, $compilation->typeOf($sound));
+        $this->assertInstanceOf(NumberShape::class, $compilation->shapeOf($sound));
+        $this->assertTrue($compilation->overlaps($compilation->typeOf($sound), new NumberType())->unwrap());
+    }
+
+    /**
+     * Every door that claims a type, over a child that failed. A claim is
+     * pinned to a value the child produces and a child that did not compile
+     * produces none, so each answers a failed source instead of the claim.
+     *
+     * @return iterable<string, array{Closure(CompiledSource): CompiledSource}>
+     */
+    public static function doorsThatClaimAType(): iterable
+    {
+        $number = new NumberType();
+        $sound = CompiledSource::constant($number, 1);
+        $double = new BoundOperation(new ResolvedOperation($number, static fn(int $value) => $value * 2));
+        $sum = new BoundOperation(new ResolvedOperation($number, static fn(?int ...$values) => array_sum($values)));
+
+        yield 'mapPresent' => [static fn(CompiledSource $failed): CompiledSource => $failed->mapPresent($number, static fn() => 1)];
+        yield 'expectPresent then mapPresent' => [static fn(CompiledSource $failed): CompiledSource => $failed
+            ->expectPresent($number)
+            ->mapPresent($number, static fn() => 1)];
+        yield 'mapIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => $failed->mapIncludingAbsent($number, static fn() => 1)];
+        yield 'apply' => [static fn(CompiledSource $failed): CompiledSource => $failed->apply($double)];
+        yield 'sources mapPresent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed])
+            ->mapPresent($number, static fn() => 1)];
+        yield 'sources mapIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['broken' => $failed, 'sound' => $sound])
+            ->mapIncludingAbsent($number, static fn() => 1)];
+        yield 'sources applyIncludingAbsent' => [static fn(CompiledSource $failed): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed])
+            ->applyIncludingAbsent($sum)];
+        yield 'admission bridge' => [static fn(CompiledSource $failed): CompiledSource => AdmissionNode::from(
+            $failed,
+            $number,
+            static fn(mixed $value): Result => Ok(Some($value)),
+            'missing %s, or %s',
+            'coerce',
+        )];
+    }
+
+    #[Test]
+    #[DataProvider('doorsThatClaimAType')]
+    public function no_door_claims_a_type_over_a_child_that_failed(Closure $claim): void
+    {
+        $absorbed = $claim(new CompiledSource(CompiledNode::failed()));
+
+        // Asked, never read: failed() is the whole of what a door answers
+        // with, and there is no type behind it to read instead.
+        $this->assertTrue($absorbed->failed());
+        $this->assertTrue($absorbed->node()->failed);
+
+        // No type and no evaluation are one state, not two: a node with
+        // nothing to run cannot present something to check.
+        try {
+            $absorbed->node()->evaluate(new Runtime());
+            $this->fail('A node a door answered over a failed child must have no evaluation.');
+        } catch (\LogicException $refused) {
+            $this->assertStringContainsString('this program was never certified', $refused->getMessage());
+        }
+    }
+
+    #[Test]
+    public function a_compiler_can_absorb_a_judgment_of_its_own(): void
+    {
+        // The judgments above absorb for a compiler; one it makes itself —
+        // consulting a service, applying a rule of its own — absorbs here.
+        $this->expectException(CompilationAbsorbed::class);
+
+        self::compilation()->absorb();
+    }
+
     #[Test]
     public function opaque_field_resolves_to_null_without_a_resolver(): void
     {
@@ -216,7 +334,7 @@ final class SourceCompilationTest extends TestCase
     {
         $source = new StaticSource(1);
         $seen = null;
-        $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $compilation = self::compilation(function (Source $candidate) use (&$seen, $node): Result {
             $seen = $candidate;
 
@@ -231,7 +349,7 @@ final class SourceCompilationTest extends TestCase
     public function compile_all_preserves_order_and_accepts_an_empty_list(): void
     {
         $compilation = self::compilation(fn(StaticSource $source): Result => Ok(
-            new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
+            CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
         ));
 
         $compiled = $compilation->children([
@@ -257,7 +375,7 @@ final class SourceCompilationTest extends TestCase
 
             return $calls === 2
                 ? Err($refusal)
-                : Ok(new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))));
+                : Ok(CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))));
         });
 
         try {
@@ -357,7 +475,7 @@ final class SourceCompilationTest extends TestCase
     #[Test]
     public function symbol_delegates_the_owned_source(): void
     {
-        $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $seen = [];
         $compilation = self::compilation(
             compileSymbol: function (SymbolSource $symbol) use (&$seen, $node): Result {
@@ -377,12 +495,12 @@ final class SourceCompilationTest extends TestCase
     public function analyzed_children_and_definitions_are_recorded_with_their_roles(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(
+        $node = (CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => Ok(Some(1)),
             references: ['stale'],
@@ -410,12 +528,12 @@ final class SourceCompilationTest extends TestCase
     public function a_child_is_compiled_at_the_path_its_position_gives_it(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
+        $node = (CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
             ->forSource($source, $analysis);
         $paths = [];
         $record = function (string $path) use (&$paths, $node): Result {

@@ -6,15 +6,13 @@ namespace Superscript\Axiom;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Analysis\CompilationAnalysis;
+use Superscript\Axiom\Analysis\Diagnosis;
+use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
-use Superscript\Axiom\Types\TypeEnvironment;
-use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
-
-use function Superscript\Monads\Result\Err;
 
 /**
  * A complete description of a program: a {@see Source} tree, the
@@ -116,19 +114,20 @@ final readonly class Expression
      */
     public function compile(): Result
     {
-        $cycles = DefinitionGraph::cycles($this->definitions);
+        return new RecoveringCompiler($this)->compile();
+    }
 
-        if ($cycles !== []) {
-            return Err(new TypeMismatch(
-                'The definition graph is not well-founded; evaluation would recurse without terminating.',
-                $cycles,
-            ));
-        }
-
-        $environment = new TypeEnvironment($this->definitions, $this->declarations);
-
-        return $this->inference()->compile($this->source, $environment)
-            ->map(fn(CompiledNode $node) => new Program($node, $this->declarations, $this->boundary));
+    /**
+     * Compile for the sake of what compilation *learns*: every refusal in
+     * the expression rather than only the first, the symbols it reads even
+     * through the parts that refuse, and the certified {@see Program} when
+     * there is nothing to report. compile() is one attempt of this same
+     * walk, so its refusal is this diagnosis' first diagnostic. What the
+     * extra attempts can and cannot see is {@see Diagnosis}.
+     */
+    public function diagnose(): Diagnosis
+    {
+        return new RecoveringCompiler($this)->diagnose();
     }
 
     /**
@@ -160,18 +159,6 @@ final readonly class Expression
     {
         return $this->infer()->andThen(
             fn(Type $actual) => TypeRelations::isTypeAssignableTo($actual, $expected)->map(fn() => $actual),
-        );
-    }
-
-    private function inference(): TypeInference
-    {
-        return new TypeInference(
-            $this->dialect->operators(),
-            $this->dialect->unaryOperators(),
-            $this->dialect->literals(),
-            $this->dialect->sourceCompilers(),
-            $this->dialect->sourceCompilerExtensions(),
-            $this->dialect->opaqueFields(),
         );
     }
 

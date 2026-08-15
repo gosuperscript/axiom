@@ -13,8 +13,13 @@ final class CompilationRecorder
     /** @var list<OperatorSelection> */
     private array $operators = [];
 
-    /** @var array<string, string> */
-    private array $references = [];
+    /**
+     * Held only once something is read. Most nodes of most expressions read
+     * no symbol at all — every literal, every operator node — and a recorder
+     * is built for each of them, so the set is worth not building until
+     * there is a name to put in it.
+     */
+    private ?References $references = null;
 
     /** @param string $path Where the node being compiled sits in the source tree. */
     public function __construct(private readonly string $path = '$') {}
@@ -24,15 +29,20 @@ final class CompilationRecorder
      * recorded so far — the same counting {@see CompilationNode::toArray()}
      * does when it derives paths for a finished tree, so a path a failure
      * reports and a path the analysis reports for one node are the same
-     * string. A child that records no compilation advances neither count.
+     * string.
      *
-     * Compilation stops at the first failure, so a child that fails before it
-     * is recorded may safely claim the index it would have had: no sibling
-     * ever comes to claim it too.
+     * Every child compilation records, whether it produced a node or refused
+     * ({@see CompilationNode::abandoned()}), and that is the invariant paths
+     * rely on: an index names the same child in every attempt, so a
+     * quarantine entry written in one attempt still names the node that
+     * refused in the next. Were a refusing child to record nothing, the
+     * sibling after it would slide into its index in the attempts where it
+     * refuses and out of it in the attempts where it is set aside — and a
+     * path would name two different nodes.
      */
     public function childPath(): string
     {
-        return sprintf('%s.children[%d].node', $this->path, count($this->children));
+        return CompilationNode::childPath($this->path, count($this->children));
     }
 
     public function child(CompilationNode $node, ?string $role): void
@@ -48,9 +58,12 @@ final class CompilationRecorder
     /** @param list<string> $references */
     public function recordReferences(array $references): void
     {
-        foreach ($references as $reference) {
-            $this->references[$reference] = $reference;
+        if ($references === []) {
+            return;
         }
+
+        $this->references ??= new References();
+        $this->references->record($references);
     }
 
     /** @return list<CompilationChild> */
@@ -68,6 +81,6 @@ final class CompilationRecorder
     /** @return list<string> */
     public function references(): array
     {
-        return array_values($this->references);
+        return $this->references?->all() ?? [];
     }
 }

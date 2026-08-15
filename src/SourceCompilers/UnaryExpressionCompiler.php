@@ -20,7 +20,7 @@ final readonly class UnaryExpressionCompiler
     public static function compile(UnaryExpression $source, SourceCompilation $compilation): CompiledSource
     {
         $operand = $compilation->child($source->operand, 'operand');
-        $operation = $compilation->prefix($source->operator, $operand->returns);
+        $operation = $compilation->prefix($source->operator, $compilation->typeOf($operand));
 
         return $compilation->custom($operation->returns, static function (SourceEvaluation $evaluation) use ($operand, $operation, $source) {
             try {

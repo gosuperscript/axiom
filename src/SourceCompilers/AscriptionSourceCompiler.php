@@ -9,7 +9,6 @@ use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\TypeRelations;
 
 /** @internal Compiler for the core ascription bridge. */
 final readonly class AscriptionSourceCompiler
@@ -24,14 +23,16 @@ final readonly class AscriptionSourceCompiler
         // overlaps(Unknown, T) always holds, which is the admission this
         // bridge exists to provide.
         $inner = $compilation->child($source->source, 'source');
-        $overlap = TypeRelations::overlaps($inner->returns, $source->type);
+        $ascribed = $compilation->typeOf($inner);
+
+        $overlap = $compilation->overlaps($ascribed, $source->type);
 
         if ($overlap->isErr()) {
             $compilation->reject(new TypeMismatch(
                 sprintf(
                     'The claim that this is %s is false: the value is %s, and no value inhabits both.',
                     TypeDescriber::describe($source->type),
-                    TypeDescriber::describe($inner->returns),
+                    TypeDescriber::describe($ascribed),
                 ),
                 [$overlap->unwrapErr()],
             ));

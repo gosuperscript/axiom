@@ -98,6 +98,14 @@ The project requires **100% code coverage** for all new code. We use three types
    * Required Mutation Score Indicator (MSI): 100%
    * Ensures test quality and effectiveness
 
+Run all three with `zend.assertions=1` (PHP's development default; check with
+`php -i | grep zend.assertions`). `assert()` is how this codebase pins
+invariants a type cannot state, and `zend.assertions=-1` — the production
+default — compiles every one of them away: the invariants go unchecked, their
+lines leave the coverage report, and their mutants become unkillable. It is a
+system setting, so it comes from the ini file or `php -d`, never from
+`phpunit.xml` or `ini_set()`.
+
 ### Running All Tests
 
 ```bash
@@ -118,7 +126,16 @@ This runs all three test suites in sequence.
 
 1. **Functional Programming**
    * Use Result and Option monads for error handling
-   * Avoid exceptions for control flow
+   * Avoid exceptions for control flow. Compilation has exactly two sanctioned
+     internal exceptions — `CompilationAborted` (this source refuses, and says
+     why) and `CompilationAbsorbed` (a child of this source already failed, so
+     this one gives up without refusing). A source compiler sits at the top of
+     a deep call tree it does not control, so an outcome decided several
+     helpers down has to unwind to the walk; threading it back by hand through
+     every compiler in between, host compilers included, would make one
+     forgotten thread a certified type over an unchecked subtree. Both are
+     caught in `TypeInference::compile()` and never escape it, and
+     `Expression::compile()` returns a `Result`. Do not add a third.
    * Prefer immutability
 
 2. **Type Safety**

@@ -4,19 +4,70 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Analysis;
 
+use InvalidArgumentException;
 use JsonSerializable;
 use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Types\Type;
 
-/** The typed, serializable explanation of one successful compilation. */
+/**
+ * The typed, serializable explanation of one successful compilation. Its
+ * nodes come in the two kinds {@see CompilationNode} describes: compilations
+ * the compiler certified, and positions a compiler abandoned — which claim
+ * no type and no owning compiler, and hold nothing under them.
+ */
 final readonly class CompilationAnalysis implements JsonSerializable
 {
-    /** @param array<string, Type> $declarations */
-    public function __construct(
+    /**
+     * Construction goes through {@see certified()} and is private, so the
+     * only analysis that exists is one over a tree the compiler certified.
+     *
+     * @param array<string, Type> $declarations
+     */
+    private function __construct(
         public CompilationNode $root,
         public array $declarations,
         public Boundary $boundary,
     ) {}
+
+    /**
+     * The explanation of a compilation the compiler certified, root and all.
+     *
+     * Two roots are refused. Neither claims a type or an owning compiler, so
+     * an analysis holding one could not be rendered: {@see toArray()} would
+     * refuse partway through, on the path where an analysis is usually
+     * already being written to a log or a build artifact. The root is
+     * answered for here instead, where the caller still has somewhere to put
+     * the answer. They are different mistakes and say so.
+     *
+     * A **failed** root, or one with a failure anywhere beneath it: nothing
+     * was certified there. {@see CompilationNode::$containsFailure} answers
+     * for the whole subtree, so a failure absorbed under an ordinary type is
+     * caught with it.
+     *
+     * An **abandoned** root: a position a compiler declined to fill. It
+     * carries no failure — the parent that abandoned it compiled without it —
+     * so the failure question alone lets it through, and only its state
+     * catches it. Abandonment befalls a child and never a root, so an
+     * abandoned root is a caller handing over a position where a compilation
+     * belongs.
+     *
+     * @param array<string, Type> $declarations
+     */
+    public static function certified(CompilationNode $root, array $declarations, Boundary $boundary): self
+    {
+        // Checked rather than asserted: production runs with assertions
+        // compiled out, and these are the invariants every reader of an
+        // analysis relies on.
+        if ($root->state === CompilationState::Abandoned) {
+            throw new InvalidArgumentException('An analysis explains a compilation the compiler certified, and this root was abandoned: it is a position held so paths stay stable, claiming no type and no owning compiler for an analysis to report.');
+        }
+
+        if ($root->containsFailure) {
+            throw new InvalidArgumentException('An analysis explains a compilation the compiler certified, and something under this root failed to compile. Read Expression::diagnose() for what refused.');
+        }
+
+        return new self($root, $declarations, $boundary);
+    }
 
     /** @return list<LocatedOperatorSelection> */
     public function operators(): array
@@ -69,7 +120,7 @@ final readonly class CompilationAnalysis implements JsonSerializable
         }
 
         foreach ($node->children as $index => $child) {
-            $this->collectOperators($child->node, "{$path}.children[{$index}].node", $operators);
+            $this->collectOperators($child->node, CompilationNode::childPath($path, $index), $operators);
         }
     }
 }

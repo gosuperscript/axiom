@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Runtime;
@@ -23,6 +24,7 @@ use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 
 #[CoversClass(TypeEnvironment::class)]
+#[UsesClass(CompilationRecorder::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
@@ -287,5 +289,19 @@ final class TypeEnvironmentTest extends TestCase
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Unbound symbol [customer.ghost]', $result->unwrapErr()->message);
+    }
+
+    #[Test]
+    public function a_name_nothing_answers_for_is_still_a_read(): void
+    {
+        // Nothing resolves, so no node carries the name up — but the
+        // expression still depends on it, which is what a broken draft is
+        // asked about most.
+        $reads = new CompilationRecorder();
+
+        $result = new TypeEnvironment()->nodeOfSymbol('ghost', 'customer', self::compiler(), '$', $reads);
+
+        $this->assertTrue($result->isErr());
+        $this->assertSame(['customer.ghost'], $reads->references());
     }
 }
