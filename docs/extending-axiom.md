@@ -724,7 +724,9 @@ The outer message becomes a `TypeMismatch` whose cause is the original diagnosti
 
 During evaluation, return `Err($exception)` for an expected value-dependent failure that static types cannot rule out. Return a plain value for success. Let unexpected exceptions propagate: a thrown `TypeError`, service misconfiguration, or impossible branch is a defect, not a normal program result.
 
-One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back typed `ErrorType` — a node that already failed and was already reported. A judgment made over one has no honest answer, and a refusal built from it would report the fault below a second time, under a second message, at a second node. So no judgment is made over one: it is *absorbed*, and your source compiles to `ErrorType` too.
+One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back having failed — a node that already failed and was already reported. A judgment made over one has no honest answer, and a refusal built from it would report the fault below a second time, under a second message, at a second node. So no judgment is made over one: it is *absorbed*, and your source compiles to `ErrorType` too.
+
+Such a child has no type to give you, and says so: reading `$child->returns` on one throws a `LogicException`. The type it wears is the compiler's own mark for a node it gave up on, and a compiler holding one is how a failure nothing diagnosed gets claimed into a later, blameless expression. Ask `$child->failed()` when you want to know whether it compiled, and take the type through the capability when you want the type.
 
 Judge through the capability and absorption is machinery rather than something to remember. Every judgment `SourceCompilation` offers absorbs before it asks:
 
@@ -732,9 +734,10 @@ Judge through the capability and absorption is machinery rather than something t
 $inner = $compilation->child($source->source, 'source');
 
 // Each of these absorbs a failed child on its own; there is nothing to guard.
-$compilation->infix($inner->returns, '+', $other->returns);
-$compilation->overlaps($inner->returns, $source->type);
-$compilation->shapeOf($inner);
+$compilation->typeOf($inner);   // the child's certified type
+$compilation->shapeOf($inner);  // what the child promises
+$compilation->infix($compilation->typeOf($inner), '+', $compilation->typeOf($other));
+$compilation->overlaps($compilation->typeOf($inner), $source->type);
 ```
 
 The same holds for the combinators that *claim* a type rather than judge one. `mapPresent()`, `mapIncludingAbsent()` and `apply()` — and their `CompiledSources` counterparts — pin the type you name to a value the child produces, and a child that did not compile produces none. Over one they answer a failed source instead of your claim, so a broken subtree cannot end up wearing an ordinary type:
@@ -752,7 +755,7 @@ For a judgment of your own that the capability cannot make for you — you consu
 
 A refusal you make anyway counts as a fault of its own and is reported as a second diagnostic — right when your refusal stands on its own (a missing configuration, a rule about your source that the child's type has no bearing on), wrong when it is really the child's failure under a second message. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
 
-What you must not do is hand one back as a claim. `ErrorType` is the compiler's mark for a node it gave up on, and it means nothing away from the node it was minted for — so a type you claim through `produces()`, `custom()`, `constant()`, or declare on an operator rule, is refused where you claim it if it is or contains one. That matters most for a claim kept between compilations: a compiler that caches a return type it computed once, having computed it from a child that failed, would otherwise put a failure into a later expression with nothing wrong with it, which `diagnose()` reports nothing about and certification then refuses. Absorb over a failed child instead; that is what it is for.
+What you must not do is hand one back as a claim, and mostly you cannot: the only `ErrorType` a host is ever given whole is `Diagnosis::$returns`, where an expression whose root failed says so. A type you claim through `produces()`, `custom()`, `constant()`, or declare on an operator rule, is refused where you claim it if it is one — and an operator rule's operand and return types, and the types on `Ascription`, `Coerce` and a declaration list, are refused if they so much as contain one. Absorb over a failed child instead; that is what it is for.
 
 `absorb()` and `reject()` both unwind by throwing — `CompilationAbsorbed` and `CompilationAborted`. These are the only two exceptions Axiom's compilation raises, and they are exceptions because your compiler sits at the top of a call tree Axiom cannot see into: an outcome decided several helpers down has to reach the walk, and threading it back by hand through every frame in between would make one forgotten thread a certified type over an unchecked subtree. Both are caught in `TypeInference::compile()` and turned into ordinary values — an `Err` carrying the `TypeMismatch`, or a node typed `ErrorType`. Neither escapes it, and `Expression::compile()` returns a `Result`. Catch `CompilationAborted` only where you deliberately abandon a child; never catch `CompilationAbsorbed`.
 

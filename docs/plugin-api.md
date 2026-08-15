@@ -185,6 +185,7 @@ The compiler capability passed to every source compiler.
 | `within(string $message, callable $compile): mixed` | Add a source-specific parent message around a nested compilation refusal. |
 | `reject(TypeMismatch|string $mismatch): never` | Refuse this source during compilation. The mismatch returns through `Expression::compile()`. |
 | `overlaps(Type $left, Type $right): Result<bool, TypeMismatch>` | Could a value inhabit both types? Absorbs when either type is a child that failed to compile. |
+| `typeOf(CompiledSource $child): Type` | The certified return type of a compiled child. Absorbs when the child failed to compile — reading `CompiledSource::$returns` on one throws, so this is how a compiler asks for a child's type. |
 | `shapeOf(CompiledSource $child): Shape` | The structural projection of a compiled child, for certifying a field or member against it. Absorbs when the child failed to compile. |
 | `absorb(): never` | Compile to `ErrorType` making no refusal. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
 
@@ -195,12 +196,14 @@ The compiler capability passed to every source compiler.
 A compiled source couples a certified return type to its evaluation.
 
 ```php
-$compiled->returns; // Type
+$compiled->returns; // Type — throws LogicException when failed()
 ```
+
+`$returns` answers only for a source that compiled. On one that did not it throws a `LogicException`: the type such a source wears is `ErrorType`, the compiler's own mark for a node it gave up on, and handing it out is how a host comes to claim a failure nothing diagnosed. Ask `failed()`, or take the type through `SourceCompilation::typeOf()`, which absorbs.
 
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
-| `failed(): bool` | True when this source did not compile and is typed `ErrorType`. Judge nothing about such a child: judge through `SourceCompilation`, which absorbs for you, or call `SourceCompilation::absorb()`. | None; this is a compile-time question. |
+| `failed(): bool` | True when this source did not compile. It has no return type to read; judge nothing about such a child, and judge through `SourceCompilation`, which absorbs for you, or call `SourceCompilation::absorb()`. | None; this is a compile-time question. |
 | `expectPresent(Type $expected): CompiledSource` | Checks the present member of an optional type; absence remains allowed and propagates later. | None; this is a compile-time certification. |
 | `mapPresent(Type $returns, callable $evaluate): CompiledSource` | An absent input stays absent and the callback is not invoked. If this source is optional, the result type is automatically `Option<$returns>`. | The present value. |
 | `mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource` | The callback is always invoked. | Present value or `null`. |
@@ -635,6 +638,6 @@ Plugin code is expected to depend on the APIs documented here. The following cla
 - direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
 - `TypeInference` and `TypeEnvironment` for implementing source compilers;
-- `Types\ErrorType` as a type to author — it is the compiler's own mark for a node that failed, minted only by `Expression::diagnose()`, and a `Program` refuses to be built from a tree containing one. This is enforced rather than advised: its constructor is private, and every door that ingests a host-supplied type — a declaration on `Expression` or `TypeEnvironment`, the type on `Ascription` or `Coerce` — throws an `InvalidArgumentException` for a type that is or contains one, before any walk. An authored mark is a defect in the calling code, not a fault of the expression, so it is never reported as a diagnostic. Your compiler may *receive* it as a child's type and should treat it like any other; see "Report Failures at the Right Boundary" in the extension guide.
+- `Types\ErrorType` as a type to author — it is the compiler's own mark for a node that failed, minted only by `Expression::diagnose()`, and a `Program` refuses to be built from a tree containing one. This is enforced rather than advised, and mostly it is unobtainable: its constructor is private, and `CompiledSource::$returns` throws rather than hand out the mark on a child that failed. The one place a host is given one whole is `Diagnosis::$returns`, and claiming that back as a node's return type is refused where the claim is made. Every door that ingests a type an author wrote down — a declaration on `Expression` or `TypeEnvironment`, the type on `Ascription` or `Coerce`, an operator rule's operands and return — additionally throws an `InvalidArgumentException` for a type that *contains* one, before any walk. An authored mark is a defect in the calling code, not a fault of the expression, so it is never reported as a diagnostic. See "Report Failures at the Right Boundary" in the extension guide.
 
 Use `Extension`, `Dialect`, and the capabilities passed to your compiler instead. That keeps persisted sources serializable, plugin code independent of Axiom's execution representation, and compiled programs free of runtime dispatch.

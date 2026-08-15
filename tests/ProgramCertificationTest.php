@@ -74,6 +74,25 @@ final class RetainingExtension extends Extension
     }
 }
 
+/** A host source whose compiler claims a type handed to it from outside. */
+final readonly class ClaimingSource implements Source {}
+
+/** @internal The dialect contribution that compiles a {@see ClaimingSource}. */
+final class ClaimingExtension extends Extension
+{
+    public function __construct(private readonly Type $claim) {}
+
+    public function sourceCompilers(): array
+    {
+        return [ClaimingSource::class => $this->compileClaiming(...)];
+    }
+
+    private function compileClaiming(ClaimingSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        return $compilation->produces($this->claim, static fn(): int => 1);
+    }
+}
+
 /**
  * The line error-tolerant compilation must not cross: a node it gave up on
  * is typed {@see ErrorType}, and a {@see Program} is where a type stops
@@ -321,6 +340,29 @@ final class ProgramCertificationTest extends TestCase
         new Expression(
             new RetainingSource(new SymbolSource('missing')),
             dialect: Dialect::core()->with(new RetainingExtension()),
+        )->diagnose();
+    }
+
+    /**
+     * The mark is public in exactly one place: a diagnosis of an expression
+     * whose root failed says so in its return type. That is the whole of
+     * what the node gate has left to refuse — a host cannot hide one inside
+     * a composite it has no instance to build with — so the gate reads the
+     * claim rather than walking into it, and pays one instanceof per node.
+     */
+    #[Test]
+    public function a_diagnosis_return_type_cannot_be_claimed_back(): void
+    {
+        $diagnosis = new Expression(new SymbolSource('missing'))->diagnose();
+
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('the type this compiled node returns is or contains one');
+
+        new Expression(
+            new ClaimingSource(),
+            dialect: Dialect::core()->with(new ClaimingExtension($diagnosis->returns)),
         )->diagnose();
     }
 

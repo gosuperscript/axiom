@@ -37,31 +37,43 @@ use Superscript\Monads\Result\Result;
  * {@see \Superscript\Axiom\Program} refuses to be constructed from a node
  * tree containing one. An ErrorType therefore never reaches evaluation.
  *
- * ## Three layers keep it that way
+ * ## The guarantee, and what holds it
  *
- * The mark is the compiler's own: the constructor is private, so
- * {@see shared()} — internal to the library — is the only mint. What a host
- * can still do is hold on to one it was handed (the type of a child that
- * failed) and give it back as a claim of its own. Were that to land in a
- * compiled tree, `diagnose()` would report nothing and certification would
- * then refuse the very tree it was handed, breaking "zero diagnostics ⟺
- * certified program". Three layers stop it, and they do different jobs:
+ * A certified program contains no node that failed and no ErrorType visible
+ * through any structure this library defines. What makes that hold is that
+ * host code cannot obtain the mark at all:
  *
- *  - **The doors, for the message.** The public places a host authors a type
- *    — a declaration on `Expression` or `TypeEnvironment`, the type on
- *    `Ascription` or `Coerce`, an operator rule's operands and return —
- *    check with {@see refuseAuthored()} before anything is compiled, so the
- *    complaint names the declaration that is wrong. They are convenience,
- *    not the guarantee: each covers one door, and there will be more doors.
- *  - **{@see \Superscript\Axiom\CompiledNode::returning()}, for the
- *    invariant.** Every type a host claims as a node's return — through
- *    `produces()`, `custom()`, `constant()`, an operator rule, a literal
- *    factory, a field declaration — becomes one there, so that is the one
- *    place the mark has to be refused for the invariant to hold, and a door
- *    nobody thought to guard is guarded anyway.
- *  - **{@see \Superscript\Axiom\Program}'s certification, as the backstop.**
- *    It answers for the whole tree at the moment a type stops being a claim
- *    and becomes a promise, and it costs one boolean read.
+ *  - **It cannot be minted.** The constructor is private, so {@see shared()}
+ *    — internal to the library — is the only mint.
+ *  - **It cannot be taken from a failed child.** That was the one channel:
+ *    a compiler is handed a child for every source it compiles, and reading
+ *    a failed one's type used to answer with the mark. {@see
+ *    \Superscript\Axiom\CompiledSource::$returns} refuses instead, and the
+ *    judgments on {@see \Superscript\Axiom\SourceCompilation} answer for a
+ *    failed child so nothing is lost by refusing.
+ *
+ * The mark is public in exactly one place — {@see
+ * \Superscript\Axiom\Analysis\Diagnosis::$returns}, where an expression
+ * whose root failed says so. Two guards answer for that one, and for
+ * whatever a host smuggles inside a `Type` of its own, which no walk over
+ * this library's composites can see into:
+ *
+ *  - **{@see refuseClaimed()} at every claim door.** Every type a host
+ *    claims as a node's return — through `produces()`, `custom()`,
+ *    `constant()`, an operator rule, a literal factory, a field declaration
+ *    — arrives at {@see \Superscript\Axiom\CompiledNode::returning()}, which
+ *    refuses the mark at top level. One instanceof, per node.
+ *  - **{@see refuseAuthored()} at every authored-data door.** A declaration
+ *    on `Expression` or `TypeEnvironment`, the type on `Ascription` or
+ *    `Coerce`, an operator rule's operands and return: these take a type an
+ *    author wrote down, so containment is walked here — `Option<Error>` and
+ *    `{quotes: List<Error>}` are refused too — and the complaint names the
+ *    declaration that is wrong. The walk costs one pass per expression or
+ *    per dialect, never one per node.
+ *
+ * Behind both, **{@see \Superscript\Axiom\Program}'s certification** answers
+ * for the whole tree at the moment a type stops being a claim and becomes a
+ * promise, and it costs one boolean read.
  *
  * @implements Type<mixed>
  */
@@ -107,18 +119,45 @@ final class ErrorType implements Type
      * Containment is walked over the library's own composites (option,
      * union, list, dict, record, opaque parameters), which is every way this
      * library builds a type out of other types. A host type that wraps a
-     * `Type` of its own is opaque to the walk and can smuggle one past this
-     * door; nothing at this level can see inside it, and the mint being
-     * internal is what covers that case.
+     * `Type` of its own is opaque to the walk; nothing at this level can see
+     * inside it, and the mark being unobtainable is what covers that case.
+     *
+     * The walk runs only where a type an author wrote down is taken in —
+     * once per expression, once per dialect — and never per compiled node.
      *
      * @internal Called by the public doors that ingest a type.
      */
     public static function refuseAuthored(Type $type, string $door): void
     {
-        if (!self::occursIn($type)) {
-            return;
+        if (self::occursIn($type)) {
+            self::refuseSupplied($door);
         }
+    }
 
+    /**
+     * Refuse a type claimed as a compiled node's return. This one is not
+     * walked into, because nothing can be hidden inside it: the mark cannot
+     * be obtained, so a composite built around one cannot be built either.
+     * What is left to refuse is the single place the mark is legitimately
+     * public — {@see \Superscript\Axiom\Analysis\Diagnosis::$returns}, the
+     * type of an expression whose root failed — handed straight back, and
+     * that arrives whole.
+     *
+     * Answering in one instanceof rather than a walk is what keeps the gate
+     * off compilation's cost: every node of every program passes through it,
+     * while an authored type is taken in once for the whole expression.
+     *
+     * @internal Called where a node takes the type its compiler claims.
+     */
+    public static function refuseClaimed(Type $type, string $door): void
+    {
+        if ($type instanceof self) {
+            self::refuseSupplied($door);
+        }
+    }
+
+    private static function refuseSupplied(string $door): never
+    {
         throw new InvalidArgumentException(sprintf(
             'The compiler marks a node it gave up on with a type of its own, and %s is or contains one. It is minted only alongside the diagnostic that explains it, so nothing outside compilation has one to give; supply the type the value really has.',
             $door,
