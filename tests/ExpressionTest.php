@@ -77,7 +77,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 final class ExpressionTest extends TestCase
 {
     #[Test]

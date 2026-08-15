@@ -126,7 +126,6 @@ use Superscript\Axiom\Types\TypeMismatch;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function gate(): Expression

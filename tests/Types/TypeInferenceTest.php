@@ -147,7 +147,6 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference

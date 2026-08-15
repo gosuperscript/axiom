@@ -35,7 +35,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(Coerce::class)]
 #[UsesClass(NumberType::class)]
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 final class UnboundSymbolsTest extends TestCase
 {
     #[Test]

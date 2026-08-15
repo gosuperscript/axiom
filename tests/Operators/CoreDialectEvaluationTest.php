@@ -35,7 +35,6 @@ use Superscript\Monads\Result\Result;
  * evaluation to test — that is the point; see ResolveTest for the
  * refusals.
  */
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 #[CoversClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Equality::class)]

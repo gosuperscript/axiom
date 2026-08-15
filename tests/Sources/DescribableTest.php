@@ -44,7 +44,6 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(StringType::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(ListType::class)]
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 class DescribableTest extends TestCase
 {
     #[Test]

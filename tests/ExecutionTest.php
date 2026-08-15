@@ -29,7 +29,6 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
-#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 #[CoversClass(CompiledNode::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(Node::class)]
