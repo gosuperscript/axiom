@@ -42,6 +42,13 @@ jobs:
       - name: Execute mutation tests
         run: composer test:infection
 
+      # --show-mutations prints escaped mutants only. The report names the
+      # uncovered and timed-out ones too, and which they are is the whole
+      # question when a run is red.
+      - name: Show the mutation report
+        if: failure()
+        run: cat build/infection.log
+
   types:
     runs-on: ubuntu-latest
     timeout-minutes: 5
