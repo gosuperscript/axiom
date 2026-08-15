@@ -206,7 +206,7 @@ final class CompilationAnalysisTest extends TestCase
     public function serializable_export_redacts_literals_unless_the_caller_explicitly_reveals_them(): void
     {
         $analysis = new CompilationAnalysis(
-            new CompilationNode(StaticSource::class, new LiteralType('private'), 'axiom.core'),
+            CompilationNode::certified(StaticSource::class, new LiteralType('private'), 'axiom.core'),
             [
                 'boolean' => new LiteralType(true),
                 'integer' => new LiteralType(7),
@@ -274,11 +274,11 @@ final class CompilationAnalysisTest extends TestCase
         $rootSelection = new OperatorSelection('infix', '+', [new NumberType(), new NumberType()], new NumberType(), $rule);
         $childSelection = new OperatorSelection('prefix', '-', [new NumberType()], new NumberType(), $rule);
         $analysis = new CompilationAnalysis(
-            new CompilationNode(
+            CompilationNode::certified(
                 InfixExpression::class,
                 new NumberType(),
                 'axiom.core',
-                [new CompilationChild(new CompilationNode(
+                [new CompilationChild(CompilationNode::certified(
                     StaticSource::class,
                     new NumberType(),
                     'axiom.core',

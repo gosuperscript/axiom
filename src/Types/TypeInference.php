@@ -129,7 +129,7 @@ final readonly class TypeInference
             $compiled = new CompiledSource(CompiledNode::failed());
         }
 
-        return Ok($compiled->node()->forSource($source, new CompilationNode(
+        return Ok($compiled->node()->forSource($source, CompilationNode::certified(
             $source::class,
             $compiled->returns,
             $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
@@ -203,7 +203,7 @@ final readonly class TypeInference
     private function failedNode(Source $source): CompiledNode
     {
         return CompiledNode::failed()
-            ->forSource($source, new CompilationNode(
+            ->forSource($source, CompilationNode::certified(
                 $source::class,
                 ErrorType::shared(),
                 // No compiler ran, so no extension owns the decisions here.

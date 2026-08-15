@@ -108,9 +108,9 @@ final class ProgramCertificationTest extends TestCase
     {
         // A failed match arm is absorbed into the union of its siblings, so a
         // broken node sits under an ordinary Number.
-        $sound = new CompilationNode('Sound', new NumberType(), 'core');
-        $broken = new CompilationNode('Broken', ErrorType::shared(), 'core');
-        $root = new CompilationNode('Root', new NumberType(), 'core', [
+        $sound = CompilationNode::certified('Sound', new NumberType(), 'core');
+        $broken = CompilationNode::certified('Broken', ErrorType::shared(), 'core');
+        $root = CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'arm.0'),
             new CompilationChild($broken, 'arm.1'),
         ]);
@@ -126,15 +126,15 @@ final class ProgramCertificationTest extends TestCase
     {
         // The bit is cumulative, and that is what lets the root answer for
         // the whole tree without anyone walking it.
-        $sound = new CompilationNode('Sound', new NumberType(), 'core');
-        $broken = new CompilationNode('Broken', ErrorType::shared(), 'core');
+        $sound = CompilationNode::certified('Sound', new NumberType(), 'core');
+        $broken = CompilationNode::certified('Broken', ErrorType::shared(), 'core');
 
         $this->assertFalse($sound->failed);
         $this->assertTrue($broken->failed);
-        $this->assertFalse(new CompilationNode('Root', new NumberType(), 'core', [
+        $this->assertFalse(CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'left'),
         ])->failed);
-        $this->assertTrue(new CompilationNode('Root', new NumberType(), 'core', [
+        $this->assertTrue(CompilationNode::certified('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'left'),
             new CompilationChild($broken, 'right'),
         ])->failed);
@@ -143,8 +143,8 @@ final class ProgramCertificationTest extends TestCase
     #[Test]
     public function a_sound_tree_is_minted(): void
     {
-        $root = new CompilationNode('Root', new NumberType(), 'core', [
-            new CompilationChild(new CompilationNode('Child', new StringType(), 'core'), 'left'),
+        $root = CompilationNode::certified('Root', new NumberType(), 'core', [
+            new CompilationChild(CompilationNode::certified('Child', new StringType(), 'core'), 'left'),
         ]);
 
         $program = new Program(CompiledNode::returning(new NumberType(), static fn() => Ok(null), compilation: $root));

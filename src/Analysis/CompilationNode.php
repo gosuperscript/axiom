@@ -65,13 +65,18 @@ final class CompilationNode
     private readonly ?string $owningExtension;
 
     /**
+     * The two kinds are minted by {@see certified()} and {@see abandoned()},
+     * and construction is private so no third kind exists: a node either
+     * carries both the type it returns and the compiler that owns it, or
+     * carries neither and is a position. A node holding one without the
+     * other would be a compilation nobody made or one nobody can attribute,
+     * and both are answered for in {@see toArray()} and in certification.
+     *
      * @param class-string $source
-     * @param ?Type $returns Null makes an abandoned node; {@see abandoned()}.
-     * @param ?string $extension Null makes an abandoned node.
      * @param list<CompilationChild> $children
      * @param list<OperatorSelection> $operators
      */
-    public function __construct(
+    private function __construct(
         public readonly string $source,
         ?Type $returns,
         ?string $extension,
@@ -83,6 +88,19 @@ final class CompilationNode
         $this->abandoned = $returns === null;
         $this->failed = $returns instanceof ErrorType
             || array_any($children, static fn(CompilationChild $child): bool => $child->node->failed);
+    }
+
+    /**
+     * A node the compiler typed: the type it returns and the extension whose
+     * source compiler owns it, together, because a compilation is both.
+     *
+     * @param class-string $source
+     * @param list<CompilationChild> $children
+     * @param list<OperatorSelection> $operators
+     */
+    public static function certified(string $source, Type $returns, string $extension, array $children = [], array $operators = []): self
+    {
+        return new self($source, $returns, $extension, $children, $operators);
     }
 
     /**

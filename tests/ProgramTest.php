@@ -173,7 +173,7 @@ final class ProgramTest extends TestCase
     public function program_preserves_attached_compilation_analysis_and_falls_back_only_for_bare_nodes(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',

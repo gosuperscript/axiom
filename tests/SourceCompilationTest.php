@@ -473,7 +473,7 @@ final class SourceCompilationTest extends TestCase
     public function analyzed_children_and_definitions_are_recorded_with_their_roles(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',
@@ -506,7 +506,7 @@ final class SourceCompilationTest extends TestCase
     public function a_child_is_compiled_at_the_path_its_position_gives_it(): void
     {
         $source = new StaticSource(1);
-        $analysis = new \Superscript\Axiom\Analysis\CompilationNode(
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
             StaticSource::class,
             new NumberType(),
             'axiom.core',

@@ -72,7 +72,7 @@ final readonly class Program
         $this->returns = $node->returns;
         $this->references = $node->references;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
-        $compilation = $node->compilation() ?? new CompilationNode(
+        $compilation = $node->compilation() ?? CompilationNode::certified(
             CompiledNode::class,
             $node->returns,
             'unattributed',
