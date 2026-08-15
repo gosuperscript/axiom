@@ -792,17 +792,26 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
-    public function a_certified_diagnosis_reads_its_type_from_the_program(): void
+    public function a_certified_diagnosis_reads_its_type_and_references_from_the_program(): void
     {
-        // Nothing carries the root type alongside the program: the program
-        // already answers for it, and two copies could disagree.
-        $program = new Expression(new StaticSource(1))->compile()->unwrap();
-        $diagnosis = Diagnosis::certified($program, ['turnover']);
+        // Nothing is carried alongside the program: the program already
+        // answers for what it returns and what it reads, and two copies
+        // could disagree.
+        $reader = new Expression(
+            new SymbolSource('turnover'),
+            declarations: ['turnover' => new NumberType()],
+        )->compile()->unwrap();
+        $diagnosis = Diagnosis::certified($reader);
 
         $this->assertSame([], $diagnosis->diagnostics);
         $this->assertSame(['turnover'], $diagnosis->references);
-        $this->assertSame($program->returns, $diagnosis->returns);
-        $this->assertSame($program, $diagnosis->program()->unwrap());
+        $this->assertSame($reader->returns, $diagnosis->returns);
+        $this->assertSame($reader, $diagnosis->program()->unwrap());
+
+        // An expression that reads nothing reports nothing read.
+        $this->assertSame([], Diagnosis::certified(
+            new Expression(new StaticSource(1))->compile()->unwrap(),
+        )->references);
     }
 
     #[Test]

@@ -83,15 +83,16 @@ final readonly class Diagnosis
     ) {}
 
     /**
-     * An expression the compiler certified: the program, and the type it
-     * returns read from the program itself rather than carried alongside it.
-     * Nothing refused, so there is nothing to report.
-     *
-     * @param list<string> $references
+     * An expression the compiler certified: the program, with the type it
+     * returns and the symbols it reads taken from the program itself rather
+     * than carried alongside it, where a second copy could disagree with it.
+     * Nothing refused, so there is nothing to report — and nothing failed to
+     * resolve, which is the only thing the two reference sets could differ
+     * by.
      */
-    public static function certified(Program $program, array $references): self
+    public static function certified(Program $program): self
     {
-        return new self([], $references, $program->returns, $program);
+        return new self([], $program->references, $program->returns, $program);
     }
 
     /**
@@ -101,6 +102,11 @@ final readonly class Diagnosis
      * a broken match arm, absorbed into the union of its siblings — leaves a
      * type the compilation genuinely certified beside the diagnostic that
      * refuses the expression; null means the root itself did not compile.
+     *
+     * References and the return type are given here rather than derived, as
+     * {@see certified()} derives them: there is no program to read them off,
+     * and the reads a refused compilation made — including the ones that
+     * never resolved — exist nowhere else.
      *
      * @param non-empty-list<TypeMismatch> $diagnostics
      * @param list<string> $references
