@@ -90,7 +90,7 @@ $program(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 
 Compile once — at authoring or deploy time — and invoke per request. `compile()` refuses, with names, everything that would make evaluation dishonest: definition cycles, unbound symbols, operators no rule resolves (or two rules claim), type errors. Running an unchecked program is not discouraged — it is unrepresentable, because only `Program` is callable.
 
-The expression's inputs are its **parameters**, passed at the call site, and the declaration list is the program's complete public signature: undeclared binding keys never enter, and a parameter you cannot type yet is declared `Unknown` explicitly. [Compile, Then Trust](#compile-then-trust) covers how inputs are admitted.
+The expression's inputs are its **parameters**, passed at the call site, and the declaration list is the program's complete public signature: undeclared binding keys never enter, and a parameter you cannot type yet is declared `Unknown` explicitly. Of that signature a call must satisfy the part the program reads — `$program->references`. [Compile, Then Trust](#compile-then-trust) covers how inputs are admitted.
 
 ## Core Concepts
 
@@ -175,11 +175,27 @@ $program(['quote.turnover' => '600000']);
 // before evaluation — certified programs never see raw garbage
 
 $program(['quote.turnover' => 'lots']);
-// Err(BoundaryViolation): "binding [quote.turnover]: …" — aggregated,
+// Err(InadmissibleBinding): "binding [quote.turnover]: …" — aggregated,
 // named by input, before any evaluation
+
+$program([]);
+// Err(MissingRequiredInput): the call is waiting on ['quote.turnover']
 ```
 
-Certification is a conditional guarantee — "*if* inputs inhabit their declared types…" — and the boundary establishes the condition on every call. Declared bindings pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required inputs must be present, and every undeclared binding key is stripped.
+Certification is a conditional guarantee — "*if* inputs inhabit their declared types…" — and the boundary establishes the condition on every call. The bindings the program **reads** pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required reads must be present, and every other key is stripped.
+
+**The boundary demands what the program reads, not what the scope declares.** `$program->references` is the demand set — computed by the compiler, reaching through definitions. Declarations type a vocabulary, and one vocabulary usually covers many programs: give every condition on a page the same declarations, and each condition runs on the inputs it reads however much of the page is still unanswered. A declaration a program never reads is ignored whether or not it is bound — no demand, no admission, no conversion. Nothing evaluation does can observe a symbol the compiler did not record, so this is ignorance by proof rather than by tolerance.
+
+A refusal comes in two kinds, because hosts act on them differently:
+
+| Class | Means | Host reading |
+| --- | --- | --- |
+| `MissingRequiredInput` | A required input the program reads was not supplied, and everything supplied was admissible. | Not answerable yet — an ordinary state. |
+| `InadmissibleBinding` | A supplied value does not inhabit its declared type, including one that reads as absent where presence is required. | A fault upstream of the call. |
+
+Both extend `BoundaryViolation`, whose `$rejections` is one `RejectedBinding` per input at fault — the input's name and the message about it in one object — with `$violations` the messages projected out, unchanged. A fault dominates absence: a call that both omits one required input and supplies another badly is an `InadmissibleBinding`, so `instanceof MissingRequiredInput` reads as "nothing is wrong here except that inputs are still missing".
+
+**Whether absence is acceptable is a property of the declared type's shape**, and of nothing else — not of how a value converted, and not of the order a union lists its members. `Union(String, Option<Number>)` and `Union(Option<Number>, String)` both project `(String | Number)?`, so both take `''` as `None`; bare `String` requires presence, so `''` is an `InadmissibleBinding` (a value was supplied and does not inhabit `String`) while binding nothing at all is a `MissingRequiredInput`. Optionality is not a licence for a fault: a value that cannot convert at all is inadmissible whether or not absence is allowed.
 
 > [!NOTE]
 > The boundary is the one runtime type check that survives compilation, by design: `compile()` proves the program, not future inputs.
@@ -269,7 +285,7 @@ Sources are the nodes a program is described with:
 
 When do you reach for `Coerce` vs `Ascription` in practice?
 
-**`Coerce` is for input you don't control.** Wrap the exact spot where a messy external value enters the program — a CSV cell, a form field, a JSON fragment — and evaluation converts it (`'42' → 42`, `'' → absence`) before anything downstream sees it. Most programs never write an explicit `Coerce` node at all: the typed-bindings boundary (`declarations` on the `Expression`) is the same conversion applied to every declared input at once, which is where conversion usually belongs. Reach for the node itself when a single value needs converting *mid-expression* — for example, a host source that returns a stringly lookup cell.
+**`Coerce` is for input you don't control.** Wrap the exact spot where a messy external value enters the program — a CSV cell, a form field, a JSON fragment — and evaluation converts it (`'42' → 42`, `'' → absence`) before anything downstream sees it. Most programs never write an explicit `Coerce` node at all: the typed-bindings boundary (`declarations` on the `Expression`) is the same conversion applied at once to every input the program reads, which is where conversion usually belongs. Reach for the node itself when a single value needs converting *mid-expression* — for example, a host source that returns a stringly lookup cell.
 
 ```php
 new Coerce(new NumberType(), $rawLookupCell)   // '42 ' → 42; the compiler takes Number on faith
