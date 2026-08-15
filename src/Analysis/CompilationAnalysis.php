@@ -8,7 +8,12 @@ use JsonSerializable;
 use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Types\Type;
 
-/** The typed, serializable explanation of one successful compilation. */
+/**
+ * The typed, serializable explanation of one successful compilation. Its
+ * nodes come in the two kinds {@see CompilationNode} describes: compilations
+ * the compiler certified, and positions a compiler abandoned — which claim
+ * no type and no owning compiler, and hold nothing under them.
+ */
 final readonly class CompilationAnalysis implements JsonSerializable
 {
     /** @param array<string, Type> $declarations */

@@ -754,6 +754,8 @@ A refusal you make anyway counts as a fault of its own and is reported as a seco
 
 `absorb()` and `reject()` both unwind by throwing — `CompilationAbsorbed` and `CompilationAborted`. These are the only two exceptions Axiom's compilation raises, and they are exceptions because your compiler sits at the top of a call tree Axiom cannot see into: an outcome decided several helpers down has to reach the walk, and threading it back by hand through every frame in between would make one forgotten thread a certified type over an unchecked subtree. Both are caught in `TypeInference::compile()` and turned into ordinary values — an `Err` carrying the `TypeMismatch`, or a node typed `ErrorType`. Neither escapes it, and `Expression::compile()` returns a `Result`. Catch `CompilationAborted` only where you deliberately abandon a child; never catch `CompilationAbsorbed`.
 
+A child you abandon still holds its position in the analysis, as an *abandoned* node: no type, no owning compiler, rendered as `['path' => …, 'source' => …, 'abandoned' => true]`. That is what keeps the child after it at the same index across the compilations `diagnose()` makes — see [Two kinds of node](plugin-api.md#two-kinds-of-node).
+
 ### Step 7: Choose Absence Semantics
 
 `null` is Axiom's runtime representation of structural absence. Pick the combinator that states what your source means:

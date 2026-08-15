@@ -582,6 +582,20 @@ Successful compilation exposes its data-only explanation as `Program::$analysis`
 
 An operator selection retains its typed operands and return type plus `OperatorRuleProvenance`: stable identifier, implementation class, and owning extension. The artifact never contains evaluation closures or collaborators captured by source compilers. Treat it as an explanation and audit format, not as an alternative serialization of the authoring `Source` tree.
 
+### Two kinds of node
+
+A `CompilationNode` is either **certified** or **abandoned**, and a reader must expect both.
+
+A certified node is the ordinary one: it answers `$returns` and `$extension`, and renders them.
+
+An abandoned node stands where a child refused and its compiler caught the refusal and compiled without it — the pattern `CoerceSourceCompiler` uses for a static value the literal registry cannot type. Nothing was compiled there, so the node claims neither a type nor an owning compiler: reading `$returns` or `$extension` throws a `LogicException`, and `toArray()` renders the position alone:
+
+```php
+['path' => '$.children[0].node', 'source' => Sources\StaticSource::class, 'abandoned' => true]
+```
+
+It is recorded because paths are positional: `$.children[1].node` names the second child, and `Expression::diagnose()` compiles an expression several times. Were a refusing child to record nothing, the sibling after it would take its index in the attempts where it refuses and a different one in the attempts where it is set aside — and one fault would be reported at two paths. An abandoned node is not a failure and never blocks certification; it has no children and no operators, so `operators()` and the certification walk pass through it unchanged.
+
 ## Execution observation
 
 Hosts and tracing plugins implement `Superscript\Axiom\Execution\Observer`:

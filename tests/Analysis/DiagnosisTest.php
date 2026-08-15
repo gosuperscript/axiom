@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Tests\Analysis;
 
 use LogicException;
+use stdClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesNamespace;
@@ -741,6 +743,60 @@ final class DiagnosisTest extends TestCase
         )->diagnostics[0];
 
         $this->assertStringStartsWith('The definition graph is not well-founded', $unlocated->describe());
+    }
+
+    #[Test]
+    public function a_position_a_compiler_abandoned_renders_as_abandoned(): void
+    {
+        // The literal registry cannot type a stdClass, so Coerce catches its
+        // child's refusal and compiles the value verbatim. Nothing is
+        // reported and the program is certified — and the analysis renders
+        // the position that child would have held as what it is, without
+        // claiming a type or a compiler was ever settled there.
+        $diagnosis = self::diagnose(new Coerce(new NumberType(), new StaticSource(new stdClass())));
+
+        $this->assertSame([], $diagnosis->diagnostics);
+
+        $root = $diagnosis->program()->unwrap()->analysis->toArray()['root'];
+
+        $this->assertSame([
+            'path' => '$.children[0].node',
+            'source' => StaticSource::class,
+            'abandoned' => true,
+        ], $root['children'][0]['node']);
+    }
+
+    #[Test]
+    public function an_abandoned_position_is_not_a_failure(): void
+    {
+        // It is not part of the program, so it does not stand in the way of
+        // certifying one: the parent compiled without it.
+        $abandoned = CompilationNode::abandoned(StaticSource::class);
+
+        $this->assertTrue($abandoned->abandoned);
+        $this->assertFalse($abandoned->failed);
+    }
+
+    /**
+     * The two things a certified node answers for and an abandoned position
+     * does not.
+     *
+     * @return iterable<string, array{string, callable(CompilationNode): mixed}>
+     */
+    public static function claimsAnAbandonedPositionNeverMade(): iterable
+    {
+        yield 'return type' => ['a return type', static fn(CompilationNode $node) => $node->returns];
+        yield 'owning compiler' => ['an owning compiler', static fn(CompilationNode $node) => $node->extension];
+    }
+
+    #[Test]
+    #[DataProvider('claimsAnAbandonedPositionNeverMade')]
+    public function an_abandoned_position_claims_nothing_a_compilation_would(string $missing, callable $read): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage(sprintf('its parent compiled without it, so it has no %s.', $missing));
+
+        $read(CompilationNode::abandoned(StaticSource::class));
     }
 
     #[Test]
