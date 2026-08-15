@@ -6,7 +6,9 @@ namespace Superscript\Axiom;
 
 use Closure;
 use Superscript\Axiom\Analysis\CompilationNode;
+use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\Execution\Node;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
@@ -45,6 +47,19 @@ final readonly class CompiledNode
     ) {
         $this->evaluation = $evaluation;
         $this->sourceType = $sourceType ?? self::class;
+    }
+
+    /**
+     * The node of a source that did not compile: {@see ErrorType} paired with
+     * an evaluation that refuses to run. The pair is what makes
+     * {@see Program}'s certification guard total — the type says the compiler
+     * gave up here, the evaluation makes reaching it a defect rather than a
+     * result — so it is minted here and nowhere else, and the two can never
+     * come apart.
+     */
+    public static function failed(): self
+    {
+        return new self(ErrorType::shared(), UnreachableEvaluation::refuse(...));
     }
 
     /**

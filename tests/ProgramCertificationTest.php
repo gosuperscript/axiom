@@ -76,6 +76,14 @@ final class ProgramCertificationTest extends TestCase
     }
 
     #[Test]
+    public function every_node_that_failed_wears_the_same_error_type(): void
+    {
+        // The mark is stateless and recognised by class, so one instance
+        // serves however many nodes the compiler gives up on.
+        $this->assertSame(ErrorType::shared(), ErrorType::shared());
+    }
+
+    #[Test]
     public function the_error_type_is_bottom_and_admits_no_value(): void
     {
         $error = new ErrorType();

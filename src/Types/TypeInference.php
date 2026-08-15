@@ -7,9 +7,7 @@ namespace Superscript\Axiom\Types;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\ErrorRecovery;
-use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
-use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
@@ -138,10 +136,10 @@ final readonly class TypeInference
         return new SourceCompilation(
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
             fn(Type $left, string $operator, Type $right): Result => $left instanceof ErrorType || $right instanceof ErrorType
-                ? Ok(self::absorbed())
+                ? Ok(ResolvedOperation::absorbed())
                 : (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $operand instanceof ErrorType
-                ? Ok(self::absorbed())
+                ? Ok(ResolvedOperation::absorbed())
                 : $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
             fn(mixed $value): Result => $this->inferValue($value),
@@ -197,23 +195,13 @@ final readonly class TypeInference
      */
     private function failedNode(Source $source): CompiledNode
     {
-        return new CompiledNode(new ErrorType(), UnreachableEvaluation::refuse(...))
+        return CompiledNode::failed()
             ->forSource($source, new CompilationNode(
                 $source::class,
-                new ErrorType(),
+                ErrorType::shared(),
                 // No compiler ran, so no extension owns the decisions here.
                 'unattributed',
             ));
-    }
-
-    /** An operation over an operand that already failed: no rule, no refusal, no value. */
-    private static function absorbed(): ResolvedOperation
-    {
-        return new ResolvedOperation(
-            new ErrorType(),
-            UnreachableEvaluation::refuse(...),
-            new OperatorRuleProvenance('error.absorbed', ErrorType::class, null),
-        );
     }
 
     /**

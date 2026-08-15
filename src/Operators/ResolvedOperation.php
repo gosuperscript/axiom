@@ -6,6 +6,8 @@ namespace Superscript\Axiom\Operators;
 
 use Closure;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
+use Superscript\Axiom\Analysis\UnreachableEvaluation;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
@@ -34,6 +36,23 @@ final readonly class ResolvedOperation implements OperatorResolution
         private Closure $evaluation,
         public ?OperatorRuleProvenance $provenance = null,
     ) {}
+
+    /**
+     * An operation over an operand that already failed: no rule, no refusal,
+     * no value — the operation twin of {@see \Superscript\Axiom\CompiledNode::failed()}.
+     * A failed operand's type is a placeholder rather than a claim, so the
+     * operation inherits the failure instead of resolving over it.
+     *
+     * @internal The compiler absorbs; a rule never resolves to this.
+     */
+    public static function absorbed(): self
+    {
+        return new self(
+            ErrorType::shared(),
+            UnreachableEvaluation::refuse(...),
+            new OperatorRuleProvenance('error.absorbed', ErrorType::class, null),
+        );
+    }
 
     /** @internal The resolver attaches the identity of the rule it selected. */
     public function attributedTo(OperatorRuleProvenance $provenance): self

@@ -6,8 +6,8 @@ namespace Superscript\Axiom;
 
 use Closure;
 use Superscript\Axiom\Analysis\CompilationRecorder;
+use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Analysis\OperatorSelection;
-use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
@@ -133,7 +133,7 @@ final readonly class SourceCompilation
      */
     public function absorbed(): CompiledSource
     {
-        return new CompiledSource(new CompiledNode(new ErrorType(), UnreachableEvaluation::refuse(...)));
+        return new CompiledSource(CompiledNode::failed());
     }
 
     /** Infer the literal-first type of an embedded PHP value. */
@@ -236,9 +236,9 @@ final readonly class SourceCompilation
             $operator,
             $operands,
             $resolved->returns,
-            $resolved->provenance ?? new \Superscript\Axiom\Analysis\OperatorRuleProvenance(
+            $resolved->provenance ?? new OperatorRuleProvenance(
                 'unattributed',
-                \Superscript\Axiom\Operators\ResolvedOperation::class,
+                ResolvedOperation::class,
                 null,
             ),
         ));

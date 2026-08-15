@@ -40,6 +40,18 @@ use Superscript\Monads\Result\Result;
  */
 final class ErrorType implements Type
 {
+    private static ?self $shared = null;
+
+    /**
+     * The mark itself. An ErrorType carries no state and is recognised by
+     * class rather than by identity, so every node that did not compile
+     * wears the same one.
+     */
+    public static function shared(): self
+    {
+        return self::$shared ??= new self();
+    }
+
     public function assert(mixed $value): Result
     {
         return new Err(new TransformValueException(type: 'error', value: $value));
