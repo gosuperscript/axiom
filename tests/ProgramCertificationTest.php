@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Tests;
 
 use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
@@ -84,19 +85,35 @@ final class ProgramCertificationTest extends TestCase
     }
 
     #[Test]
-    public function the_error_type_is_bottom_and_admits_no_value(): void
+    public function the_error_type_is_bottom(): void
     {
-        $error = new ErrorType();
+        // Never-shaped is what lets a broken subtree sit anywhere without a
+        // second refusal: it is assignable everywhere and covers every match.
+        $this->assertInstanceOf(NeverShape::class, ErrorType::shared()->shape());
+    }
 
-        $this->assertInstanceOf(NeverShape::class, $error->shape());
-        $this->assertSame('<error>', $error->format(1));
-        $this->assertSame(
-            'Unable to transform into [error] from [1]',
-            $error->assert(1)->unwrapErr()->getMessage(),
-        );
-        $this->assertSame(
-            'Unable to transform into [error] from [1]',
-            $error->coerce(1)->unwrapErr()->getMessage(),
-        );
+    /**
+     * The other three questions on {@see ErrorType} are unreachable, and say
+     * so rather than inventing an answer. Only a certified program holds a
+     * value to put to a type, and no program is certified from a tree
+     * containing an ErrorType — so each of these is a defect in that guard.
+     *
+     * @return iterable<string, array{callable(ErrorType): mixed}>
+     */
+    public static function valueQuestions(): iterable
+    {
+        yield 'assert' => [static fn(ErrorType $error) => $error->assert(1)];
+        yield 'coerce' => [static fn(ErrorType $error) => $error->coerce(1)];
+        yield 'format' => [static fn(ErrorType $error) => $error->format(1)];
+    }
+
+    #[Test]
+    #[DataProvider('valueQuestions')]
+    public function the_error_type_answers_nothing_about_a_value(callable $question): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('A type that marks a node that failed to compile answers nothing about a value; this program was never certified.');
+
+        $question(ErrorType::shared());
     }
 }

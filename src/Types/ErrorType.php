@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
-use Superscript\Axiom\Exceptions\TransformValueException;
+use LogicException;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\Shape;
-use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
 
 /**
@@ -55,21 +54,35 @@ final class ErrorType implements Type
 
     public function assert(mixed $value): Result
     {
-        return new Err(new TransformValueException(type: 'error', value: $value));
+        self::refuse();
     }
 
     public function coerce(mixed $value): Result
     {
-        return $this->assert($value);
+        self::refuse();
     }
 
     public function format(mixed $value): string
     {
-        return '<error>';
+        self::refuse();
     }
 
     public function shape(): Shape
     {
         return new NeverShape();
+    }
+
+    /**
+     * The three questions a type answers about a *value* — does this value
+     * inhabit me, can I make one that does, how do I render one — and an
+     * ErrorType is asked none of them. It marks a node the compiler gave up
+     * on; no Program is certified from a tree containing one, and nothing
+     * outside a certified program ever holds a value to put to a type.
+     * Reaching this is a defect in that guard, not a program error, so it
+     * says so rather than inventing an answer.
+     */
+    private static function refuse(): never
+    {
+        throw new LogicException('A type that marks a node that failed to compile answers nothing about a value; this program was never certified.');
     }
 }
