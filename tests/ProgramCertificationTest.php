@@ -20,6 +20,7 @@ use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -86,6 +87,10 @@ final class RetainingExtension extends Extension
 #[CoversClass(Ascription::class)]
 #[CoversClass(Coerce::class)]
 #[CoversClass(CompiledNode::class)]
+#[CoversClass(\Superscript\Axiom\Operators\InfixOperatorRuleBuilder::class)]
+#[CoversClass(\Superscript\Axiom\Operators\InfixOperatorRuleWithOperands::class)]
+#[CoversClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
+#[CoversClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesNamespace('Superscript\\Axiom')]
 final class ProgramCertificationTest extends TestCase
 {
@@ -195,10 +200,15 @@ final class ProgramCertificationTest extends TestCase
     }
 
     /**
-     * Every public door a host hands a type through. Each refuses the mark
-     * at the door, naming what was supplied — an authored ErrorType is a
-     * defect in the calling code, not a fault of the expression, so it is
-     * never a diagnostic.
+     * The doors a host authors a type through, each refusing the mark before
+     * anything is compiled and naming what was supplied: an authored
+     * ErrorType is a defect in the calling code, not a fault of the
+     * expression, so it is never a diagnostic. What a declaration would
+     * otherwise do differs by door — a symbol declared with the mark
+     * compiles to a failure nothing diagnosed, an operator rule declaring it
+     * simply never fires, because an operation over a failed operand is
+     * absorbed before any rule is looked at — and both are worth hearing
+     * about where they were written.
      *
      * @return iterable<string, array{string, callable(Type): mixed}>
      */
@@ -224,6 +234,30 @@ final class ProgramCertificationTest extends TestCase
             static fn(Type $type) => new Coerce($type, new StaticSource(1)),
         ];
 
+        yield 'infix rule left operand' => [
+            'the left operand of an operator rule',
+            static fn(Type $type) => Operator::infix('+')->takes($type, new NumberType()),
+        ];
+
+        yield 'infix rule right operand' => [
+            'the right operand of an operator rule',
+            static fn(Type $type) => Operator::infix('+')->takes(new NumberType(), $type),
+        ];
+
+        yield 'infix rule return' => [
+            'the return type of an operator rule',
+            static fn(Type $type) => Operator::infix('+')->takes(new NumberType(), new NumberType())->returns($type),
+        ];
+
+        yield 'prefix rule operand' => [
+            'the operand of an operator rule',
+            static fn(Type $type) => Operator::prefix('-')->takes($type),
+        ];
+
+        yield 'prefix rule return' => [
+            'the return type of an operator rule',
+            static fn(Type $type) => Operator::prefix('-')->takes(new NumberType())->returns($type),
+        ];
     }
 
     #[Test]

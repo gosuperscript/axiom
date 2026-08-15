@@ -39,6 +39,7 @@ use Superscript\Axiom\Types\UnknownType;
 
 use function Superscript\Monads\Result\Ok;
 
+#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 #[CoversClass(Operator::class)]
 #[CoversClass(InfixOperatorRuleBuilder::class)]
 #[CoversClass(InfixOperatorRuleWithOperands::class)]

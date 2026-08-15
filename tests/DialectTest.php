@@ -25,6 +25,7 @@ use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 
+#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 #[CoversClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Extension::class)]
