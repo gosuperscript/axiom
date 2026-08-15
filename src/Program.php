@@ -11,6 +11,7 @@ use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Exceptions\InadmissibleBinding;
 use Superscript\Axiom\Exceptions\MissingRequiredInput;
+use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -223,16 +224,16 @@ final readonly class Program
      */
     private function admit(array $raw): Result
     {
-        // Keyed by input: an input is answered for once, so a violation
+        // Keyed by input: an input is answered for once, so a rejection
         // replaces nothing and the keys are the inputs at fault, in order.
-        $violations = [];
+        $rejections = [];
         $overlay = [];
         $fault = false;
 
         foreach ($this->demanded as $key => $type) {
             if (!array_key_exists($key, $raw)) {
                 if (!$this->optional[$key]) {
-                    $violations[$key] = sprintf('required input [%s] is missing', $key);
+                    $rejections[$key] = new RejectedBinding($key, sprintf('required input [%s] is missing', $key));
                 }
 
                 continue;
@@ -246,7 +247,7 @@ final readonly class Program
             };
 
             if ($admitted->isErr()) {
-                $violations[$key] = sprintf('binding [%s]: %s', $key, $admitted->unwrapErr()->getMessage());
+                $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s]: %s', $key, $admitted->unwrapErr()->getMessage()));
                 $fault = true;
 
                 continue;
@@ -258,7 +259,7 @@ final readonly class Program
             // None is simply the value, and falls through to the overlay as
             // the null a symbol reads back as absent.
             if ($admitted->unwrap()->isNone() && !$this->optional[$key]) {
-                $violations[$key] = sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type));
+                $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type)));
                 $fault = true;
 
                 continue;
@@ -267,10 +268,10 @@ final readonly class Program
             $overlay[$key] = $admitted->unwrap()->unwrapOr(null);
         }
 
-        if ($violations !== []) {
+        if ($rejections !== []) {
             return Err($fault
-                ? new InadmissibleBinding(array_values($violations), array_keys($violations))
-                : new MissingRequiredInput(array_values($violations), array_keys($violations)));
+                ? new InadmissibleBinding(array_values($rejections))
+                : new MissingRequiredInput(array_values($rejections)));
         }
 
         return Ok(new Bindings($overlay));

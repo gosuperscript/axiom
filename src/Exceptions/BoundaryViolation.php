@@ -29,19 +29,28 @@ use RuntimeException;
  * `instanceof MissingRequiredInput` reads as "nothing here is wrong except
  * that inputs are still missing".
  *
- * `$violations` and `$inputs` are parallel: `$violations[$i]` is the message
- * about the binding named by `$inputs[$i]`.
+ * `$rejections` is the refusal itself: one {@see RejectedBinding} per input
+ * at fault, each carrying the input's name and the message about it together,
+ * so no reader has to align two lists. `$violations` is the messages
+ * projected out of them, in the same order.
  */
 abstract class BoundaryViolation extends RuntimeException
 {
     /**
-     * @param non-empty-list<string> $violations
-     * @param non-empty-list<string> $inputs The binding each violation names.
+     * The messages of `$rejections`, in the same order.
+     *
+     * @var non-empty-list<string>
+     */
+    public readonly array $violations;
+
+    /**
+     * @param non-empty-list<RejectedBinding> $rejections
      */
     public function __construct(
-        public readonly array $violations,
-        public readonly array $inputs,
+        public readonly array $rejections,
     ) {
-        parent::__construct("Bindings rejected at the boundary:\n- " . implode("\n- ", $violations));
+        $this->violations = array_map(static fn(RejectedBinding $rejection) => $rejection->message, $rejections);
+
+        parent::__construct("Bindings rejected at the boundary:\n- " . implode("\n- ", $this->violations));
     }
 }

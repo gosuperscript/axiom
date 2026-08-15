@@ -15,6 +15,7 @@ use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
 use Superscript\Axiom\Exceptions\InadmissibleBinding;
 use Superscript\Axiom\Exceptions\MissingRequiredInput;
+use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
@@ -64,6 +65,7 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(BoundaryViolation::class)]
 #[CoversClass(InadmissibleBinding::class)]
 #[CoversClass(MissingRequiredInput::class)]
+#[CoversClass(RejectedBinding::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
@@ -184,7 +186,11 @@ final class TypedExpressionTest extends TestCase
         $this->assertCount(2, $violation->violations);
         $this->assertStringContainsString('binding [a]:', $violation->violations[0]);
         $this->assertStringContainsString('required input [b] is missing', $violation->violations[1]);
-        $this->assertSame(['a', 'b'], $violation->inputs);
+
+        // Each rejection carries its input beside its message; `$violations`
+        // is those messages projected out, in the same order.
+        $this->assertSame(['a', 'b'], array_column($violation->rejections, 'input'));
+        $this->assertSame($violation->violations, array_column($violation->rejections, 'message'));
 
         // A supplied value that is wrong is a fault whatever else is absent.
         $this->assertInstanceOf(InadmissibleBinding::class, $violation);
@@ -354,10 +360,12 @@ final class TypedExpressionTest extends TestCase
         $violation = $program([])->unwrapErr();
 
         $this->assertInstanceOf(MissingRequiredInput::class, $violation);
-        $this->assertSame(['name'], $violation->inputs);
 
         // The unread declaration is absent too, and nothing is said about it.
-        $this->assertSame(['required input [name] is missing'], $violation->violations);
+        $this->assertEquals(
+            [new RejectedBinding('name', 'required input [name] is missing')],
+            $violation->rejections,
+        );
     }
 
     #[Test]
@@ -376,7 +384,7 @@ final class TypedExpressionTest extends TestCase
         $this->assertInstanceOf(InadmissibleBinding::class, $violation);
         $this->assertNotInstanceOf(MissingRequiredInput::class, $violation);
         $this->assertInstanceOf(BoundaryViolation::class, $violation);
-        $this->assertSame(['employees'], $violation->inputs);
+        $this->assertSame(['employees'], array_column($violation->rejections, 'input'));
     }
 
     #[Test]
@@ -400,7 +408,7 @@ final class TypedExpressionTest extends TestCase
 
         $violation = $program([])->unwrapErr();
         $this->assertInstanceOf(MissingRequiredInput::class, $violation);
-        $this->assertSame(['staff'], $violation->inputs);
+        $this->assertSame(['staff'], array_column($violation->rejections, 'input'));
     }
 
     #[Test]
