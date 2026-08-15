@@ -4,11 +4,21 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Analysis;
 
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 
 /** One certified source node and the compile-time decisions made for it. */
 final readonly class CompilationNode
 {
+    /**
+     * Did this node, or anything under it, fail to compile? Carried
+     * bottom-up so the question is answered by reading a boolean instead of
+     * walking the tree: {@see \Superscript\Axiom\Program} asks it of every
+     * program it mints, including the overwhelming majority in which nothing
+     * ever went wrong.
+     */
+    public bool $failed;
+
     /**
      * @param class-string $source
      * @param list<CompilationChild> $children
@@ -20,7 +30,21 @@ final readonly class CompilationNode
         public string $extension,
         public array $children = [],
         public array $operators = [],
-    ) {}
+    ) {
+        $this->failed = $returns instanceof ErrorType
+            || array_any($children, static fn(CompilationChild $child): bool => $child->node->failed);
+    }
+
+    /**
+     * Where the child at $index under the node at $path sits. This is the
+     * `$`-rooted path language itself: every path in a compilation — the one
+     * a refusal is stamped with, the one the analysis prints, the one a
+     * quarantine entry names — is this call, nested.
+     */
+    public static function childPath(string $path, int $index): string
+    {
+        return sprintf('%s.children[%d].node', $path, $index);
+    }
 
     /**
      * @return array{
@@ -45,7 +69,7 @@ final readonly class CompilationNode
         foreach ($this->children as $index => $child) {
             $children[] = [
                 'role' => $child->role,
-                'node' => $child->node->toArray("{$path}.children[{$index}].node", $revealLiterals),
+                'node' => $child->node->toArray(self::childPath($path, $index), $revealLiterals),
             ];
         }
 

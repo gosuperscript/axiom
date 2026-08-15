@@ -32,7 +32,7 @@ final class CompilationRecorder
      */
     public function childPath(): string
     {
-        return sprintf('%s.children[%d].node', $this->path, count($this->children));
+        return CompilationNode::childPath($this->path, count($this->children));
     }
 
     public function child(CompilationNode $node, ?string $role): void

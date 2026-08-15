@@ -88,12 +88,22 @@ final readonly class Program
      * line: a node typed {@see ErrorType} is a node error-tolerant
      * compilation gave up on ({@see Diagnosis}), and a program carrying one
      * anywhere would present a checked face over an unchecked subtree. The
-     * whole tree is walked, not just the root — a failed match arm is
+     * whole tree is answered for, not just the root — a failed match arm is
      * absorbed into the union of its siblings, so a broken node can sit under
      * a perfectly ordinary type.
+     *
+     * The answer costs one boolean read: {@see CompilationNode::$failed}
+     * carries it for a whole subtree, so a sound program — every program
+     * `compile()` mints — pays for the guard once, not once per node. The
+     * walk below runs only to name the offending node, on the path where no
+     * program is minted anyway.
      */
     private static function certify(CompilationNode $node, string $path): void
     {
+        if (!$node->failed) {
+            return;
+        }
+
         if ($node->returns instanceof ErrorType) {
             throw new LogicException(sprintf(
                 'The node at [%s] failed to compile; a Program cannot be certified from it. Read Expression::diagnose() for what refused.',
@@ -101,8 +111,10 @@ final readonly class Program
             ));
         }
 
+        // A node that failed without being ErrorType itself has a failed
+        // child, so this loop always reaches one and throws.
         foreach ($node->children as $index => $child) {
-            self::certify($child->node, sprintf('%s.children[%d].node', $path, $index));
+            self::certify($child->node, CompilationNode::childPath($path, $index));
         }
     }
 

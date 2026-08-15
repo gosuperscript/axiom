@@ -69,7 +69,7 @@ final readonly class CompilationAnalysis implements JsonSerializable
         }
 
         foreach ($node->children as $index => $child) {
-            $this->collectOperators($child->node, "{$path}.children[{$index}].node", $operators);
+            $this->collectOperators($child->node, CompilationNode::childPath($path, $index), $operators);
         }
     }
 }
