@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use LogicException;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Types\ErrorType;
@@ -43,31 +44,50 @@ use function Superscript\Monads\Result\Ok;
  * ({@see \Superscript\Axiom\SourceCompilers\AdmissionNode}). A door written
  * later is absorbing by construction if it is built the same way.
  *
- * This is the same absorption {@see SourceCompilation::shapeOf()} and
- * {@see SourceCompilation::overlaps()} perform, and it is machinery for the
- * same reason: a compiler must not have to remember.
+ * This is the same absorption {@see SourceCompilation::typeOf()},
+ * {@see SourceCompilation::shapeOf()} and {@see SourceCompilation::overlaps()}
+ * perform, and it is machinery for the same reason: a compiler must not have
+ * to remember.
+ *
+ * ## The mark is not handed out
+ *
+ * {@see ErrorType} is the compiler's own, and a failed child's type was the
+ * one channel through which a host could come to hold one. So {@see $returns}
+ * refuses on a failed source rather than answering with the mark. Everything
+ * a compiler legitimately wants from a failed child it still has —
+ * {@see failed()} asks whether it failed, and the judgments on
+ * {@see SourceCompilation} answer for it — and what it cannot have is an
+ * instance to claim back as a type of its own.
  */
-final readonly class CompiledSource
+final class CompiledSource
 {
-    public Type $returns;
+    /**
+     * What this source returns — for a source that compiled. A source that
+     * did not has no type to give: error-tolerant compilation marks it with
+     * {@see ErrorType}, minted only alongside the diagnostic that explains
+     * it, so answering with the mark would let a compiler claim a failure
+     * nothing diagnosed. Reading it refuses instead.
+     */
+    public Type $returns {
+        get => $this->failed()
+            ? throw new LogicException('A source that did not compile has no return type to read; the compiler marks it with a type of its own, which nothing outside compilation may hold. Ask failed() before reading it, or let the compilation capability answer for it: typeOf(), shapeOf() and overlaps() absorb a failed child, and claiming() composes over one.')
+            : $this->node->returns;
+    }
 
     /** @internal Use SourceCompilation to construct compiled sources. */
-    public function __construct(private CompiledNode $node)
-    {
-        $this->returns = $node->returns;
-    }
+    public function __construct(private readonly CompiledNode $node) {}
 
     /**
      * Did the source this came from fail to compile? Error-tolerant
      * compilation types such a source {@see ErrorType} so the walk can carry
-     * on around it, which leaves a compiler holding a child whose type is a
-     * placeholder rather than a claim. A compiler about to judge that child
-     * has nothing to judge and absorbs instead, which the judgments on
-     * {@see SourceCompilation} do for it — this is the question they ask.
+     * on around it, which leaves a compiler holding a child with no type to
+     * judge. A compiler about to judge that child absorbs instead, which the
+     * judgments on {@see SourceCompilation} do for it — this is the question
+     * they ask.
      */
     public function failed(): bool
     {
-        return $this->returns instanceof ErrorType;
+        return $this->node->returns instanceof ErrorType;
     }
 
     /**
@@ -121,11 +141,13 @@ final readonly class CompiledSource
      * Never-shaped, so the check passes without judging anything, and the
      * certification is only ever a precondition for a claim made by the door
      * that follows — which absorbs. A guard here would change nothing an
-     * expression can observe.
+     * expression can observe. That is why it reads the node's type rather
+     * than {@see $returns}: passing vacuously is the behaviour, and the
+     * property refuses instead of answering.
      */
     public function expectPresent(Type $expected): self
     {
-        $present = PresentType::of($this->returns);
+        $present = PresentType::of($this->node->returns);
         $admitted = TypeRelations::admits($present, $expected);
 
         if ($admitted->isErr()) {
@@ -133,7 +155,7 @@ final readonly class CompiledSource
                 sprintf(
                     'This source must provide %s when present; it provides %s.',
                     TypeDescriber::describe($expected),
-                    TypeDescriber::describe($this->returns),
+                    TypeDescriber::describe($this->node->returns),
                 ),
                 [$admitted->unwrapErr()],
             ));
@@ -211,7 +233,7 @@ final readonly class CompiledSource
     /** Mapping a present value preserves optionality without nesting it. */
     private function propagateAbsence(Type $returns): Type
     {
-        return $this->returns->shape() instanceof OptionShape
+        return $this->node->returns->shape() instanceof OptionShape
             && !$returns->shape() instanceof OptionShape
                 ? new OptionType($returns)
                 : $returns;

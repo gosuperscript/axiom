@@ -300,30 +300,28 @@ final class ProgramCertificationTest extends TestCase
 
     /**
      * The claim a source compiler makes is not authored through any of those
-     * doors, and it is where a host most easily comes by the mark: it is
-     * handed one for every child that failed. Every claim becomes a node's
-     * return type, so the node is where the claim is answered for.
+     * doors, and it was the one way a host could come by the mark at all: a
+     * compiler is handed a child for every source it compiles, and reading
+     * the type of one that failed used to answer with the mark itself. It
+     * refuses instead, so there is nothing to keep and nothing to claim
+     * back.
      */
     #[Test]
-    public function a_compiler_cannot_claim_the_mark_it_was_handed_for_a_failed_child(): void
+    public function the_mark_cannot_be_taken_from_a_child_that_failed(): void
     {
-        $extension = new RetainingExtension();
-        $dialect = Dialect::core()->with($extension);
+        // A compiler that keeps the type of the child it compiled — a plugin
+        // caching a claim per source class does exactly this — over an
+        // expression whose child does not compile. Without the refusal it
+        // would keep the mark and claim it back for the next, blameless
+        // expression; the read is where that goes wrong, so the read is
+        // where it is stopped.
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('A source that did not compile has no return type to read');
 
-        // One broken expression, diagnosed. The compiler is handed the mark
-        // for the child that failed, and keeps it.
-        $broken = new Expression(new RetainingSource(new SymbolSource('missing')), dialect: $dialect)->diagnose();
-
-        $this->assertCount(1, $broken->diagnostics);
-
-        // A second expression, sound, compiled by the same extension — which
-        // now claims what it kept. The claim is refused where it is made,
-        // rather than certification refusing an expression with nothing
-        // wrong with it.
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('the type this compiled node returns is or contains one');
-
-        new Expression(new RetainingSource(new StaticSource(1)), dialect: $dialect)->diagnose();
+        new Expression(
+            new RetainingSource(new SymbolSource('missing')),
+            dialect: Dialect::core()->with(new RetainingExtension()),
+        )->diagnose();
     }
 
     #[Test]

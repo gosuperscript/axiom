@@ -16,7 +16,11 @@ final readonly class InfixExpressionCompiler
     {
         $left = $compilation->child($source->left, 'left');
         $right = $compilation->child($source->right, 'right');
-        $operation = $compilation->infix($left->returns, $source->operator, $right->returns);
+        $operation = $compilation->infix(
+            $compilation->typeOf($left),
+            $source->operator,
+            $compilation->typeOf($right),
+        );
 
         return $compilation->custom($operation->returns, static function (SourceEvaluation $evaluation) use ($left, $right, $operation, $source) {
             try {

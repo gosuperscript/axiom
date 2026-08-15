@@ -23,15 +23,16 @@ final readonly class AscriptionSourceCompiler
         // overlaps(Unknown, T) always holds, which is the admission this
         // bridge exists to provide.
         $inner = $compilation->child($source->source, 'source');
+        $ascribed = $compilation->typeOf($inner);
 
-        $overlap = $compilation->overlaps($inner->returns, $source->type);
+        $overlap = $compilation->overlaps($ascribed, $source->type);
 
         if ($overlap->isErr()) {
             $compilation->reject(new TypeMismatch(
                 sprintf(
                     'The claim that this is %s is false: the value is %s, and no value inhabits both.',
                     TypeDescriber::describe($source->type),
-                    TypeDescriber::describe($inner->returns),
+                    TypeDescriber::describe($ascribed),
                 ),
                 [$overlap->unwrapErr()],
             ));

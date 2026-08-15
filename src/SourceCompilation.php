@@ -147,6 +147,24 @@ final readonly class SourceCompilation
     }
 
     /**
+     * The certified type of a compiled child, for a compiler that needs the
+     * type itself — to bind an operation from, to claim over, to name in a
+     * message. Absorbs for the same reason {@see overlaps()} does: a child
+     * that did not compile has no type, and {@see CompiledSource::$returns}
+     * refuses rather than hand out the compiler's mark, so this is how a
+     * compiler asks for a child's type without first asking whether there is
+     * one.
+     */
+    public function typeOf(CompiledSource $child): Type
+    {
+        if ($child->failed()) {
+            $this->absorb();
+        }
+
+        return $child->returns;
+    }
+
+    /**
      * The structural projection of a compiled child — what it promises, for a
      * compiler about to certify something against it (a field, a member, a
      * case). Absorbs for the same reason {@see overlaps()} does: a child that
@@ -155,11 +173,7 @@ final readonly class SourceCompilation
      */
     public function shapeOf(CompiledSource $child): Shape
     {
-        if ($child->failed()) {
-            $this->absorb();
-        }
-
-        return $child->returns->shape();
+        return $this->typeOf($child)->shape();
     }
 
     /**

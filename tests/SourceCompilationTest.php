@@ -222,6 +222,49 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function no_operation_is_bound_from_a_failed_operand(): void
+    {
+        // No rule can be selected from the mark, and a refusal saying so
+        // would blame this source for the fault below it. Both operand
+        // positions absorb, on either kind of operation.
+        $compilation = self::compilation();
+        $error = ErrorType::shared();
+        $number = new NumberType();
+
+        foreach ([
+            'infix left' => static fn() => $compilation->infix($error, '+', $number),
+            'infix right' => static fn() => $compilation->infix($number, '+', $error),
+            'prefix operand' => static fn() => $compilation->prefix('-', $error),
+        ] as $position => $bind) {
+            try {
+                $bind();
+                $this->fail("Binding an operation over a failed {$position} must absorb.");
+            } catch (CompilationAbsorbed) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    #[Test]
+    public function the_type_of_a_failed_child_is_not_a_type_to_claim(): void
+    {
+        // The one way a compiler asks a child for its type. A child that did
+        // not compile has none — reading CompiledSource::$returns refuses
+        // rather than answering with the mark — so the question is not put
+        // and this source inherits the failure instead.
+        $compilation = self::compilation();
+
+        $this->assertInstanceOf(
+            NumberType::class,
+            $compilation->typeOf(CompiledSource::constant(new NumberType(), 1)),
+        );
+
+        $this->expectException(CompilationAbsorbed::class);
+
+        $compilation->typeOf(new CompiledSource(CompiledNode::failed()));
+    }
+
+    #[Test]
     public function the_shape_of_a_failed_child_is_not_a_promise_to_judge(): void
     {
         $compilation = self::compilation();
@@ -266,7 +309,10 @@ final class SourceCompilationTest extends TestCase
         ] as $door => $claim) {
             $absorbed = $claim();
 
-            $this->assertInstanceOf(ErrorType::class, $absorbed->returns, $door);
+            // Asked, never read: a failed source refuses to hand out the mark
+            // it wears, so failed() is the whole of what a door answers with.
+            $this->assertTrue($absorbed->failed(), $door);
+            $this->assertInstanceOf(ErrorType::class, $absorbed->node()->returns, $door);
 
             // ErrorType and an evaluation that refuses are one pair: a node
             // that wears the type must also carry the refusal, or a broken

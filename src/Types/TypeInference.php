@@ -129,9 +129,14 @@ final readonly class TypeInference
             $compiled = new CompiledSource(CompiledNode::failed());
         }
 
-        return Ok($compiled->node()->forSource($source, CompilationNode::certified(
+        // The node, not the compiled source: the walk records what every node
+        // was typed as, the mark on a node the compiler gave up on included,
+        // and {@see CompiledSource::$returns} refuses to hand that out.
+        $node = $compiled->node();
+
+        return Ok($node->forSource($source, CompilationNode::certified(
             $source::class,
-            $compiled->returns,
+            $node->returns,
             $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
             $recorder->children(),
             $recorder->operators(),
