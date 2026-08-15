@@ -24,6 +24,11 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: pcov
+          # assert() is how this codebase pins invariants a type cannot state.
+          # setup-php starts from php.ini-production, where zend.assertions=-1
+          # compiles every assert out: the invariants go unchecked, the lines
+          # leave the coverage report, and their mutants can never be killed.
+          ini-values: zend.assertions=1
 
       - name: Setup problem matchers
         run: |

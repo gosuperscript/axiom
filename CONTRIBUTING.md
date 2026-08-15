@@ -98,6 +98,14 @@ The project requires **100% code coverage** for all new code. We use three types
    * Required Mutation Score Indicator (MSI): 100%
    * Ensures test quality and effectiveness
 
+Run all three with `zend.assertions=1` (PHP's development default; check with
+`php -i | grep zend.assertions`). `assert()` is how this codebase pins
+invariants a type cannot state, and `zend.assertions=-1` — the production
+default — compiles every one of them away: the invariants go unchecked, their
+lines leave the coverage report, and their mutants become unkillable. It is a
+system setting, so it comes from the ini file or `php -d`, never from
+`phpunit.xml` or `ini_set()`.
+
 ### Running All Tests
 
 ```bash
