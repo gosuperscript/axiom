@@ -351,6 +351,16 @@ Extension rules **join** core's — order carries no meaning, because no tie is 
 
 #### Typed bindings: the boundary
 
+> **Superseded (2026-08-15).** This section has the boundary admit *every* declared
+> binding on every call. The shipped boundary demands only the inputs the compiled
+> program reads — `Program::$references`, the compiler's own record — and decides
+> whether an absent input is legal from the declared type's shape rather than from
+> how a supplied value happened to convert. See the CHANGELOG entries *The boundary
+> demands bindings only for the inputs the program reads* and *Absence at the boundary
+> is judged by the declared type's shape* (gosuperscript/axiom#92). The rest of this
+> section stands: stripping, the disjoint namespaces, and the two `Boundary` modes are
+> as written.
+
 Certification is conditional — "*if* inputs inhabit their declared types, this program is sound" — and the boundary establishes the condition, on every call of the compiled `Program`. `compile()` proves the program; it cannot prove future inputs — which is why the boundary is the one runtime type check that survives compilation, *by design*. The same declarations map serves both faces: statically it seeds the `TypeEnvironment`; at invoke time each declared binding passes through its declared type (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
 
 - Declared input, bad value → boundary error, pre-evaluation, aggregated across all bad inputs, named by binding (`binding [customer]: field [turnover]…`) — errors speak the host's language, not the AST's.
