@@ -156,14 +156,36 @@ final readonly class RecoveringCompiler
      */
     private function attempt(?ErrorRecovery $recovery): Result
     {
-        $dialect = $this->expression->dialect;
+        // Reads are collected for the recovery to accumulate across attempts.
+        // Certification has no recovery and so nothing to hand them to, and it
+        // threads no recorder rather than filling one it would discard.
+        if ($recovery === null) {
+            return $this->walk(null, null);
+        }
 
         // Where the attempt's reads end up. Every node hands its reads to its
         // parent — as it finishes, or as it refuses — so the root's recorder
         // holds the whole attempt, in the order the names were read.
         $reads = new CompilationRecorder();
+        $compiled = $this->walk($recovery, $reads);
 
-        $compiled = new TypeInference(
+        $compiled->inspect(static fn(CompiledNode $node) => $reads->recordReferences($node->references));
+        $recovery->record($reads->references());
+
+        return $compiled;
+    }
+
+    /**
+     * One ordinary compilation of the expression, quarantining what $recovery
+     * has set aside and handing every name it reads to $reads.
+     *
+     * @return Result<CompiledNode, TypeMismatch>
+     */
+    private function walk(?ErrorRecovery $recovery, ?CompilationRecorder $reads): Result
+    {
+        $dialect = $this->expression->dialect;
+
+        return new TypeInference(
             $dialect->operators(),
             $dialect->unaryOperators(),
             $dialect->literals(),
@@ -177,11 +199,6 @@ final readonly class RecoveringCompiler
             '$',
             $reads,
         );
-
-        $compiled->inspect(static fn(CompiledNode $node) => $reads->recordReferences($node->references));
-        $recovery?->record($reads->references());
-
-        return $compiled;
     }
 
     private function program(CompiledNode $node): Program
