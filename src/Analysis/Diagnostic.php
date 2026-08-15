@@ -13,23 +13,26 @@ use Superscript\Axiom\Types\TypeMismatch;
  * made it (first location wins), and is null for a refusal about the whole
  * program rather than a position in it — a definition cycle.
  *
- * It carries no more than the {@see TypeMismatch} it wraps, and is kept
- * anyway because it is the vocabulary a reader of a diagnosis sees.
+ * It reads no more than the {@see TypeMismatch} it wraps — `path` and
+ * `message` are that mismatch's own, answered rather than copied — and is
+ * kept anyway because it is the vocabulary a reader of a diagnosis sees.
  * Severity, related locations and suggested fixes are things a diagnostic
  * grows; each would be wrong on a TypeMismatch, which is a verdict the
  * compiler reaches rather than a report anyone reads.
  */
-final readonly class Diagnostic
+final class Diagnostic
 {
-    public ?string $path;
-
-    public string $message;
-
-    public function __construct(public TypeMismatch $mismatch)
-    {
-        $this->path = $mismatch->path;
-        $this->message = $mismatch->message;
+    /** The node the refusal names; null when it names no position. */
+    public ?string $path {
+        get => $this->mismatch->path;
     }
+
+    /** The refusal itself, without the causes under it. */
+    public string $message {
+        get => $this->mismatch->message;
+    }
+
+    public function __construct(public readonly TypeMismatch $mismatch) {}
 
     /** The full cause chain, prefixed with the node when there is one. */
     public function describe(): string
