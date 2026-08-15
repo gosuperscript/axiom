@@ -37,15 +37,31 @@ use Superscript\Monads\Result\Result;
  * {@see \Superscript\Axiom\Program} refuses to be constructed from a node
  * tree containing one. An ErrorType therefore never reaches evaluation.
  *
- * That invariant is held from both sides. The constructor is private, so
- * {@see shared()} — internal to the library — is the only mint. And every
- * public door that ingests a host-supplied type refuses one through
- * {@see refuseAuthored()}, so an ErrorType obtained anyway cannot be
- * authored back into a program. Without the second half, a declaration
- * typed ErrorType would compile a symbol to a failure nothing had
- * diagnosed: `diagnose()` would report nothing and certification would then
- * refuse the very tree it was handed, breaking "zero diagnostics ⟺
- * certified program".
+ * ## Three layers keep it that way
+ *
+ * The mark is the compiler's own: the constructor is private, so
+ * {@see shared()} — internal to the library — is the only mint. What a host
+ * can still do is hold on to one it was handed (the type of a child that
+ * failed) and give it back as a claim of its own. Were that to land in a
+ * compiled tree, `diagnose()` would report nothing and certification would
+ * then refuse the very tree it was handed, breaking "zero diagnostics ⟺
+ * certified program". Three layers stop it, and they do different jobs:
+ *
+ *  - **The doors, for the message.** The public places a host authors a type
+ *    — a declaration on `Expression` or `TypeEnvironment`, the type on
+ *    `Ascription` or `Coerce`, an operator rule's operands and return —
+ *    check with {@see refuseAuthored()} before anything is compiled, so the
+ *    complaint names the declaration that is wrong. They are convenience,
+ *    not the guarantee: each covers one door, and there will be more doors.
+ *  - **{@see \Superscript\Axiom\CompiledNode::returning()}, for the
+ *    invariant.** Every type a host claims as a node's return — through
+ *    `produces()`, `custom()`, `constant()`, an operator rule, a literal
+ *    factory, a field declaration — becomes one there, so that is the one
+ *    place the mark has to be refused for the invariant to hold, and a door
+ *    nobody thought to guard is guarded anyway.
+ *  - **{@see \Superscript\Axiom\Program}'s certification, as the backstop.**
+ *    It answers for the whole tree at the moment a type stops being a claim
+ *    and becomes a promise, and it costs one boolean read.
  *
  * @implements Type<mixed>
  */

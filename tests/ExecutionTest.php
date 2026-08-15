@@ -29,6 +29,7 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
+#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 #[CoversClass(CompiledNode::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(Node::class)]
@@ -47,7 +48,7 @@ final class ExecutionTest extends TestCase
         $type = new NumberType();
         $observer = new SpyObserver();
 
-        $child = new CompiledNode(
+        $child = CompiledNode::returning(
             $type,
             function (Runtime $runtime) {
                 $runtime->annotate('label', 'child');
@@ -56,7 +57,7 @@ final class ExecutionTest extends TestCase
             },
             'host.ChildSource',
         );
-        $root = new CompiledNode(
+        $root = CompiledNode::returning(
             $type,
             function (Runtime $runtime) use ($child) {
                 $result = $child->evaluate($runtime);
@@ -86,7 +87,7 @@ final class ExecutionTest extends TestCase
     {
         $failure = new RuntimeException('not resolved');
         $observer = new SpyObserver();
-        $node = new CompiledNode(new NumberType(), fn() => Err($failure));
+        $node = CompiledNode::returning(new NumberType(), fn() => Err($failure));
 
         $result = $node->evaluate(new Runtime(observer: $observer));
 
@@ -102,7 +103,7 @@ final class ExecutionTest extends TestCase
         $failure = new RuntimeException('host failure');
         $observer = new SpyObserver();
         $runtime = new Runtime(observer: $observer);
-        $node = new CompiledNode(new NumberType(), fn() => throw $failure);
+        $node = CompiledNode::returning(new NumberType(), fn() => throw $failure);
 
         try {
             $node->evaluate($runtime);
@@ -123,7 +124,7 @@ final class ExecutionTest extends TestCase
     public function an_observer_belongs_to_one_invocation(): void
     {
         $type = new NumberType();
-        $program = new Program(new CompiledNode(
+        $program = new Program(CompiledNode::returning(
             $type,
             fn() => Ok(Some(42)),
             StaticSource::class,

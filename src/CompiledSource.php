@@ -101,7 +101,7 @@ final readonly class CompiledSource
             $evaluate = $evaluate(...);
             $returns = $this->propagateAbsence($returns);
 
-            return new self(new CompiledNode($returns, function (Runtime $runtime) use ($evaluate) {
+            return new self(CompiledNode::returning($returns, function (Runtime $runtime) use ($evaluate) {
                 return $this->node->evaluate($runtime)->andThen(function ($option) use ($evaluate) {
                     if ($option->isNone()) {
                         return Ok(None());
@@ -151,7 +151,7 @@ final readonly class CompiledSource
         return self::claiming([$this], function () use ($returns, $evaluate): self {
             $evaluate = $evaluate(...);
 
-            return new self(new CompiledNode($returns, fn(Runtime $runtime) => $this->node
+            return new self(CompiledNode::returning($returns, fn(Runtime $runtime) => $this->node
                 ->evaluate($runtime)
                 ->andThen(fn($option) => self::normalize(
                     fn() => $evaluate($option->unwrapOr(null)),
@@ -176,7 +176,7 @@ final readonly class CompiledSource
     {
         $evaluate = $evaluate(...);
 
-        return new self(new CompiledNode($returns, fn(Runtime $runtime) => self::normalize(
+        return new self(CompiledNode::returning($returns, fn(Runtime $runtime) => self::normalize(
             fn() => $evaluate(new SourceEvaluation($runtime)),
         )));
     }
@@ -184,7 +184,7 @@ final readonly class CompiledSource
     /** Construct a total constant source; null is absence. */
     public static function constant(Type $returns, mixed $value): self
     {
-        return new self(new CompiledNode($returns, fn() => Ok(Option::from($value))));
+        return new self(CompiledNode::returning($returns, fn() => Ok(Option::from($value))));
     }
 
     /**

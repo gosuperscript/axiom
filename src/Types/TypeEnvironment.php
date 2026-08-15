@@ -83,7 +83,7 @@ final class TypeEnvironment
         $key = SymbolSource::key($name, $namespace);
 
         if (isset($this->declarations[$key])) {
-            return Ok(new CompiledNode($this->declarations[$key], static function (Runtime $runtime) use ($name, $namespace, $key) {
+            return Ok(CompiledNode::returning($this->declarations[$key], static function (Runtime $runtime) use ($name, $namespace, $key) {
                 // The resolution channel has one representation of null:
                 // None. A bound null is still a bound key — the boundary
                 // admitted it — but its value is honestly absent.
@@ -124,8 +124,7 @@ final class TypeEnvironment
         $result = $compiler->compile($source->unwrap(), $this, $path, $reads);
         array_pop($this->inProgress);
 
-        return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(
-            $node->returns,
+        return $this->memo[$key] = $result->map(fn(CompiledNode $node) => $node->evaluatedBy(
             static function (Runtime $runtime) use ($node, $key) {
                 $result = $runtime->slot($key, fn() => $node->evaluate($runtime));
 
@@ -134,8 +133,6 @@ final class TypeEnvironment
 
                 return $result;
             },
-            compilation: $node->compilation(),
-            references: $node->references,
         ));
     }
 }

@@ -179,7 +179,7 @@ The compiler capability passed to every source compiler.
 | `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Absorbs when the operand is a child that failed to compile. |
 | `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
-| `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |
+| `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. Refuses a `$returns` that is or contains `ErrorType`, as `produces()` and `custom()` do. |
 | `produces(Type $returns, callable $evaluate): CompiledSource` | Build a source without compiled children, commonly around an injected service. |
 | `custom(Type $returns, callable $evaluate): CompiledSource` | Advanced lazy/control-flow evaluation. The callable may accept `SourceEvaluation`. |
 | `within(string $message, callable $compile): mixed` | Add a source-specific parent message around a nested compilation refusal. |

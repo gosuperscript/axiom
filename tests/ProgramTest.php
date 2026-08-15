@@ -178,7 +178,7 @@ final class ProgramTest extends TestCase
             new NumberType(),
             'axiom.core',
         );
-        $attached = (new CompiledNode(
+        $attached = (CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
         ))->forSource($source, $analysis);
@@ -186,7 +186,7 @@ final class ProgramTest extends TestCase
         $this->assertSame(StaticSource::class, (new Program($attached))->analysis->root->source);
         $this->assertSame(
             CompiledNode::class,
-            (new Program(new CompiledNode(
+            (new Program(CompiledNode::returning(
                 new NumberType(),
                 fn(Runtime $runtime) => \Superscript\Monads\Result\Ok(\Superscript\Monads\Option\Some(1)),
             )))->analysis->root->source,

@@ -312,7 +312,7 @@ final class SourceCompilationTest extends TestCase
     {
         $source = new StaticSource(1);
         $seen = null;
-        $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $compilation = self::compilation(function (Source $candidate) use (&$seen, $node): Result {
             $seen = $candidate;
 
@@ -327,7 +327,7 @@ final class SourceCompilationTest extends TestCase
     public function compile_all_preserves_order_and_accepts_an_empty_list(): void
     {
         $compilation = self::compilation(fn(StaticSource $source): Result => Ok(
-            new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
+            CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some($source->value))),
         ));
 
         $compiled = $compilation->children([
@@ -353,7 +353,7 @@ final class SourceCompilationTest extends TestCase
 
             return $calls === 2
                 ? Err($refusal)
-                : Ok(new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))));
+                : Ok(CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))));
         });
 
         try {
@@ -453,7 +453,7 @@ final class SourceCompilationTest extends TestCase
     #[Test]
     public function symbol_delegates_the_owned_source(): void
     {
-        $node = new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $seen = [];
         $compilation = self::compilation(
             compileSymbol: function (SymbolSource $symbol) use (&$seen, $node): Result {
@@ -478,7 +478,7 @@ final class SourceCompilationTest extends TestCase
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(
+        $node = (CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => Ok(Some(1)),
             references: ['stale'],
@@ -511,7 +511,7 @@ final class SourceCompilationTest extends TestCase
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
+        $node = (CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
             ->forSource($source, $analysis);
         $paths = [];
         $record = function (string $path) use (&$paths, $node): Result {
