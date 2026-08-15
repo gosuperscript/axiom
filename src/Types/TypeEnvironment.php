@@ -44,21 +44,11 @@ final class TypeEnvironment
     /** @var list<string> */
     private array $inProgress = [];
 
-    /**
-     * A declaration is the type a symbol compiles to, so this is the second
-     * door {@see ErrorType} is refused at: an environment can be built
-     * without an {@see \Superscript\Axiom\Expression} around it, and a
-     * symbol typed with the compiler's mark for a node that failed would
-     * fail a node nothing had diagnosed.
-     *
-     * @param array<string, Type> $declarations
-     */
+    /** @param array<string, Type> $declarations */
     public function __construct(
         private readonly Definitions $definitions = new Definitions(),
         private readonly array $declarations = [],
-    ) {
-        ErrorType::refuseAuthoredDeclarations($this->declarations);
-    }
+    ) {}
 
     /**
      * @param string $path Where a defined symbol's source compiles — the edge

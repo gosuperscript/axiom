@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use InvalidArgumentException;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 
 /**
@@ -29,18 +28,8 @@ final readonly class InfixOperatorRuleBuilder
         return new self($this->operator, $identifier);
     }
 
-    /**
-     * An operand type is refused the compiler's mark for a node that failed:
-     * an operation over a failed operand is absorbed before any rule is
-     * looked at, so a rule declaring one could never fire. A rule that can
-     * never match is a confusing way to learn about the mistake, so the
-     * declaration says so instead.
-     */
     public function takes(Type $left, Type $right): InfixOperatorRuleWithOperands
     {
-        ErrorType::refuseAuthored($left, 'the left operand of an operator rule');
-        ErrorType::refuseAuthored($right, 'the right operand of an operator rule');
-
         return new InfixOperatorRuleWithOperands($this->operator, $left, $right, $this->identifier);
     }
 

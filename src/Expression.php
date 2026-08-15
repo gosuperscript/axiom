@@ -9,7 +9,6 @@ use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
@@ -41,9 +40,7 @@ use Superscript\Monads\Result\Result;
  * The declaration list is the expression's complete public signature —
  * declarations and definitions are disjoint namespaces (a symbol is a
  * parameter or a derived value, never both; enforced at construction), so
- * shadowing a definition is unrepresentable. A declaration typed with the
- * compiler's own mark for a node that failed is refused here too — see
- * {@see \Superscript\Axiom\Types\ErrorType::refuseAuthored()}.
+ * shadowing a definition is unrepresentable.
  */
 final readonly class Expression
 {
@@ -60,8 +57,6 @@ final readonly class Expression
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
-
-        ErrorType::refuseAuthoredDeclarations($this->declarations);
 
         // Symbol lookup is exact-key only (no descent), so declared and
         // defined names can only collide literally: Symbol('turnover',

@@ -32,18 +32,15 @@ use Throwable;
  * operator rule returns, what a literal factory infers, what a field
  * declares. So this is where the mark for a node that failed is refused —
  * {@see returning()} runs {@see ErrorType::refuseClaimed()} on the claim,
- * once, for all of them. A host that gets hold of the mark and claims it back
- * therefore hears about it where it made the claim, rather than as a
- * certification that refuses a later, blameless expression.
+ * once, for all of them.
  *
- * The gate reads the claim and does not walk into it. That follows from the
- * mark being unobtainable: a host cannot build `Option<Error>` without an
- * `Error` to put inside it. What it can hold is the one instance the library
- * hands out whole — {@see \Superscript\Axiom\Analysis\Diagnosis::$returns},
- * for an expression whose root failed — and one instanceof answers for that.
- * Containment is walked where a type is authored instead
- * ({@see ErrorType::refuseAuthored()}), which is a cost per expression and
- * not a cost per node.
+ * The mark has no public appearance and no supported way to obtain one, so
+ * the gate is a backstop rather than the guarantee: it catches an instance
+ * taken by a route this library does not support, and a first-party
+ * regression that hands one back out, where the claim was made rather than
+ * as a certification that refuses a later, blameless expression. It reads
+ * the claim and does not walk into it, because a host with no instance
+ * cannot build `Option<Error>` around one either.
  *
  * Construction is private so that gate cannot be walked around. The two other
  * ways a node comes into being both stay inside it: {@see failed()} mints the
@@ -92,7 +89,7 @@ final readonly class CompiledNode
         ?CompilationNode $compilation = null,
         array $references = [],
     ): self {
-        ErrorType::refuseClaimed($returns, 'the type this compiled node returns');
+        ErrorType::refuseClaimed($returns);
 
         return new self($returns, $evaluation, $sourceType, $compilation, $references);
     }
