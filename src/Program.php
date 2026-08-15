@@ -45,6 +45,9 @@ final readonly class Program
 
     public CompilationAnalysis $analysis;
 
+    /** @var list<string> Declared inputs read by this compiled program. */
+    public array $references;
+
     /**
      * Required-ness per declaration, fixed at compile time. It is a
      * property of the projection, not the concrete class:
@@ -64,6 +67,7 @@ final readonly class Program
         private Boundary $boundary = Boundary::Coerce,
     ) {
         $this->returns = $node->returns;
+        $this->references = $node->references;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
         $compilation = $node->compilation() ?? new CompilationNode(
             CompiledNode::class,

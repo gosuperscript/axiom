@@ -108,11 +108,12 @@ final readonly class HostLiteralSource implements Source
 #[CoversClass(CompilationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
+#[CoversClass(\Superscript\Axiom\Analysis\CompilationRecorder::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
-#[UsesClass(CompiledNode::class)]
+#[CoversClass(CompiledNode::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
 #[UsesClass(Extension::class)]
@@ -381,8 +382,12 @@ final class SourceCompilationTest extends TestCase
             new NumberType(),
             'axiom.core',
         );
-        $node = (new CompiledNode(new NumberType(), fn(Runtime $runtime) => Ok(Some(1))))
-            ->forSource($source, $analysis);
+        $node = (new CompiledNode(
+            new NumberType(),
+            fn(Runtime $runtime) => Ok(Some(1)),
+            references: ['stale'],
+        ))
+            ->forSource($source, $analysis, ['amount']);
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
             compileNode: fn(Source $candidate): Result => Ok($node),
@@ -398,6 +403,7 @@ final class SourceCompilationTest extends TestCase
             fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
             $recorder->children(),
         ));
+        $this->assertSame(['amount'], $recorder->references());
     }
 
     #[Test]
@@ -717,6 +723,7 @@ final class SourceCompilationTest extends TestCase
         $program = $expression->compile()->unwrap();
 
         $this->assertSame(['amount'], $expression->parameters());
+        $this->assertSame(['amount'], $program->references);
         $this->assertInstanceOf(NumberType::class, $program->returns);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
@@ -793,6 +800,7 @@ final class SourceCompilationTest extends TestCase
             declarations: ['amount' => new NumberType()],
         ))->compile()->unwrap();
 
+        $this->assertSame(['amount'], $program->references);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
 

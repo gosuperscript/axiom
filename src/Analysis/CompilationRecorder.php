@@ -13,6 +13,9 @@ final class CompilationRecorder
     /** @var list<OperatorSelection> */
     private array $operators = [];
 
+    /** @var array<string, string> */
+    private array $references = [];
+
     /** @param string $path Where the node being compiled sits in the source tree. */
     public function __construct(private readonly string $path = '$') {}
 
@@ -42,6 +45,14 @@ final class CompilationRecorder
         $this->operators[] = $operator;
     }
 
+    /** @param list<string> $references */
+    public function recordReferences(array $references): void
+    {
+        foreach ($references as $reference) {
+            $this->references[$reference] = $reference;
+        }
+    }
+
     /** @return list<CompilationChild> */
     public function children(): array
     {
@@ -52,5 +63,11 @@ final class CompilationRecorder
     public function operators(): array
     {
         return $this->operators;
+    }
+
+    /** @return list<string> */
+    public function references(): array
+    {
+        return array_values($this->references);
     }
 }

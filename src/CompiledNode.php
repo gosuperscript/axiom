@@ -32,12 +32,16 @@ final readonly class CompiledNode
 
     private string $sourceType;
 
-    /** @param Closure(Runtime): Result<Option<mixed>, Throwable> $evaluation */
+    /**
+     * @param Closure(Runtime): Result<Option<mixed>, Throwable> $evaluation
+     * @param list<string> $references
+     */
     public function __construct(
         public Type $returns,
         Closure $evaluation,
         ?string $sourceType = null,
         private ?CompilationNode $compilation = null,
+        public array $references = [],
     ) {
         $this->evaluation = $evaluation;
         $this->sourceType = $sourceType ?? self::class;
@@ -49,10 +53,12 @@ final readonly class CompiledNode
      * description, so host nodes cannot forget to participate in observation.
      *
      * @internal
+     *
+     * @param list<string> $references
      */
-    public function forSource(Source $source, CompilationNode $compilation): self
+    public function forSource(Source $source, CompilationNode $compilation, array $references = []): self
     {
-        return new self($this->returns, $this->evaluation, $source::class, $compilation);
+        return new self($this->returns, $this->evaluation, $source::class, $compilation, $references);
     }
 
     /** @internal Compilation infrastructure and Program consume this metadata. */
