@@ -13,7 +13,7 @@ namespace Superscript\Axiom\Exceptions;
  *
  * This is the fault half of the taxonomy {@see BoundaryViolation} describes,
  * and it is what the call reports whenever any supplied value is wrong —
- * required inputs the same call left out are listed in `$violations` beside
+ * required inputs the same call left out are listed in `$rejections` beside
  * it, but they do not soften the verdict.
  */
 final class InadmissibleBinding extends BoundaryViolation {}

@@ -511,6 +511,14 @@ A consolidated record of the decisions this design makes, with the alternatives 
 - **Symbols are exact keys; descent is deleted.** `Bindings`/`TypeEnvironment` answer exact (dotted) keys; nothing digs into a binding's value to answer a lookup. `MemberAccessSource` is the one structural path. Any un-enumerated width — an open record, a dict's keys equally — could otherwise answer a lookup the checker refuses, and no collision check can expand unenumerable width; deleting the mechanism closes the class, where guarding (declaration-aware descent) or banning (namespace-collision errors) keeps two mechanisms in sync. Calling convention: bind keys exactly as declared.
 - **Declarations and definitions are disjoint namespaces.** Enforced at construction; the boundary strips undeclared keys. Shadowing becomes unrepresentable — no license rule, no descent hole, no declared∧defined agreement check to maintain. Overrides are modeled in-language as `Option`-typed parameters the definition consults.
 - **Typed bindings are the boundary.** The same declarations map seeds the `TypeEnvironment` statically and coerces/asserts declared inputs pre-evaluation (aggregated, named by binding). This is the one runtime type check that survives compilation, by design — `compile()` proves the program but cannot prove future inputs. Rejected typed value objects at the call site — they put types on the wrong side of time.
+
+  > **Superseded (2026-08-15).** "Declared inputs" here means every declaration.
+  > The shipped boundary coerces/asserts only the inputs the compiled program
+  > reads (`Program::$references`); a declaration nothing reads is neither
+  > demanded nor admitted. Same ruling as the note in §Typed bindings: the
+  > boundary — read it there for the absence rule that came with it. Everything
+  > else in this bullet stands.
+
 - **One `Dialect` value object, consumed at compile time only.** Packages contribute via `Extension` (abstract base with empty-default hooks); duplicate literal and exact source-compiler registrations are loud errors. Extension rules join core's; order carries no meaning because no tie is resolvable. A compiled program carries no dialect, so checking with different rules than you run with is unrepresentable. (Two earlier designs died on the way here: a resolver-held stack with an install-unless-present slot was order-dependent under resolver sharing; its replacement — the dialect riding the per-call `Context` — kept evaluator and checker honest but paid runtime dispatch per node. Compilation subsumes both.)
 - **Partial-agreement conformance stays a host policy**, built on the upstreamed registry; upstream later only if a second host independently reinvents it.
 

@@ -285,7 +285,7 @@ Sources are the nodes a program is described with:
 
 When do you reach for `Coerce` vs `Ascription` in practice?
 
-**`Coerce` is for input you don't control.** Wrap the exact spot where a messy external value enters the program — a CSV cell, a form field, a JSON fragment — and evaluation converts it (`'42' → 42`, `'' → absence`) before anything downstream sees it. Most programs never write an explicit `Coerce` node at all: the typed-bindings boundary (`declarations` on the `Expression`) is the same conversion applied to every declared input at once, which is where conversion usually belongs. Reach for the node itself when a single value needs converting *mid-expression* — for example, a host source that returns a stringly lookup cell.
+**`Coerce` is for input you don't control.** Wrap the exact spot where a messy external value enters the program — a CSV cell, a form field, a JSON fragment — and evaluation converts it (`'42' → 42`, `'' → absence`) before anything downstream sees it. Most programs never write an explicit `Coerce` node at all: the typed-bindings boundary (`declarations` on the `Expression`) is the same conversion applied at once to every input the program reads, which is where conversion usually belongs. Reach for the node itself when a single value needs converting *mid-expression* — for example, a host source that returns a stringly lookup cell.
 
 ```php
 new Coerce(new NumberType(), $rawLookupCell)   // '42 ' → 42; the compiler takes Number on faith

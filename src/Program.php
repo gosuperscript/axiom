@@ -182,8 +182,8 @@ final readonly class Program
     }
 
     /**
-     * Invoke the program with the given bindings. Declared bindings pass
-     * the boundary first; evaluation trusts everything past it.
+     * Invoke the program with the given bindings. The bindings this program
+     * reads pass the boundary first; evaluation trusts everything past it.
      *
      * @param array<string, mixed> $bindings
      * @return Result<Option<mixed>, Throwable>
