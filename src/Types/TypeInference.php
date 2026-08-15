@@ -114,10 +114,17 @@ final readonly class TypeInference
             // made it: a source compiler, an operator no rule resolves, an
             // unbound symbol, a failed relation. Locating it here locates all
             // of them, and at() keeps an already-located refusal from a child
-            // pointing at the child. The names the node had already read
-            // before it refused are kept: a broken draft still knows what it
-            // depends on, and nothing else will carry them up.
-            $parent?->recordReferences($recorder->references());
+            // pointing at the child.
+            //
+            // Carrying up what the node read before it refused is error
+            // recovery's alone: recovery is what compiles on past a refusal
+            // and reports the reads of a broken region, so it is the only
+            // compilation in which they are read again. Without it a refusal
+            // aborts every compilation above it and the tree being recorded
+            // is discarded, so recording into it is work nobody collects.
+            if ($this->recovery !== null && $parent !== null) {
+                $parent->recordReferences($recorder->references());
+            }
 
             return Err($aborted->mismatch->at($path));
         } catch (CompilationAbsorbed) {
