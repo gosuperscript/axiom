@@ -161,7 +161,10 @@ final readonly class SourceCompilation
             $this->absorb();
         }
 
-        return $child->returns;
+        // The node, not the property: the question the property asks before
+        // it answers has just been asked here, and this runs once per operand
+        // of every operation in every program.
+        return $child->node()->returns;
     }
 
     /**

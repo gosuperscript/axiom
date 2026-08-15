@@ -13,13 +13,16 @@ final class CompilationRecorder
     /** @var list<OperatorSelection> */
     private array $operators = [];
 
-    private readonly References $references;
+    /**
+     * Held only once something is read. Most nodes of most expressions read
+     * no symbol at all — every literal, every operator node — and a recorder
+     * is built for each of them, so the set is worth not building until
+     * there is a name to put in it.
+     */
+    private ?References $references = null;
 
     /** @param string $path Where the node being compiled sits in the source tree. */
-    public function __construct(private readonly string $path = '$')
-    {
-        $this->references = new References();
-    }
+    public function __construct(private readonly string $path = '$') {}
 
     /**
      * The path of the next child to be compiled, numbered off the children
@@ -55,6 +58,11 @@ final class CompilationRecorder
     /** @param list<string> $references */
     public function recordReferences(array $references): void
     {
+        if ($references === []) {
+            return;
+        }
+
+        $this->references ??= new References();
         $this->references->record($references);
     }
 
@@ -73,6 +81,6 @@ final class CompilationRecorder
     /** @return list<string> */
     public function references(): array
     {
-        return $this->references->all();
+        return $this->references?->all() ?? [];
     }
 }
