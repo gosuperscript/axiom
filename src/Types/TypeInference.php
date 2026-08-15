@@ -11,6 +11,7 @@ use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
@@ -120,6 +121,13 @@ final readonly class TypeInference
             $parent?->recordReferences($recorder->references());
 
             return Err($aborted->mismatch->at($path));
+        } catch (CompilationAbsorbed) {
+            // A judgment with no subject: a child of this source already
+            // failed and was already reported, so this source inherits the
+            // failure instead of refusing over a placeholder type. What it
+            // compiled and read before the judgment is kept, so the reads
+            // survive and the node still describes what it got through.
+            $compiled = new CompiledSource(CompiledNode::failed());
         }
 
         return Ok($compiled->node()->forSource($source, new CompilationNode(

@@ -9,7 +9,6 @@ use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
-use Superscript\Axiom\Types\TypeRelations;
 
 /** @internal Compiler for the core ascription bridge. */
 final readonly class AscriptionSourceCompiler
@@ -25,14 +24,7 @@ final readonly class AscriptionSourceCompiler
         // bridge exists to provide.
         $inner = $compilation->child($source->source, 'source');
 
-        // Overlap is a claim about two inhabited types, and a source that
-        // failed to compile inhabits nothing — asking would refuse for a
-        // reason that has nothing to do with this claim.
-        if ($inner->failed()) {
-            return $compilation->absorbed();
-        }
-
-        $overlap = TypeRelations::overlaps($inner->returns, $source->type);
+        $overlap = $compilation->overlaps($inner->returns, $source->type);
 
         if ($overlap->isErr()) {
             $compilation->reject(new TypeMismatch(

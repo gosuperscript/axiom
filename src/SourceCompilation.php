@@ -10,12 +10,15 @@ use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Analysis\OperatorSelection;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\ErrorType;
+use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
 
 /**
@@ -113,28 +116,54 @@ final readonly class SourceCompilation
     }
 
     /**
-     * The compilation of a source whose judgment has no subject: a child of
-     * it already failed ({@see CompiledSource::failed()}), so this source is
-     * {@see ErrorType} too, and makes no refusal of its own.
+     * Could a value inhabit both of these types? The overlap relation, asked
+     * through the capability so it absorbs: a type that failed to compile is
+     * a placeholder rather than a claim, and no honest answer exists about
+     * it, so the question is not put and this compilation is
+     * {@see absorb()}ed instead.
+     *
+     * @return Result<bool, TypeMismatch>
+     */
+    public function overlaps(Type $left, Type $right): Result
+    {
+        if ($left instanceof ErrorType || $right instanceof ErrorType) {
+            $this->absorb();
+        }
+
+        return TypeRelations::overlaps($left, $right);
+    }
+
+    /**
+     * The structural projection of a compiled child — what it promises, for a
+     * compiler about to certify something against it (a field, a member, a
+     * case). Absorbs for the same reason {@see overlaps()} does: a child that
+     * did not compile promises nothing, and refusing on that would blame this
+     * source for the fault below it.
+     */
+    public function shapeOf(CompiledSource $child): Shape
+    {
+        if ($child->failed()) {
+            $this->absorb();
+        }
+
+        return $child->returns->shape();
+    }
+
+    /**
+     * Give up on this source without refusing: a child of it already failed
+     * ({@see CompiledSource::failed()}), so this source compiles to
+     * {@see ErrorType} too and makes no refusal of its own.
      *
      * Absorbing rather than refusing is what keeps one fault to one
-     * diagnostic. A failed child's type is a placeholder, so a judgment over
-     * it has no honest answer, and a refusal made on it would report the
-     * fault below a second time — under a second message, at a second node.
-     * Every judgment a compiler makes about a child's type therefore belongs
-     * behind a `failed()` check:
-     *
-     * ```php
-     * $inner = $compilation->child($source->source, 'source');
-     *
-     * if ($inner->failed()) {
-     *     return $compilation->absorbed();
-     * }
-     * ```
+     * diagnostic — a refusal made over a placeholder type would report the
+     * fault below a second time, under a second message, at a second node.
+     * The judgments this capability offers absorb on their own, so a compiler
+     * that judges through them never has to remember; call this directly only
+     * for a judgment of your own that it cannot make for you.
      */
-    public function absorbed(): CompiledSource
+    public function absorb(): never
     {
-        return new CompiledSource(CompiledNode::failed());
+        throw new CompilationAbsorbed();
     }
 
     /** Infer the literal-first type of an embedded PHP value. */

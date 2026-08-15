@@ -42,8 +42,8 @@ final readonly class CompiledSource
      * compilation types such a source {@see ErrorType} so the walk can carry
      * on around it, which leaves a compiler holding a child whose type is a
      * placeholder rather than a claim. A compiler about to judge that child
-     * has nothing to judge and absorbs instead — see
-     * {@see SourceCompilation::absorbed()}.
+     * has nothing to judge and absorbs instead, which the judgments on
+     * {@see SourceCompilation} do for it — this is the question they ask.
      */
     public function failed(): bool
     {

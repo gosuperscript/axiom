@@ -28,9 +28,10 @@ use Superscript\Monads\Result\Result;
  * way. Overlap asks whether two types *share* a value, and an uninhabited
  * type shares none; member access asks what a type promises, and an
  * uninhabited type promises nothing. Both refuse where the question is put
- * to them. So a compiler tests the class and absorbs before judging — see
- * {@see \Superscript\Axiom\SourceCompilation::absorbed()} — and that, not
- * the shape, is what keeps a node above a failure from refusing again.
+ * to them. So each such judgment tests the class and absorbs before asking —
+ * the judgments live on {@see \Superscript\Axiom\SourceCompilation} for
+ * exactly that reason — and that, not the shape, is what keeps a node above a
+ * failure from refusing again.
  *
  * It is minted only where a diagnostic is recorded alongside it, and a
  * {@see \Superscript\Axiom\Program} refuses to be constructed from a node

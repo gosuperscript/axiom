@@ -36,12 +36,11 @@ use function Superscript\Monads\Result\Err;
  *
  * ## What the retry does *not* do: report twice
  *
- * ErrorType absorbs, and absorption is total: every judgment a compiler
- * makes about a child's type is taken only over a child that compiled
- * ({@see \Superscript\Axiom\SourceCompilation::absorbed()}). An operation
- * over an ErrorType resolves to ErrorType with no rule lookup and no
- * refusal, an ascription over one claims nothing, a member access on one
- * certifies nothing — so `mystery > 1000 && postcode == 'SW1'` costs exactly
+ * ErrorType absorbs, and absorption is total: every judgment about a child's
+ * type is made through {@see \Superscript\Axiom\SourceCompilation}, which
+ * takes it only over a child that compiled. An operation over an ErrorType
+ * resolves to ErrorType with no rule lookup and no refusal, an ascription
+ * over one claims nothing, a member access on one certifies nothing — so `mystery > 1000 && postcode == 'SW1'` costs exactly
  * one diagnostic, the unbound `mystery`, while the right-hand comparison is
  * still fully checked and `postcode` is still collected as a reference. One
  * fault, one diagnostic — see {@see Diagnosis} for what that costs.
@@ -78,10 +77,10 @@ final readonly class RecoveringCompiler
      *
      * There is no recovery to carry, so none is built: compilation runs
      * without the quarantine check at every node, and nothing keeps what the
-     * attempt read. An empty recovery would answer no to every
-     * question it is asked, so this is the same compilation attempt
-     * diagnose() makes first — the same refusal, the same message, the same
-     * path — at the cost of the walk alone.
+     * attempt read. An empty recovery would answer no to every question it is
+     * asked, so this is the same compilation attempt diagnose() makes first —
+     * the same refusal, the same message, the same path — at the cost of the
+     * walk alone.
      *
      * @return Result<Program, TypeMismatch>
      */

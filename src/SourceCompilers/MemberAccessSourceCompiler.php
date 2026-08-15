@@ -44,14 +44,7 @@ final readonly class MemberAccessSourceCompiler
     {
         $object = $compilation->child($source->object, 'object');
 
-        // A source that failed to compile makes no structural claim, so no
-        // field is certified on it — and refusing here would blame this
-        // access for the fault below it.
-        if ($object->failed()) {
-            return $compilation->absorbed();
-        }
-
-        $access = self::resolveAccess($object->returns->shape(), $source->property, $compilation);
+        $access = self::resolveAccess($compilation->shapeOf($object), $source->property, $compilation);
 
         if ($access->isErr()) {
             $compilation->reject($access->unwrapErr());

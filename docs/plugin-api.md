@@ -184,7 +184,9 @@ The compiler capability passed to every source compiler.
 | `custom(Type $returns, callable $evaluate): CompiledSource` | Advanced lazy/control-flow evaluation. The callable may accept `SourceEvaluation`. |
 | `within(string $message, callable $compile): mixed` | Add a source-specific parent message around a nested compilation refusal. |
 | `reject(TypeMismatch|string $mismatch): never` | Refuse this source during compilation. The mismatch returns through `Expression::compile()`. |
-| `absorbed(): CompiledSource` | Compile to `ErrorType` making no refusal, for when a child has already failed and a judgment about its type has nothing left to judge. Guard it with `CompiledSource::failed()`. |
+| `overlaps(Type $left, Type $right): Result<bool, TypeMismatch>` | Could a value inhabit both types? Absorbs when either type is a child that failed to compile. |
+| `shapeOf(CompiledSource $child): Shape` | The structural projection of a compiled child, for certifying a field or member against it. Absorbs when the child failed to compile. |
+| `absorb(): never` | Compile to `ErrorType` making no refusal. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
 
 `child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
 
@@ -198,7 +200,7 @@ $compiled->returns; // Type
 
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
-| `failed(): bool` | True when this source did not compile and is typed `ErrorType`. Judge nothing about such a child; return `SourceCompilation::absorbed()`. | None; this is a compile-time question. |
+| `failed(): bool` | True when this source did not compile and is typed `ErrorType`. Judge nothing about such a child: judge through `SourceCompilation`, which absorbs for you, or call `SourceCompilation::absorb()`. | None; this is a compile-time question. |
 | `expectPresent(Type $expected): CompiledSource` | Checks the present member of an optional type; absence remains allowed and propagates later. | None; this is a compile-time certification. |
 | `mapPresent(Type $returns, callable $evaluate): CompiledSource` | An absent input stays absent and the callback is not invoked. If this source is optional, the result type is automatically `Option<$returns>`. | The present value. |
 | `mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource` | The callback is always invoked. | Present value or `null`. |

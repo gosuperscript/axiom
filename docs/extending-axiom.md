@@ -724,19 +724,22 @@ The outer message becomes a `TypeMismatch` whose cause is the original diagnosti
 
 During evaluation, return `Err($exception)` for an expected value-dependent failure that static types cannot rule out. Return a plain value for success. Let unexpected exceptions propagate: a thrown `TypeError`, service misconfiguration, or impossible branch is a defect, not a normal program result.
 
-One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back typed `ErrorType` — a node that already failed and was already reported. Operations absorb one on their own, because `ErrorType` is `Never`-shaped and an operation you bind over it resolves without a rule lookup. A judgment *you* make about the child's type does not absorb by itself, so ask `failed()` first and hand back `absorbed()`:
+One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back typed `ErrorType` — a node that already failed and was already reported. A judgment made over one has no honest answer, and a refusal built from it would report the fault below a second time, under a second message, at a second node. So no judgment is made over one: it is *absorbed*, and your source compiles to `ErrorType` too.
+
+Judge through the capability and absorption is machinery rather than something to remember. Every judgment `SourceCompilation` offers absorbs before it asks:
 
 ```php
 $inner = $compilation->child($source->source, 'source');
 
-if ($inner->failed()) {
-    return $compilation->absorbed();
-}
-
-// Judgments about $inner->returns belong below this line.
+// Each of these absorbs a failed child on its own; there is nothing to guard.
+$compilation->infix($inner->returns, '+', $other->returns);
+$compilation->overlaps($inner->returns, $source->type);
+$compilation->shapeOf($inner);
 ```
 
-That is the whole contract. A refusal you make anyway counts as a fault of its own and is reported as a second diagnostic — right when your refusal stands on its own (a missing configuration, a rule about your source that the child's type has no bearing on), wrong when it is really the child's failure under a second message. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
+For a judgment of your own that the capability cannot make for you — you consult a service, or check a rule about the child's type yourself — ask `$inner->failed()` and call `$compilation->absorb()`, which ends your compilation the way absorption ends the built-in ones.
+
+A refusal you make anyway counts as a fault of its own and is reported as a second diagnostic — right when your refusal stands on its own (a missing configuration, a rule about your source that the child's type has no bearing on), wrong when it is really the child's failure under a second message. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
 
 ### Step 7: Choose Absence Semantics
 
