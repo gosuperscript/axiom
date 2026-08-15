@@ -115,12 +115,13 @@ final readonly class RecoveringCompiler
             $attempt = $this->attempt($recovery);
 
             if ($attempt->isOk()) {
+                $root = $attempt->unwrap();
+
                 return new Diagnosis(
                     $diagnostics,
                     $recovery->references(),
-                    $attempt->unwrap(),
-                    $this->expression->declarations,
-                    $this->expression->boundary,
+                    $root->returns,
+                    $diagnostics === [] ? $this->program($root) : null,
                 );
             }
 

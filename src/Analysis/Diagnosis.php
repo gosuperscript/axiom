@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Analysis;
 
-use Superscript\Axiom\Boundary;
-use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
@@ -56,23 +54,23 @@ use function Superscript\Monads\Result\Ok;
  */
 final readonly class Diagnosis
 {
-    /** What the expression returns. {@see ErrorType} when the root node itself failed. */
-    public Type $returns;
-
     /**
      * @param list<Diagnostic> $diagnostics
      * @param list<string> $references
-     * @param array<string, Type> $declarations
+     * @param Type $returns What the expression returns. {@see ErrorType} when
+     *                      the root node itself failed.
+     * @param ?Program $program The program the compiler certified, or null
+     *                      when something refused. Null and a non-empty
+     *                      $diagnostics are the same verdict seen from two
+     *                      sides: the compiler mints a program exactly when
+     *                      the attempt that succeeded reported nothing.
      */
     public function __construct(
         public array $diagnostics,
         public array $references,
-        private CompiledNode $root,
-        private array $declarations = [],
-        private Boundary $boundary = Boundary::Coerce,
-    ) {
-        $this->returns = $root->returns;
-    }
+        public Type $returns,
+        private ?Program $program,
+    ) {}
 
     /**
      * The certified program, or everything that stands in its way.
@@ -81,10 +79,14 @@ final readonly class Diagnosis
      */
     public function program(): Result
     {
-        if ($this->diagnostics !== []) {
-            return Err($this->diagnostics);
+        if ($this->program !== null) {
+            return Ok($this->program);
         }
 
-        return Ok(new Program($this->root, $this->declarations, $this->boundary));
+        // The compiler mints a program exactly when nothing refused, so a
+        // missing program means at least one diagnostic explains it.
+        assert($this->diagnostics !== []);
+
+        return Err($this->diagnostics);
     }
 }
