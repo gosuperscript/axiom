@@ -12,7 +12,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\Diagnosis;
-use Superscript\Axiom\Analysis\Diagnostic;
 use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
@@ -161,7 +160,6 @@ final class AbandoningExtension extends Extension
  * line between telling you and pretending to have compiled.
  */
 #[CoversClass(Diagnosis::class)]
-#[CoversClass(Diagnostic::class)]
 #[CoversClass(RecoveringCompiler::class)]
 #[CoversClass(ErrorRecovery::class)]
 #[CoversClass(UnreachableEvaluation::class)]
@@ -218,7 +216,7 @@ final class DiagnosisTest extends TestCase
     /** @return list<string> */
     private static function messages(Diagnosis $diagnosis): array
     {
-        return array_map(fn(Diagnostic $diagnostic) => $diagnostic->message, $diagnosis->diagnostics);
+        return array_map(fn(TypeMismatch $diagnostic) => $diagnostic->message, $diagnosis->diagnostics);
     }
 
     /** `turnover > 1000 && postcode == 'SW1'`, with the left symbol swappable. */
@@ -393,7 +391,7 @@ final class DiagnosisTest extends TestCase
             'The definition graph is not well-founded; evaluation would recurse without terminating.',
         ], self::messages($diagnosis));
         $this->assertNull($diagnosis->diagnostics[0]->path);
-        $this->assertSame('Cyclic symbol definition: a → b → a.', $diagnosis->diagnostics[0]->mismatch->causes[0]->message);
+        $this->assertSame('Cyclic symbol definition: a → b → a.', $diagnosis->diagnostics[0]->causes[0]->message);
 
         // The cyclic name is still a dependency of this expression, and the
         // sound operand beside it was still checked and collected.
@@ -612,7 +610,7 @@ final class DiagnosisTest extends TestCase
             'This source is not configured.',
         ], self::messages($diagnosis));
         $this->assertSame(['$.children[0].node', '$'], array_map(
-            fn(Diagnostic $diagnostic) => $diagnostic->path,
+            fn(TypeMismatch $diagnostic) => $diagnostic->path,
             $diagnosis->diagnostics,
         ));
     }
@@ -710,7 +708,7 @@ final class DiagnosisTest extends TestCase
 
             $this->assertSame($refusal->message, $first->message, $name);
             $this->assertSame($refusal->path, $first->path, $name);
-            $this->assertSame($refusal->describe(), $first->mismatch->describe(), $name);
+            $this->assertSame($refusal->describe(), $first->describe(), $name);
         }
     }
 
@@ -728,20 +726,24 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
-    public function a_diagnostic_describes_itself_with_the_node_it_names(): void
+    public function a_diagnostic_carries_the_node_it_names(): void
     {
         $located = self::diagnose(new SymbolSource('mystery'))->diagnostics[0];
 
+        $this->assertSame('$', $located->path);
         $this->assertSame(
-            '[$] Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
             $located->describe(),
         );
 
+        // A refusal about the whole program names no position: a definition
+        // cycle is a property of the graph, not of a node.
         $unlocated = self::diagnose(
             new SymbolSource('a'),
             definitions: new Definitions(['a' => new SymbolSource('a')]),
         )->diagnostics[0];
 
+        $this->assertNull($unlocated->path);
         $this->assertStringStartsWith('The definition graph is not well-founded', $unlocated->describe());
     }
 

@@ -107,7 +107,7 @@ final readonly class RecoveringCompiler
         $recovery = new ErrorRecovery($cycles === [] ? [] : DefinitionGraph::cyclicKeys($definitions));
 
         if ($cycles !== []) {
-            $diagnostics[] = new Diagnostic(new TypeMismatch(self::NotWellFounded, $cycles));
+            $diagnostics[] = new TypeMismatch(self::NotWellFounded, $cycles);
         }
 
         while (true) {
@@ -144,7 +144,7 @@ final readonly class RecoveringCompiler
                 continue;
             }
 
-            $diagnostics[] = new Diagnostic($refusal);
+            $diagnostics[] = $refusal;
             $recovery->quarantine($failedPath);
         }
     }

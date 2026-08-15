@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Analysis;
 
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Types\ErrorType;
+use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
 
@@ -21,11 +22,15 @@ use function Superscript\Monads\Result\Ok;
  * ```php
  * $diagnosis = $expression->diagnose();
  *
- * $diagnosis->diagnostics; // list<Diagnostic>, in the order the compiler met them
+ * $diagnosis->diagnostics; // list<TypeMismatch>, in the order the compiler met them
  * $diagnosis->references;  // symbols read, including ones that failed to resolve
  * $diagnosis->returns;     // the root type; ErrorType when the root itself failed
  * $diagnosis->program();   // Ok(Program) iff diagnostics === []
  * ```
+ *
+ * A diagnostic is a {@see TypeMismatch} — the same value `compile()` refuses
+ * with, carrying its message, the node it names in `$path`, and the cause
+ * chain `describe()` renders.
  *
  * What it guarantees:
  *
@@ -55,7 +60,7 @@ use function Superscript\Monads\Result\Ok;
 final readonly class Diagnosis
 {
     /**
-     * @param list<Diagnostic> $diagnostics
+     * @param list<TypeMismatch> $diagnostics
      * @param list<string> $references
      * @param Type $returns What the expression returns. {@see ErrorType} when
      *                      the root node itself failed.
@@ -75,7 +80,7 @@ final readonly class Diagnosis
     /**
      * The certified program, or everything that stands in its way.
      *
-     * @return Result<Program, non-empty-list<Diagnostic>>
+     * @return Result<Program, non-empty-list<TypeMismatch>>
      */
     public function program(): Result
     {

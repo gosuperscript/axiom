@@ -124,7 +124,7 @@ Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignab
 ```php
 $diagnosis = $expression->diagnose();
 
-$diagnosis->diagnostics; // list<Diagnostic> — every refusal, in the order compilation met them
+$diagnosis->diagnostics; // list<TypeMismatch> — every refusal, in the order compilation met them
 $diagnosis->references;  // symbols read, including ones that failed to resolve
 $diagnosis->returns;     // the root type; ErrorType where the root itself failed
 $diagnosis->program();   // Ok(Program) iff there are no diagnostics
