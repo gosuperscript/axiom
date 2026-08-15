@@ -12,8 +12,9 @@ use Superscript\Axiom\Types\Type;
  * Named compiled children that can be evaluated as one computation.
  *
  * Both doors here claim a type over every child at once, so one child that
- * did not compile is enough to make the claim unfounded: the group answers a
- * failed source instead, the absorption {@see CompiledSource} explains.
+ * did not compile is enough to make the claim unfounded. Neither decides
+ * that for itself: both are built from {@see CompiledSource::claiming()},
+ * the one place absorption is decided.
  */
 final readonly class CompiledSources
 {
@@ -27,55 +28,51 @@ final readonly class CompiledSources
      */
     public function mapPresent(Type $returns, callable $evaluate): CompiledSource
     {
-        if ($this->anyFailed()) {
-            return CompiledSource::absorbed();
-        }
+        return CompiledSource::claiming($this->sources, function () use ($returns, $evaluate): CompiledSource {
+            $sources = $this->sources;
+            $evaluate = $evaluate(...);
 
-        $sources = $this->sources;
-        $evaluate = $evaluate(...);
-
-        if (
-            array_any($sources, fn(CompiledSource $source) => $source->returns->shape() instanceof OptionShape)
-            && !$returns->shape() instanceof OptionShape
-        ) {
-            $returns = new OptionType($returns);
-        }
-
-        return CompiledSource::custom($returns, function (SourceEvaluation $runtime) use ($sources, $evaluate) {
-            $values = [];
-
-            foreach ($sources as $name => $source) {
-                $value = $runtime->value($source);
-
-                if ($value === null) {
-                    return null;
-                }
-
-                $values[$name] = $value;
+            if (
+                array_any($sources, fn(CompiledSource $source) => $source->returns->shape() instanceof OptionShape)
+                && !$returns->shape() instanceof OptionShape
+            ) {
+                $returns = new OptionType($returns);
             }
 
-            return $evaluate(...$values);
+            return CompiledSource::custom($returns, function (SourceEvaluation $runtime) use ($sources, $evaluate) {
+                $values = [];
+
+                foreach ($sources as $name => $source) {
+                    $value = $runtime->value($source);
+
+                    if ($value === null) {
+                        return null;
+                    }
+
+                    $values[$name] = $value;
+                }
+
+                return $evaluate(...$values);
+            });
         });
     }
 
     /** Evaluate every child left-to-right and pass absence as null. */
     public function mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource
     {
-        if ($this->anyFailed()) {
-            return CompiledSource::absorbed();
-        }
+        return CompiledSource::claiming($this->sources, function () use ($returns, $evaluate): CompiledSource {
+            $sources = $this->sources;
+            $evaluate = $evaluate(...);
 
-        $sources = $this->sources;
-        $evaluate = $evaluate(...);
+            return CompiledSource::custom($returns, function (SourceEvaluation $runtime) use ($sources, $evaluate) {
+                $values = [];
 
-        return CompiledSource::custom($returns, function (SourceEvaluation $runtime) use ($sources, $evaluate) {
-            $values = [];
+                foreach ($sources as $name => $source) {
+                    $values[$name] = $runtime->value($source);
+                }
 
-            foreach ($sources as $name => $source) {
-                $values[$name] = $runtime->value($source);
-            }
-
-            return $evaluate(...$values);
+                return $evaluate(...$values);
+            });
         });
     }
 
@@ -86,11 +83,5 @@ final readonly class CompiledSources
             $operation->returns,
             fn(mixed ...$operands) => $operation(...$operands),
         );
-    }
-
-    /** Did any child fail to compile, leaving nothing to claim a type over? */
-    private function anyFailed(): bool
-    {
-        return array_any($this->sources, static fn(CompiledSource $source): bool => $source->failed());
     }
 }

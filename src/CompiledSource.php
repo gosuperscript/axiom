@@ -29,13 +29,19 @@ use function Superscript\Monads\Result\Ok;
  *
  * ## Absorption
  *
- * Every door here that claims a type — {@see mapPresent()},
- * {@see mapIncludingAbsent()}, and {@see apply()} through the first — takes
- * the claim from the compiler and pins it to a value this source produces.
- * Over a child that did not compile there is no such value, so the claim is
- * unfounded and the door refuses to make it: it answers a failed source
- * instead ({@see absorbed()}), and the compiler's node inherits the failure
- * rather than presenting a checked type over an unchecked subtree.
+ * A door that claims a type takes the claim from the compiler and pins it to
+ * a value its children produce. Over a child that did not compile there is no
+ * such value, so the claim is unfounded and the door must not make it: it
+ * answers a failed source instead ({@see absorbed()}), and the compiler's
+ * node inherits the failure rather than presenting a checked type over an
+ * unchecked subtree.
+ *
+ * That decision is made in one place — {@see claiming()} — and every such
+ * door in the library goes through it: {@see mapPresent()},
+ * {@see mapIncludingAbsent()}, {@see apply()} through the first, both doors
+ * on {@see CompiledSources}, and the coercion bridge
+ * ({@see \Superscript\Axiom\SourceCompilers\AdmissionNode}). A door written
+ * later is absorbing by construction if it is built the same way.
  *
  * This is the same absorption {@see SourceCompilation::shapeOf()} and
  * {@see SourceCompilation::overlaps()} perform, and it is machinery for the
@@ -65,28 +71,46 @@ final readonly class CompiledSource
     }
 
     /**
+     * Make a claim over compiled children, or absorb their failure. This is
+     * the one place absorption is decided: a claim about a type is only
+     * honest over children that compiled, so $claim is invoked only then and
+     * a failed child answers for the whole door instead.
+     *
+     * @internal Every door that claims a type is built from this.
+     *
+     * @param array<array-key, self> $over The children the claim is made over.
+     * @param Closure(): self $claim
+     */
+    public static function claiming(array $over, Closure $claim): self
+    {
+        if (array_any($over, static fn(self $child): bool => $child->failed())) {
+            return self::absorbed();
+        }
+
+        return $claim();
+    }
+
+    /**
      * Transform a present value. Absence propagates without invoking the
      * callback and makes the result type optional. $returns describes the
      * callback's present result. Plain values succeed; Results pass through.
      */
     public function mapPresent(Type $returns, callable $evaluate): self
     {
-        if ($this->failed()) {
-            return self::absorbed();
-        }
+        return self::claiming([$this], function () use ($returns, $evaluate): self {
+            $evaluate = $evaluate(...);
+            $returns = $this->propagateAbsence($returns);
 
-        $evaluate = $evaluate(...);
-        $returns = $this->propagateAbsence($returns);
+            return new self(new CompiledNode($returns, function (Runtime $runtime) use ($evaluate) {
+                return $this->node->evaluate($runtime)->andThen(function ($option) use ($evaluate) {
+                    if ($option->isNone()) {
+                        return Ok(None());
+                    }
 
-        return new self(new CompiledNode($returns, function (Runtime $runtime) use ($evaluate) {
-            return $this->node->evaluate($runtime)->andThen(function ($option) use ($evaluate) {
-                if ($option->isNone()) {
-                    return Ok(None());
-                }
-
-                return self::normalize(fn() => $evaluate($option->unwrap()));
-            });
-        }));
+                    return self::normalize(fn() => $evaluate($option->unwrap()));
+                });
+            }));
+        });
     }
 
     /**
@@ -124,17 +148,15 @@ final readonly class CompiledSource
      */
     public function mapIncludingAbsent(Type $returns, callable $evaluate): self
     {
-        if ($this->failed()) {
-            return self::absorbed();
-        }
+        return self::claiming([$this], function () use ($returns, $evaluate): self {
+            $evaluate = $evaluate(...);
 
-        $evaluate = $evaluate(...);
-
-        return new self(new CompiledNode($returns, fn(Runtime $runtime) => $this->node
-            ->evaluate($runtime)
-            ->andThen(fn($option) => self::normalize(
-                fn() => $evaluate($option->unwrapOr(null)),
-            ))));
+            return new self(new CompiledNode($returns, fn(Runtime $runtime) => $this->node
+                ->evaluate($runtime)
+                ->andThen(fn($option) => self::normalize(
+                    fn() => $evaluate($option->unwrapOr(null)),
+                ))));
+        });
     }
 
     /** Apply a unary operation to present values; absence propagates. */
@@ -172,9 +194,10 @@ final readonly class CompiledSource
      * evaluation that refuses to run — so a compiler that composed over a
      * broken child produces a node no {@see Program} can be certified from.
      *
-     * @internal The absorbing doors above answer with this.
+     * Nothing outside this class mints one: {@see claiming()} is where the
+     * decision to absorb is made, and it is the only caller.
      */
-    public static function absorbed(): self
+    private static function absorbed(): self
     {
         return new self(CompiledNode::failed());
     }
