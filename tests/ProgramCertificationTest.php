@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Tests;
 
+use InvalidArgumentException;
 use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
@@ -14,11 +16,24 @@ use Superscript\Axiom\Analysis\CompilationChild;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\CompiledNode;
+use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\Sources\Ascription;
+use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\StaticSource;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ErrorType;
+use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\OpaqueType;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\StringType;
+use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeEnvironment;
+use Superscript\Axiom\Types\UnionType;
 
 use function Superscript\Monads\Result\Ok;
 
@@ -30,6 +45,10 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(Program::class)]
 #[CoversClass(CompilationNode::class)]
 #[CoversClass(ErrorType::class)]
+#[CoversClass(Expression::class)]
+#[CoversClass(TypeEnvironment::class)]
+#[CoversClass(Ascription::class)]
+#[CoversClass(Coerce::class)]
 #[UsesNamespace('Superscript\\Axiom')]
 final class ProgramCertificationTest extends TestCase
 {
@@ -44,7 +63,7 @@ final class ProgramCertificationTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('The node at [$] failed to compile; a Program cannot be certified from it.');
 
-        new Program(self::node(new ErrorType()));
+        new Program(self::node(ErrorType::shared()));
     }
 
     #[Test]
@@ -53,7 +72,7 @@ final class ProgramCertificationTest extends TestCase
         // A failed match arm is absorbed into the union of its siblings, so a
         // broken node sits under an ordinary Number.
         $sound = new CompilationNode('Sound', new NumberType(), 'core');
-        $broken = new CompilationNode('Broken', new ErrorType(), 'core');
+        $broken = new CompilationNode('Broken', ErrorType::shared(), 'core');
         $root = new CompilationNode('Root', new NumberType(), 'core', [
             new CompilationChild($sound, 'arm.0'),
             new CompilationChild($broken, 'arm.1'),
@@ -71,7 +90,7 @@ final class ProgramCertificationTest extends TestCase
         // The bit is cumulative, and that is what lets the root answer for
         // the whole tree without anyone walking it.
         $sound = new CompilationNode('Sound', new NumberType(), 'core');
-        $broken = new CompilationNode('Broken', new ErrorType(), 'core');
+        $broken = new CompilationNode('Broken', ErrorType::shared(), 'core');
 
         $this->assertFalse($sound->failed);
         $this->assertTrue($broken->failed);
@@ -96,7 +115,13 @@ final class ProgramCertificationTest extends TestCase
         $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
+    /**
+     * In a process of its own, because the mark is minted once and this is
+     * the test that watches it happen: any earlier compilation in the same
+     * process would have minted it already.
+     */
     #[Test]
+    #[RunInSeparateProcess]
     public function every_node_that_failed_wears_the_same_error_type(): void
     {
         // The mark is stateless and recognised by class, so one instance
@@ -135,5 +160,93 @@ final class ProgramCertificationTest extends TestCase
         $this->expectExceptionMessage('A type that marks a node that failed to compile answers nothing about a value; this program was never certified.');
 
         $question(ErrorType::shared());
+    }
+
+    /**
+     * Every public door a host hands a type through. Each refuses the mark
+     * at the door, naming what was supplied — an authored ErrorType is a
+     * defect in the calling code, not a fault of the expression, so it is
+     * never a diagnostic.
+     *
+     * @return iterable<string, array{string, callable(Type): mixed}>
+     */
+    public static function doorsThatIngestAType(): iterable
+    {
+        yield 'declaration' => [
+            'the declaration of [x]',
+            static fn(Type $type) => new Expression(new SymbolSource('x'), declarations: ['x' => $type]),
+        ];
+
+        yield 'type environment' => [
+            'the declaration of [x]',
+            static fn(Type $type) => new TypeEnvironment(declarations: ['x' => $type]),
+        ];
+
+        yield 'ascription' => [
+            'the ascribed type',
+            static fn(Type $type) => new Ascription($type, new StaticSource(1)),
+        ];
+
+        yield 'coercion' => [
+            'the coerced type',
+            static fn(Type $type) => new Coerce($type, new StaticSource(1)),
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('doorsThatIngestAType')]
+    public function the_mark_cannot_be_authored_back_into_a_program(string $door, callable $supply): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('The compiler marks a node it gave up on with a type of its own, and %s is or contains one.', $door));
+
+        $supply(ErrorType::shared());
+    }
+
+    /**
+     * The mark nested inside a composite is the same fault: a symbol
+     * declared `Option<Error>` compiles to a failure nothing diagnosed just
+     * as surely as one declared `Error`.
+     *
+     * @return iterable<string, array{callable(): Type}>
+     */
+    public static function compositesContainingTheMark(): iterable
+    {
+        yield 'option' => [static fn(): Type => new OptionType(ErrorType::shared())];
+        yield 'list' => [static fn(): Type => new ListType(ErrorType::shared())];
+        yield 'dict' => [static fn(): Type => new DictType(ErrorType::shared())];
+        yield 'record field' => [static fn(): Type => new RecordType(['premium' => ErrorType::shared()])];
+        yield 'union member' => [static fn(): Type => new UnionType(new NumberType(), ErrorType::shared())];
+        yield 'opaque parameter' => [static fn(): Type => new OpaqueType('Money', ['amount' => ErrorType::shared()])];
+        yield 'nested twice' => [static fn(): Type => new RecordType(['quotes' => new ListType(new OptionType(ErrorType::shared()))])];
+    }
+
+    #[Test]
+    #[DataProvider('compositesContainingTheMark')]
+    public function a_composite_that_contains_the_mark_is_refused_too(callable $compose): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('the declaration of [x] is or contains one');
+
+        new Expression(new SymbolSource('x'), declarations: ['x' => $compose()]);
+    }
+
+    #[Test]
+    public function an_ordinary_declaration_passes_every_door(): void
+    {
+        // The guard reads the type it is given and nothing else: every
+        // composite it walks into passes when no mark is in it.
+        $diagnosis = new Expression(
+            new Coerce(new NumberType(), new SymbolSource('x')),
+            declarations: [
+                'x' => new RecordType(['premium' => new OptionType(new NumberType())]),
+                'members' => new UnionType(new NumberType(), new StringType()),
+                'money' => new OpaqueType('Money', ['amount' => new NumberType()]),
+                'quotes' => new ListType(new DictType(new NumberType())),
+            ],
+        )->diagnose();
+
+        $this->assertSame([], $diagnosis->diagnostics);
+        $this->assertTrue($diagnosis->program()->isOk());
     }
 }

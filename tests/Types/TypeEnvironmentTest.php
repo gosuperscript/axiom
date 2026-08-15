@@ -85,6 +85,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\Types\ErrorType::class)]
 final class TypeEnvironmentTest extends TestCase
 {
     private static function compiler(?Dialect $dialect = null): TypeInference

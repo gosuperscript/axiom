@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
+use InvalidArgumentException;
 use LogicException;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\Shape;
@@ -36,6 +37,16 @@ use Superscript\Monads\Result\Result;
  * {@see \Superscript\Axiom\Program} refuses to be constructed from a node
  * tree containing one. An ErrorType therefore never reaches evaluation.
  *
+ * That invariant is held from both sides. The constructor is private, so
+ * {@see shared()} — internal to the library — is the only mint. And every
+ * public door that ingests a host-supplied type refuses one through
+ * {@see refuseAuthored()}, so an ErrorType obtained anyway cannot be
+ * authored back into a program. Without the second half, a declaration
+ * typed ErrorType would compile a symbol to a failure nothing had
+ * diagnosed: `diagnose()` would report nothing and certification would then
+ * refuse the very tree it was handed, breaking "zero diagnostics ⟺
+ * certified program".
+ *
  * @implements Type<mixed>
  */
 final class ErrorType implements Type
@@ -43,13 +54,72 @@ final class ErrorType implements Type
     private static ?self $shared = null;
 
     /**
+     * The mark is one instance for the whole process, and this is the only
+     * place an instance comes into being — construction is private, so
+     * {@see shared()} is the only mint.
+     */
+    private function __construct()
+    {
+        self::$shared = $this;
+    }
+
+    /**
      * The mark itself. An ErrorType carries no state and is recognised by
      * class rather than by identity, so every node that did not compile
      * wears the same one.
+     *
+     * @internal Minted only alongside the diagnostic that explains it —
+     * error-tolerant compilation types the node it gave up on, and nothing
+     * else has a node to give up on.
      */
     public static function shared(): self
     {
-        return self::$shared ??= new self();
+        return self::$shared ?? new self();
+    }
+
+    /**
+     * Refuse a host-supplied type that is, or contains, the compiler's mark
+     * for a node that failed. $door names what was being supplied, because
+     * the caller's fault is a specific declaration or claim, not "a type
+     * somewhere".
+     *
+     * This is programmer error and says so immediately: an authored
+     * ErrorType is not a fault of the expression, so it must not become a
+     * diagnostic — a diagnosis reports what compilation found, and it would
+     * find a failure that nothing failed at.
+     *
+     * Containment is walked over the library's own composites (option,
+     * union, list, dict, record, opaque parameters), which is every way this
+     * library builds a type out of other types. A host type that wraps a
+     * `Type` of its own is opaque to the walk and can smuggle one past this
+     * door; nothing at this level can see inside it, and the mint being
+     * internal is what covers that case.
+     *
+     * @internal Called by the public doors that ingest a type.
+     */
+    public static function refuseAuthored(Type $type, string $door): void
+    {
+        if (!self::occursIn($type)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'The compiler marks a node it gave up on with a type of its own, and %s is or contains one. It is minted only alongside the diagnostic that explains it, so nothing outside compilation has one to give; supply the type the value really has.',
+            $door,
+        ));
+    }
+
+    private static function occursIn(Type $type): bool
+    {
+        return match (true) {
+            $type instanceof self => true,
+            $type instanceof OptionType => self::occursIn($type->inner),
+            $type instanceof UnionType => array_any($type->members, self::occursIn(...)),
+            $type instanceof ListType, $type instanceof DictType => self::occursIn($type->type),
+            $type instanceof RecordType => array_any($type->fields, self::occursIn(...)),
+            $type instanceof OpaqueType => array_any($type->parameters, self::occursIn(...)),
+            default => false,
+        };
     }
 
     public function assert(mixed $value): Result

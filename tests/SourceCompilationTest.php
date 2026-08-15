@@ -207,8 +207,8 @@ final class SourceCompilationTest extends TestCase
         $compilation = self::compilation();
 
         foreach ([
-            'left' => [new ErrorType(), new NumberType()],
-            'right' => [new NumberType(), new ErrorType()],
+            'left' => [ErrorType::shared(), new NumberType()],
+            'right' => [new NumberType(), ErrorType::shared()],
         ] as $position => [$left, $right]) {
             try {
                 $compilation->overlaps($left, $right);

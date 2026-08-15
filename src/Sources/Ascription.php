@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Sources;
 
 use Superscript\Axiom\Describable;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\Type;
 
 /**
@@ -32,7 +33,9 @@ final readonly class Ascription implements Source, Describable
     public function __construct(
         public Type $type,
         public Source $source,
-    ) {}
+    ) {
+        ErrorType::refuseAuthored($type, 'the ascribed type');
+    }
 
     public function describe(): string
     {
