@@ -175,8 +175,8 @@ The compiler capability passed to every source compiler.
 | `child(Source $source, ?string $role = null): CompiledSource` | Compile one persisted child in the current dialect, definitions, and type environment. Give structural children a stable role for analysis output. |
 | `children(array $sources): CompiledSources` | Compile named or positional children in array order. Use when no per-child work is needed before composition. |
 | `combine(array $sources): CompiledSources` | Combine `CompiledSource` values already compiled or certified individually. |
-| `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Absorbs when either operand is a child that failed to compile. |
-| `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Absorbs when the operand is a child that failed to compile. |
+| `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Operand types come from `typeOf()`, which absorbs a failed child, so both operands are certified by construction. |
+| `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Its operand type comes from `typeOf()`, as `infix()`'s does. |
 | `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
 | `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |
@@ -184,25 +184,25 @@ The compiler capability passed to every source compiler.
 | `custom(Type $returns, callable $evaluate): CompiledSource` | Advanced lazy/control-flow evaluation. The callable may accept `SourceEvaluation`. |
 | `within(string $message, callable $compile): mixed` | Add a source-specific parent message around a nested compilation refusal. |
 | `reject(TypeMismatch|string $mismatch): never` | Refuse this source during compilation. The mismatch returns through `Expression::compile()`. |
-| `overlaps(Type $left, Type $right): Result<bool, TypeMismatch>` | Could a value inhabit both types? Absorbs when either type is a child that failed to compile. |
+| `overlaps(Type $left, Type $right): Result<bool, TypeMismatch>` | Could a value inhabit both types? Both types come from `typeOf()`, which absorbs a failed child before answering. |
 | `typeOf(CompiledSource $child): Type` | The certified return type of a compiled child. Absorbs when the child failed to compile — reading `CompiledSource::$returns` on one throws, so this is how a compiler asks for a child's type. |
 | `shapeOf(CompiledSource $child): Shape` | The structural projection of a compiled child, for certifying a field or member against it. Absorbs when the child failed to compile. |
-| `absorb(): never` | Compile to `ErrorType` making no refusal. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
+| `absorb(): never` | Give up on this source making no refusal; it compiles to a failed source. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
 
 `child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
 
 ### `CompiledSource`
 
-A compiled source comes in two kinds, the same two a compilation node comes in.
+A compiled source is in one of two states.
 
-A **certified** source couples a certified return type to its evaluation. A **failed** source is one whose compilation was refused, with that refusal recorded as a diagnostic; it carries no type at all, because there is no value for a type to be about. `$returns` refuses on one, `failed()` is the question to ask instead, and the capabilities absorb it.
+A **certified** source couples a certified return type to its evaluation. A **failed** source is one whose compilation was refused, with that refusal recorded as a diagnostic; it carries no type and no evaluation, because there is no value for a type to be about. `$returns` refuses on one, `failed()` is the question to ask instead, and the capabilities absorb it.
 
 ```php
-$compiled->failed();  // bool — which kind is this?
+$compiled->failed();  // bool — which state is this in?
 $compiled->returns;   // Type on a certified source; throws LogicException on a failed one
 ```
 
-Only `Expression::diagnose()` produces a failed source. `Expression::compile()` stops at the first refusal, so a compiler it calls is only ever handed children that compiled. The type a failed source wears internally is `ErrorType`, the compiler's own mark for a node it gave up on; handing it out is how a host would come to claim a failure nothing diagnosed, so the read refuses. Ask `failed()`, or take the type through `SourceCompilation::typeOf()`, which absorbs.
+Only `Expression::diagnose()` produces a failed source. `Expression::compile()` stops at the first refusal, so a compiler it calls is only ever handed children that compiled. Failure is a state, not a type: there is no type standing in for one, so nothing is handed out and nothing can be wrapped and claimed back. Ask `failed()`, or take the type through `SourceCompilation::typeOf()`, which absorbs.
 
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
@@ -590,9 +590,11 @@ An operator selection retains its typed operands and return type plus `OperatorR
 
 ### Two kinds of node
 
-A `CompilationNode` is either **certified** or **abandoned**, and a reader must expect both.
+A `CompilationNode` records which of three states compilation left a source in — `CompilationState::Certified`, `Failed` or `Abandoned`, on `$state`. A reader of an analysis meets two of them.
 
 A certified node is the ordinary one: it answers `$returns` and `$extension`, and renders them.
+
+A failed node is one the compiler gave up on. It never appears in an analysis, because an analysis is built only for a certified program: `Program`'s constructor refuses any tree containing one, reading `$containsFailure` — the bottom-up bit that answers for a whole subtree — rather than inspecting types. Like an abandoned node it claims neither a type nor an owning compiler.
 
 An abandoned node stands where a child refused and its compiler caught the refusal and compiled without it — the pattern `CoerceSourceCompiler` uses for a static value the literal registry cannot type. Nothing was compiled there, so the node claims neither a type nor an owning compiler: reading `$returns` or `$extension` throws a `LogicException`, and `toArray()` renders the position alone:
 
@@ -641,6 +643,6 @@ Plugin code is expected to depend on the APIs documented here. The following cla
 - direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
 - `TypeInference` and `TypeEnvironment` for implementing source compilers;
-- `Types\ErrorType`, the compiler's own mark for a node that failed. It has no public appearance: its constructor is private and the only mint is internal; `CompiledSource::$returns` throws rather than hand it out on a child that failed; and `Diagnosis::$returns` is `null` for an expression whose root failed rather than the mark. There is nothing to author with, and a `Program` refuses to be built from a tree containing one. One backstop remains against acquisition this library does not support: a type claimed as a node's return is refused with an `InvalidArgumentException` where the claim is made. See "Report Failures at the Right Boundary" in the extension guide.
+- `Analysis\CompilationState`, the compiler's record of what became of each source. Failure is one of its cases, not a type: there is no type standing for a node that failed, so there is nothing to be handed, nothing to wrap in a type of your own, and nothing for certification to search a type for. A `Program` refuses to be built from a tree in which anything failed, and your own types — including composites Axiom cannot see inside — are never inspected. See "Report Failures at the Right Boundary" in the extension guide.
 
 Use `Extension`, `Dialect`, and the capabilities passed to your compiler instead. That keeps persisted sources serializable, plugin code independent of Axiom's execution representation, and compiled programs free of runtime dispatch.
