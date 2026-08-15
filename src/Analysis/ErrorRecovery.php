@@ -22,12 +22,13 @@ final class ErrorRecovery
     /** @var array<string, true> */
     private array $poisoned = [];
 
-    /** @var array<string, string> */
-    private array $references = [];
+    private readonly References $references;
 
     /** @param list<string> $poisoned Definition names that lie on a cycle. */
     public function __construct(array $poisoned = [])
     {
+        $this->references = new References();
+
         foreach ($poisoned as $key) {
             $this->poisoned[$key] = true;
         }
@@ -50,28 +51,22 @@ final class ErrorRecovery
     }
 
     /**
-     * Keep what one attempt read. A name already kept holds its place, so
-     * the order is the order the first attempt to read a name met it.
-     *
-     * {@see CompilationRecorder} orders names the same way, and the two stay
-     * separate deliberately: a recorder belongs to one node of one attempt
-     * and dies with it, while this accumulates across every attempt a
+     * Keep what one attempt read, accumulating across every attempt a
      * diagnosis makes — including the reads of attempts whose nodes were
-     * thrown away. Sharing one structure would tie the second lifetime to the
-     * first.
+     * thrown away. That lifetime is why the set is this object's own and not
+     * shared with the {@see CompilationRecorder} that collected the names:
+     * a recorder belongs to one node of one attempt and dies with it.
      *
      * @param list<string> $keys
      */
     public function record(array $keys): void
     {
-        foreach ($keys as $key) {
-            $this->references[$key] = $key;
-        }
+        $this->references->record($keys);
     }
 
     /** @return list<string> Every symbol the attempts resolved or tried to, in first-read order. */
     public function references(): array
     {
-        return array_values($this->references);
+        return $this->references->all();
     }
 }

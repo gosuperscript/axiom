@@ -15,6 +15,7 @@ use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
+use Superscript\Axiom\Analysis\References;
 use Superscript\Axiom\Analysis\UnreachableEvaluation;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
@@ -162,6 +163,7 @@ final class AbandoningExtension extends Extension
 #[CoversClass(Diagnosis::class)]
 #[CoversClass(RecoveringCompiler::class)]
 #[CoversClass(ErrorRecovery::class)]
+#[CoversClass(References::class)]
 #[CoversClass(UnreachableEvaluation::class)]
 #[CoversClass(TypeInference::class)]
 #[CoversClass(CompilationNode::class)]
