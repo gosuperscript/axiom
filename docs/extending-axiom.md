@@ -752,6 +752,8 @@ For a judgment of your own that the capability cannot make for you — you consu
 
 A refusal you make anyway counts as a fault of its own and is reported as a second diagnostic — right when your refusal stands on its own (a missing configuration, a rule about your source that the child's type has no bearing on), wrong when it is really the child's failure under a second message. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
 
+`absorb()` and `reject()` both unwind by throwing — `CompilationAbsorbed` and `CompilationAborted`. These are the only two exceptions Axiom's compilation raises, and they are exceptions because your compiler sits at the top of a call tree Axiom cannot see into: an outcome decided several helpers down has to reach the walk, and threading it back by hand through every frame in between would make one forgotten thread a certified type over an unchecked subtree. Both are caught in `TypeInference::compile()` and turned into ordinary values — an `Err` carrying the `TypeMismatch`, or a node typed `ErrorType`. Neither escapes it, and `Expression::compile()` returns a `Result`. Catch `CompilationAborted` only where you deliberately abandon a child; never catch `CompilationAbsorbed`.
+
 ### Step 7: Choose Absence Semantics
 
 `null` is Axiom's runtime representation of structural absence. Pick the combinator that states what your source means:

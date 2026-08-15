@@ -118,7 +118,16 @@ This runs all three test suites in sequence.
 
 1. **Functional Programming**
    * Use Result and Option monads for error handling
-   * Avoid exceptions for control flow
+   * Avoid exceptions for control flow. Compilation has exactly two sanctioned
+     internal exceptions — `CompilationAborted` (this source refuses, and says
+     why) and `CompilationAbsorbed` (a child of this source already failed, so
+     this one gives up without refusing). A source compiler sits at the top of
+     a deep call tree it does not control, so an outcome decided several
+     helpers down has to unwind to the walk; threading it back by hand through
+     every compiler in between, host compilers included, would make one
+     forgotten thread a certified type over an unchecked subtree. Both are
+     caught in `TypeInference::compile()` and never escape it, and
+     `Expression::compile()` returns a `Result`. Do not add a third.
    * Prefer immutability
 
 2. **Type Safety**
