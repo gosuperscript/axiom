@@ -464,7 +464,7 @@ Your host may contribute its own `Source` kinds — a stored value, a lookup-tab
 
 ### The Source Compiler Contract
 
-A source is persisted description data. A source compiler turns that description into a `CompiledSource`: a certified return type coupled to the evaluation that will produce it.
+A source is persisted description data. A source compiler turns that description into a `CompiledSource`, which comes in two kinds: a **certified** one — a certified return type coupled to the evaluation that will produce it — or a **failed** one, standing for a source whose compilation was refused, with that refusal recorded as a diagnostic. A failed source carries no type; `failed()` is the question to ask of it, and the capabilities absorb it. Only `Expression::diagnose()` produces one, and [Step 6](#step-6-report-failures-at-the-right-boundary) is where it matters to you.
 
 ```php
 use Superscript\Axiom\CompiledSource;
@@ -726,7 +726,7 @@ During evaluation, return `Err($exception)` for an expected value-dependent fail
 
 One thing to know about refusals under `Expression::diagnose()`, which compiles the expression again after each refusal to find the next one: a child of yours may come back having failed — a node that already failed and was already reported. A judgment made over one has no honest answer, and a refusal built from it would report the fault below a second time, under a second message, at a second node. So no judgment is made over one: it is *absorbed*, and your source compiles to `ErrorType` too.
 
-Such a child has no type to give you, and says so: reading `$child->returns` on one throws a `LogicException`. The type it wears is the compiler's own mark for a node it gave up on, and a compiler holding one is how a failure nothing diagnosed gets claimed into a later, blameless expression. Ask `$child->failed()` when you want to know whether it compiled, and take the type through the capability when you want the type.
+Such a child has no type to give you, and says so: reading `$child->returns` on one throws a `LogicException`. The type it wears internally is the compiler's own mark for a node it gave up on, and a compiler holding one is how a failure nothing diagnosed gets claimed into a later, blameless expression. Ask `$child->failed()` when you want to know whether it compiled, and take the type through the capability when you want the type.
 
 Judge through the capability and absorption is machinery rather than something to remember. Every judgment `SourceCompilation` offers absorbs before it asks:
 

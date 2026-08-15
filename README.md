@@ -130,7 +130,7 @@ $diagnosis->returns;     // the root type, or null where the root itself failed
 $diagnosis->program();   // Ok(Program) iff there are no diagnostics
 ```
 
-For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports `['mystery', 'postcode']` as the expression's reads. A node that refuses is typed `ErrorType`, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
+For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports `['mystery', 'postcode']` as the expression's reads. A node that refuses compiles to a *failed* source, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
 
 `compile()` is one attempt of the same walk, so its refusal is always the diagnosis' first diagnostic.
 

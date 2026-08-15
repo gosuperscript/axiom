@@ -24,9 +24,21 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The source-compiler-facing form of a compiled source: its certified return
- * type plus composable evaluation. Axiom keeps Runtime, Result<Option<...>>,
- * node construction, and observation scopes behind this interface.
+ * The source-compiler-facing form of a compiled source, in one of two kinds —
+ * the same two a {@see \Superscript\Axiom\Analysis\CompilationNode} comes in.
+ * Axiom keeps Runtime, Result<Option<...>>, node construction, and observation
+ * scopes behind this interface.
+ *
+ * A **certified** source is the ordinary one: a certified return type coupled
+ * to composable evaluation.
+ *
+ * A **failed** source is one whose compilation was refused, with that refusal
+ * recorded as a diagnostic. It carries no type — there is no value for a type
+ * to be about — so {@see $returns} refuses, {@see failed()} is the question to
+ * ask instead, and the capabilities absorb it rather than judging it. Only
+ * error-tolerant compilation produces one: {@see \Superscript\Axiom\Expression::compile()}
+ * stops at the first refusal, so a compiler it calls is only ever handed
+ * children that compiled.
  *
  * ## Absorption
  *
@@ -51,13 +63,12 @@ use function Superscript\Monads\Result\Ok;
  *
  * ## The mark is not handed out
  *
- * {@see ErrorType} is the compiler's own, and a failed child's type was the
- * one channel through which a host could come to hold one. So {@see $returns}
- * refuses on a failed source rather than answering with the mark. Everything
- * a compiler legitimately wants from a failed child it still has —
- * {@see failed()} asks whether it failed, and the judgments on
- * {@see SourceCompilation} answer for it — and what it cannot have is an
- * instance to claim back as a type of its own.
+ * A failed source is marked internally with {@see ErrorType}, which is the
+ * compiler's own and appears nowhere in this library's public surface. A
+ * failed child's type was the one channel through which a host could come to
+ * hold one, so {@see $returns} refuses rather than answering with the mark.
+ * Nothing a compiler legitimately wants is lost: {@see failed()} asks whether
+ * it failed, and the judgments on {@see SourceCompilation} answer for it.
  */
 final class CompiledSource
 {

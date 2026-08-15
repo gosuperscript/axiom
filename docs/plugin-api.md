@@ -193,13 +193,16 @@ The compiler capability passed to every source compiler.
 
 ### `CompiledSource`
 
-A compiled source couples a certified return type to its evaluation.
+A compiled source comes in two kinds, the same two a compilation node comes in.
+
+A **certified** source couples a certified return type to its evaluation. A **failed** source is one whose compilation was refused, with that refusal recorded as a diagnostic; it carries no type at all, because there is no value for a type to be about. `$returns` refuses on one, `failed()` is the question to ask instead, and the capabilities absorb it.
 
 ```php
-$compiled->returns; // Type — throws LogicException when failed()
+$compiled->failed();  // bool — which kind is this?
+$compiled->returns;   // Type on a certified source; throws LogicException on a failed one
 ```
 
-`$returns` answers only for a source that compiled. On one that did not it throws a `LogicException`: the type such a source wears is `ErrorType`, the compiler's own mark for a node it gave up on, and handing it out is how a host comes to claim a failure nothing diagnosed. Ask `failed()`, or take the type through `SourceCompilation::typeOf()`, which absorbs.
+Only `Expression::diagnose()` produces a failed source. `Expression::compile()` stops at the first refusal, so a compiler it calls is only ever handed children that compiled. The type a failed source wears internally is `ErrorType`, the compiler's own mark for a node it gave up on; handing it out is how a host would come to claim a failure nothing diagnosed, so the read refuses. Ask `failed()`, or take the type through `SourceCompilation::typeOf()`, which absorbs.
 
 | Method | Absence behavior | Callback input |
 | --- | --- | --- |
@@ -638,6 +641,6 @@ Plugin code is expected to depend on the APIs documented here. The following cla
 - direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
 - `TypeInference` and `TypeEnvironment` for implementing source compilers;
-- `Types\ErrorType`, the compiler's own mark for a node that failed. It has no public appearance: its constructor is private and the only mint is internal; `CompiledSource::$returns` throws on a failed child rather than hand it out; and `Diagnosis::$returns` is `null` for an expression whose root failed rather than the mark. There is nothing to author with, and a `Program` refuses to be built from a tree containing one. One backstop remains against acquisition this library does not support: a type claimed as a node's return is refused with an `InvalidArgumentException` where the claim is made. See "Report Failures at the Right Boundary" in the extension guide.
+- `Types\ErrorType`, the compiler's own mark for a node that failed. It has no public appearance: its constructor is private and the only mint is internal; `CompiledSource::$returns` throws rather than hand it out on a child that failed; and `Diagnosis::$returns` is `null` for an expression whose root failed rather than the mark. There is nothing to author with, and a `Program` refuses to be built from a tree containing one. One backstop remains against acquisition this library does not support: a type claimed as a node's return is refused with an `InvalidArgumentException` where the claim is made. See "Report Failures at the Right Boundary" in the extension guide.
 
 Use `Extension`, `Dialect`, and the capabilities passed to your compiler instead. That keeps persisted sources serializable, plugin code independent of Axiom's execution representation, and compiled programs free of runtime dispatch.
