@@ -80,7 +80,7 @@ final readonly class Program
         $this->returns = $node->returns;
         $this->references = $node->references;
         $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->declarations);
-        $this->analysis = new CompilationAnalysis($compilation, $this->declarations, $this->boundary);
+        $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
     }
 
     /**

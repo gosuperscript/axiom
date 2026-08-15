@@ -205,7 +205,7 @@ final class CompilationAnalysisTest extends TestCase
     #[Test]
     public function serializable_export_redacts_literals_unless_the_caller_explicitly_reveals_them(): void
     {
-        $analysis = new CompilationAnalysis(
+        $analysis = CompilationAnalysis::certified(
             CompilationNode::certified(StaticSource::class, new LiteralType('private'), 'axiom.core'),
             [
                 'boolean' => new LiteralType(true),
@@ -273,7 +273,7 @@ final class CompilationAnalysisTest extends TestCase
         $rule = new OperatorRuleProvenance('test.rule', self::class, 'test');
         $rootSelection = new OperatorSelection('infix', '+', [new NumberType(), new NumberType()], new NumberType(), $rule);
         $childSelection = new OperatorSelection('prefix', '-', [new NumberType()], new NumberType(), $rule);
-        $analysis = new CompilationAnalysis(
+        $analysis = CompilationAnalysis::certified(
             CompilationNode::certified(
                 InfixExpression::class,
                 new NumberType(),
@@ -384,5 +384,42 @@ final class CompilationAnalysisTest extends TestCase
             'arm.2.expression',
         ], $roles);
         $this->assertSame($roles, array_unique($roles), 'Two children share a role, so neither can be addressed.');
+    }
+
+    /**
+     * The one shape an analysis comes in, and the only way to build one.
+     * A failed node claims no type and no owning compiler, so
+     * {@see CompilationAnalysis::toArray()} has no rendering for one and
+     * refuses partway through — by which point the caller is usually
+     * already writing to a log or a build artifact. The root is answered
+     * for at construction instead.
+     */
+    #[Test]
+    public function no_construction_path_admits_a_failed_node(): void
+    {
+        $this->assertTrue(new \ReflectionMethod(CompilationAnalysis::class, '__construct')->isPrivate());
+
+        $certified = CompilationAnalysis::certified(
+            CompilationNode::certified(StaticSource::class, new NumberType(), 'axiom.core'),
+            [],
+            \Superscript\Axiom\Boundary::Coerce,
+        );
+
+        $this->assertSame('Number', $certified->toArray()['root']['returns']);
+
+        // A failure absorbed under an ordinary type is still a failure, so
+        // the whole subtree is answered for and not just the root: here the
+        // root compiled and its child did not.
+        $absorbed = CompilationNode::certified(
+            InfixExpression::class,
+            new NumberType(),
+            'axiom.core',
+            [new CompilationChild(CompilationNode::failed(StaticSource::class), 'left')],
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('something under this root failed to compile');
+
+        CompilationAnalysis::certified($absorbed, [], \Superscript\Axiom\Boundary::Coerce);
     }
 }

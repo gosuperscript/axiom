@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Analysis;
 
+use InvalidArgumentException;
 use JsonSerializable;
 use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Types\Type;
@@ -16,12 +17,42 @@ use Superscript\Axiom\Types\Type;
  */
 final readonly class CompilationAnalysis implements JsonSerializable
 {
-    /** @param array<string, Type> $declarations */
-    public function __construct(
+    /**
+     * Construction goes through {@see certified()} and is private, so the
+     * only analysis that exists is one over a tree the compiler certified.
+     *
+     * @param array<string, Type> $declarations
+     */
+    private function __construct(
         public CompilationNode $root,
         public array $declarations,
         public Boundary $boundary,
     ) {}
+
+    /**
+     * The explanation of a compilation in which nothing failed.
+     *
+     * A failed node claims no type and no owning compiler, so an analysis
+     * holding one could not be rendered: {@see toArray()} would refuse
+     * partway through, on the path where an analysis is usually already
+     * being written to a log or a build artifact. The root is refused here
+     * instead, where the caller still has somewhere to put the answer —
+     * and {@see CompilationNode::$containsFailure} answers for the whole
+     * subtree, so a failure absorbed under an ordinary type is caught too.
+     *
+     * @param array<string, Type> $declarations
+     */
+    public static function certified(CompilationNode $root, array $declarations, Boundary $boundary): self
+    {
+        if ($root->containsFailure) {
+            // Checked here rather than asserted: production runs with
+            // assertions compiled out, and this is the invariant every
+            // reader of an analysis relies on.
+            throw new InvalidArgumentException('An analysis explains a compilation the compiler certified, and something under this root failed to compile. Read Expression::diagnose() for what refused.');
+        }
+
+        return new self($root, $declarations, $boundary);
+    }
 
     /** @return list<LocatedOperatorSelection> */
     public function operators(): array
