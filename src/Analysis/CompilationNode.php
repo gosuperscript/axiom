@@ -52,12 +52,12 @@ final class CompilationNode
 
     /** The type this node was certified to return. */
     public Type $returns {
-        get => $this->certifiedType ?? self::unclaimed('a return type');
+        get => $this->certifiedType ?? self::unclaimed('return type');
     }
 
     /** The identity of the extension whose source compiler owns this node. */
     public string $extension {
-        get => $this->owningExtension ?? self::unclaimed('an owning compiler');
+        get => $this->owningExtension ?? self::unclaimed('owning compiler');
     }
 
     private readonly ?Type $certifiedType;

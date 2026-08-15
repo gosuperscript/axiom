@@ -787,8 +787,8 @@ final class DiagnosisTest extends TestCase
      */
     public static function claimsAnAbandonedPositionNeverMade(): iterable
     {
-        yield 'return type' => ['a return type', static fn(CompilationNode $node) => $node->returns];
-        yield 'owning compiler' => ['an owning compiler', static fn(CompilationNode $node) => $node->extension];
+        yield 'return type' => ['return type', static fn(CompilationNode $node) => $node->returns];
+        yield 'owning compiler' => ['owning compiler', static fn(CompilationNode $node) => $node->extension];
     }
 
     #[Test]
