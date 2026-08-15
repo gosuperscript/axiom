@@ -20,7 +20,11 @@ final readonly class DefaultValueSourceCompiler
     {
         $inner = $compilation->child($source->source, 'source');
 
-        $shape = $inner->returns->shape();
+        // Whether a default is needed at all is a judgment about what the
+        // child promises, so it is asked through the capability: a child that
+        // did not compile promises nothing, and this source inherits the
+        // failure rather than deciding over a placeholder type.
+        $shape = $compilation->shapeOf($inner);
 
         if (!$shape instanceof OptionShape) {
             return $inner;

@@ -29,6 +29,8 @@ use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceCompilers\AscriptionSourceCompiler;
 use Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler;
 use Superscript\Axiom\Sources\Ascription;
+use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\DefaultValue;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -47,6 +49,33 @@ use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\UnknownType;
+
+/**
+ * A host source compiled the way the plugin guide documents: certify the
+ * child's present value, then map it to a native result of a claimed type.
+ * The claim is the whole point — it is what a compiler is allowed to say
+ * about a child it certified, and what it may not say about one that failed.
+ */
+final readonly class ClaimingSource implements Source
+{
+    public function __construct(public Source $source) {}
+}
+
+/** @internal The dialect contribution that compiles a {@see ClaimingSource}. */
+final class ClaimingExtension extends Extension
+{
+    public function sourceCompilers(): array
+    {
+        return [ClaimingSource::class => $this->compileClaiming(...)];
+    }
+
+    private function compileClaiming(ClaimingSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        return $compilation->child($source->source, 'source')
+            ->expectPresent(new NumberType())
+            ->mapPresent(new NumberType(), fn(int|float $value) => $value * 2);
+    }
+}
 
 /**
  * A host source whose compiler judges twice: once about its child, and once
@@ -143,6 +172,10 @@ final class AbandoningExtension extends Extension
 #[CoversClass(CompiledSource::class)]
 #[CoversClass(AscriptionSourceCompiler::class)]
 #[CoversClass(MemberAccessSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\CoerceSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\DefaultValueSourceCompiler::class)]
+#[CoversClass(\Superscript\Axiom\CompiledSources::class)]
 #[UsesNamespace('Superscript\\Axiom')]
 final class DiagnosisTest extends TestCase
 {
@@ -152,6 +185,12 @@ final class DiagnosisTest extends TestCase
     private static function diagnose(Source $source, array $declarations = [], ?Definitions $definitions = null): Diagnosis
     {
         return new Expression($source, $definitions ?? new Definitions(), declarations: $declarations)->diagnose();
+    }
+
+    /** Diagnose against a dialect that knows {@see ClaimingSource}. */
+    private static function diagnoseClaiming(Source $source): Diagnosis
+    {
+        return new Expression($source, dialect: Dialect::core()->with(new ClaimingExtension()))->diagnose();
     }
 
     /** Diagnose against a dialect that knows {@see JudgingSource}. */
@@ -478,6 +517,60 @@ final class DiagnosisTest extends TestCase
         // nothing — so overlap would refuse for a reason that is the fault
         // below, not a false claim.
         $diagnosis = self::diagnose(new Ascription(new NumberType(), new SymbolSource('quote')));
+
+        $this->assertSame([
+            'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_compiler_that_maps_a_failed_child_claims_nothing_about_the_result(): void
+    {
+        // ErrorType is Never-shaped, so expectPresent() certifies vacuously.
+        // Nothing but absorption at the door that follows keeps the claimed
+        // NumberType off a subtree that never compiled.
+        $diagnosis = self::diagnoseClaiming(new ClaimingSource(new SymbolSource('mystery')));
+
+        $this->assertSame([
+            'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertTrue($diagnosis->program()->isErr());
+    }
+
+    #[Test]
+    public function a_compiler_that_maps_a_child_that_compiled_still_claims_its_type(): void
+    {
+        // Absorption is for failed children only: the same compiler over a
+        // sound child certifies, claims Number, and runs.
+        $diagnosis = self::diagnoseClaiming(new ClaimingSource(new StaticSource(21)));
+
+        $this->assertSame([], $diagnosis->diagnostics);
+        $this->assertInstanceOf(NumberType::class, $diagnosis->returns);
+        $this->assertSame(42, $diagnosis->program()->unwrap()()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_coercion_over_a_failed_source_claims_nothing_rather_than_admitting(): void
+    {
+        // Coercion is admission policy, not a type judgment, so it makes no
+        // judgment that could absorb — the bridge itself must not claim the
+        // coerced type over a source that never compiled.
+        $diagnosis = self::diagnose(new Coerce(new NumberType(), new SymbolSource('quote')));
+
+        $this->assertSame([
+            'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_default_over_a_failed_source_claims_nothing_rather_than_deciding(): void
+    {
+        // Whether a default is needed is a question about what the source
+        // promises, and a failed source promises nothing.
+        $diagnosis = self::diagnose(new DefaultValue(new SymbolSource('quote'), 0));
 
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',

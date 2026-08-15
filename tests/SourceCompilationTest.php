@@ -117,6 +117,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
 #[UsesClass(Extension::class)]
@@ -233,6 +234,50 @@ final class SourceCompilationTest extends TestCase
         $this->expectException(CompilationAbsorbed::class);
 
         $compilation->shapeOf(new CompiledSource(CompiledNode::failed()));
+    }
+
+    #[Test]
+    public function no_door_that_claims_a_type_claims_one_over_a_child_that_failed(): void
+    {
+        // A claim is pinned to a value the child produces, and a child that
+        // did not compile produces none. ErrorType is Never-shaped, so every
+        // presence and assignability check along the way passes vacuously —
+        // the doors themselves are the only thing keeping a claimed type off
+        // a subtree that never compiled.
+        $number = new NumberType();
+        $failed = static fn(): CompiledSource => new CompiledSource(CompiledNode::failed());
+        $double = new BoundOperation(new ResolvedOperation($number, fn(int $value) => $value * 2));
+        $sum = new BoundOperation(new ResolvedOperation($number, fn(?int ...$values) => array_sum($values)));
+        $sound = CompiledSource::constant($number, 1);
+
+        foreach ([
+            'mapPresent' => static fn(): CompiledSource => $failed()->mapPresent($number, static fn() => 1),
+            'expectPresent then mapPresent' => static fn(): CompiledSource => $failed()
+                ->expectPresent($number)
+                ->mapPresent($number, static fn() => 1),
+            'mapIncludingAbsent' => static fn(): CompiledSource => $failed()->mapIncludingAbsent($number, static fn() => 1),
+            'apply' => static fn(): CompiledSource => $failed()->apply($double),
+            'sources mapPresent' => static fn(): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed()])
+                ->mapPresent($number, static fn() => 1),
+            'sources mapIncludingAbsent' => static fn(): CompiledSource => new CompiledSources(['broken' => $failed(), 'sound' => $sound])
+                ->mapIncludingAbsent($number, static fn() => 1),
+            'sources applyIncludingAbsent' => static fn(): CompiledSource => new CompiledSources(['sound' => $sound, 'broken' => $failed()])
+                ->applyIncludingAbsent($sum),
+        ] as $door => $claim) {
+            $absorbed = $claim();
+
+            $this->assertInstanceOf(ErrorType::class, $absorbed->returns, $door);
+
+            // ErrorType and an evaluation that refuses are one pair: a node
+            // that wears the type must also carry the refusal, or a broken
+            // subtree would still have something to run.
+            try {
+                $absorbed->node()->evaluate(new Runtime());
+                $this->fail("The node [{$door}] answered must have no evaluation.");
+            } catch (\LogicException $refused) {
+                $this->assertStringContainsString('this program was never certified', $refused->getMessage(), $door);
+            }
+        }
     }
 
     #[Test]

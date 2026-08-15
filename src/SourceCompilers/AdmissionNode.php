@@ -25,10 +25,20 @@ final readonly class AdmissionNode
      * Evaluate the inner node, convert present values through the bridge,
      * guard absence, and normalize the admitted value.
      *
+     * A bridge claims $type over the value the inner node produces, and a node
+     * that did not compile produces none — so the bridge inherits the failure
+     * instead of presenting the claimed type over it. Ascription never reaches
+     * here with one, because its overlap judgment absorbs first; coercion
+     * makes no type judgment at all, by design, so this is its only door.
+     *
      * @param Closure(mixed, SourceEvaluation): Result<Option<mixed>, \Throwable> $convert
      */
     public static function from(CompiledSource $inner, Type $type, Closure $convert, string $missing, string $label): CompiledSource
     {
+        if ($inner->failed()) {
+            return CompiledSource::absorbed();
+        }
+
         $optional = $type->shape() instanceof OptionShape;
         $missing = sprintf($missing, TypeDescriber::describe($type), TypeDescriber::describe(new OptionType($type)));
 

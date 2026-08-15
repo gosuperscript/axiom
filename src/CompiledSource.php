@@ -26,6 +26,20 @@ use function Superscript\Monads\Result\Ok;
  * The source-compiler-facing form of a compiled source: its certified return
  * type plus composable evaluation. Axiom keeps Runtime, Result<Option<...>>,
  * node construction, and observation scopes behind this interface.
+ *
+ * ## Absorption
+ *
+ * Every door here that claims a type — {@see mapPresent()},
+ * {@see mapIncludingAbsent()}, and {@see apply()} through the first — takes
+ * the claim from the compiler and pins it to a value this source produces.
+ * Over a child that did not compile there is no such value, so the claim is
+ * unfounded and the door refuses to make it: it answers a failed source
+ * instead ({@see absorbed()}), and the compiler's node inherits the failure
+ * rather than presenting a checked type over an unchecked subtree.
+ *
+ * This is the same absorption {@see SourceCompilation::shapeOf()} and
+ * {@see SourceCompilation::overlaps()} perform, and it is machinery for the
+ * same reason: a compiler must not have to remember.
  */
 final readonly class CompiledSource
 {
@@ -57,6 +71,10 @@ final readonly class CompiledSource
      */
     public function mapPresent(Type $returns, callable $evaluate): self
     {
+        if ($this->failed()) {
+            return self::absorbed();
+        }
+
         $evaluate = $evaluate(...);
         $returns = $this->propagateAbsence($returns);
 
@@ -74,6 +92,12 @@ final readonly class CompiledSource
     /**
      * Certify the value seen by mapPresent(). For an optional child this
      * checks its present member; absence remains structural and propagates.
+     *
+     * A failed child needs no branch of its own here. {@see ErrorType} is
+     * Never-shaped, so the check passes without judging anything, and the
+     * certification is only ever a precondition for a claim made by the door
+     * that follows — which absorbs. A guard here would change nothing an
+     * expression can observe.
      */
     public function expectPresent(Type $expected): self
     {
@@ -100,6 +124,10 @@ final readonly class CompiledSource
      */
     public function mapIncludingAbsent(Type $returns, callable $evaluate): self
     {
+        if ($this->failed()) {
+            return self::absorbed();
+        }
+
         $evaluate = $evaluate(...);
 
         return new self(new CompiledNode($returns, fn(Runtime $runtime) => $this->node
@@ -135,6 +163,20 @@ final readonly class CompiledSource
     public static function constant(Type $returns, mixed $value): self
     {
         return new self(new CompiledNode($returns, fn() => Ok(Option::from($value))));
+    }
+
+    /**
+     * A source that inherits a child's failure — the compiled-source twin of
+     * {@see \Superscript\Axiom\Operators\ResolvedOperation::absorbed()}. It carries the same pair a
+     * node the compiler gave up on carries — {@see ErrorType} and an
+     * evaluation that refuses to run — so a compiler that composed over a
+     * broken child produces a node no {@see Program} can be certified from.
+     *
+     * @internal The absorbing doors above answer with this.
+     */
+    public static function absorbed(): self
+    {
+        return new self(CompiledNode::failed());
     }
 
     /** @internal The compiler and Program consume the execution node. */

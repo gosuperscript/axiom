@@ -8,7 +8,13 @@ use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 
-/** Named compiled children that can be evaluated as one computation. */
+/**
+ * Named compiled children that can be evaluated as one computation.
+ *
+ * Both doors here claim a type over every child at once, so one child that
+ * did not compile is enough to make the claim unfounded: the group answers a
+ * failed source instead, the absorption {@see CompiledSource} explains.
+ */
 final readonly class CompiledSources
 {
     /** @param array<array-key, CompiledSource> $sources */
@@ -21,6 +27,10 @@ final readonly class CompiledSources
      */
     public function mapPresent(Type $returns, callable $evaluate): CompiledSource
     {
+        if ($this->anyFailed()) {
+            return CompiledSource::absorbed();
+        }
+
         $sources = $this->sources;
         $evaluate = $evaluate(...);
 
@@ -51,6 +61,10 @@ final readonly class CompiledSources
     /** Evaluate every child left-to-right and pass absence as null. */
     public function mapIncludingAbsent(Type $returns, callable $evaluate): CompiledSource
     {
+        if ($this->anyFailed()) {
+            return CompiledSource::absorbed();
+        }
+
         $sources = $this->sources;
         $evaluate = $evaluate(...);
 
@@ -72,5 +86,11 @@ final readonly class CompiledSources
             $operation->returns,
             fn(mixed ...$operands) => $operation(...$operands),
         );
+    }
+
+    /** Did any child fail to compile, leaving nothing to claim a type over? */
+    private function anyFailed(): bool
+    {
+        return array_any($this->sources, static fn(CompiledSource $source): bool => $source->failed());
     }
 }

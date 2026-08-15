@@ -737,7 +737,18 @@ $compilation->overlaps($inner->returns, $source->type);
 $compilation->shapeOf($inner);
 ```
 
-For a judgment of your own that the capability cannot make for you — you consult a service, or check a rule about the child's type yourself — ask `$inner->failed()` and call `$compilation->absorb()`, which ends your compilation the way absorption ends the built-in ones.
+The same holds for the combinators that *claim* a type rather than judge one. `mapPresent()`, `mapIncludingAbsent()` and `apply()` — and their `CompiledSources` counterparts — pin the type you name to a value the child produces, and a child that did not compile produces none. Over one they answer a failed source instead of your claim, so a broken subtree cannot end up wearing an ordinary type:
+
+```php
+// `mystery` did not compile. `expectPresent()` passes vacuously — ErrorType
+// is Never-shaped and Never is admissible everywhere — and `mapPresent()`
+// absorbs, so this compiles to ErrorType rather than to Number.
+$compilation->child($source->source, 'source')
+    ->expectPresent(new NumberType())
+    ->mapPresent(new NumberType(), fn(int|float $value) => $value * 2);
+```
+
+For a judgment of your own that the capability cannot make for you — you consult a service, or check a rule about the child's type yourself — ask `$inner->failed()` and call `$compilation->absorb()`, which ends your compilation the way absorption ends the built-in ones. The same applies to `custom()`: it takes a type from you without seeing the children you close over, so a compiler that composes children by hand guards them by hand.
 
 A refusal you make anyway counts as a fault of its own and is reported as a second diagnostic — right when your refusal stands on its own (a missing configuration, a rule about your source that the child's type has no bearing on), wrong when it is really the child's failure under a second message. There is no error-tolerant mode to implement, and no reason to construct an `ErrorType` yourself.
 
