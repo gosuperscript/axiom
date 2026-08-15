@@ -175,8 +175,8 @@ The compiler capability passed to every source compiler.
 | `child(Source $source, ?string $role = null): CompiledSource` | Compile one persisted child in the current dialect, definitions, and type environment. Give structural children a stable role for analysis output. |
 | `children(array $sources): CompiledSources` | Compile named or positional children in array order. Use when no per-child work is needed before composition. |
 | `combine(array $sources): CompiledSources` | Combine `CompiledSource` values already compiled or certified individually. |
-| `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. |
-| `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. |
+| `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Absorbs when either operand is a child that failed to compile. |
+| `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Absorbs when the operand is a child that failed to compile. |
 | `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
 | `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |

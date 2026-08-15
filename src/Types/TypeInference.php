@@ -15,7 +15,6 @@ use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
-use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -147,12 +146,8 @@ final readonly class TypeInference
     {
         return new SourceCompilation(
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
-            fn(Type $left, string $operator, Type $right): Result => $left instanceof ErrorType || $right instanceof ErrorType
-                ? Ok(ResolvedOperation::absorbed())
-                : (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
-            fn(string $operator, Type $operand): Result => $operand instanceof ErrorType
-                ? Ok(ResolvedOperation::absorbed())
-                : $this->unaryOperators->resolve($operator, $operand),
+            fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
+            fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),

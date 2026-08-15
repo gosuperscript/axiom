@@ -83,18 +83,31 @@ final readonly class SourceCompilation
         return new CompiledSources($sources);
     }
 
-    /** Bind one binary operation once from certified operand types. */
+    /**
+     * Bind one binary operation once from certified operand types. Absorbs
+     * over an operand that did not compile, for the reason {@see overlaps()}
+     * does: no rule can be selected from a placeholder type, and a refusal
+     * saying so would blame this source for the fault below it.
+     */
     public function infix(Type $left, string $operator, Type $right): BoundOperation
     {
+        if ($left instanceof ErrorType || $right instanceof ErrorType) {
+            $this->absorb();
+        }
+
         $resolved = $this->require(($this->compileInfix)($left, $operator, $right));
         $this->recordOperator('infix', $operator, [$left, $right], $resolved);
 
         return new BoundOperation($resolved);
     }
 
-    /** Bind one unary operation once from a certified operand type. */
+    /** Bind one unary operation once from a certified operand type; absorbs over a failed operand, as {@see infix()} does. */
     public function prefix(string $operator, Type $operand): BoundOperation
     {
+        if ($operand instanceof ErrorType) {
+            $this->absorb();
+        }
+
         $resolved = $this->require(($this->compilePrefix)($operator, $operand));
         $this->recordOperator('prefix', $operator, [$operand], $resolved);
 
