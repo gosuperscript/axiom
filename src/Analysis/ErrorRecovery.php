@@ -22,7 +22,7 @@ final class ErrorRecovery
     /** @var array<string, true> */
     private array $poisoned = [];
 
-    /** @var array<string, true> */
+    /** @var array<string, string> */
     private array $references = [];
 
     /** @param list<string> $poisoned Definition names that lie on a cycle. */
@@ -58,13 +58,13 @@ final class ErrorRecovery
     public function record(array $keys): void
     {
         foreach ($keys as $key) {
-            $this->references[$key] = true;
+            $this->references[$key] = $key;
         }
     }
 
     /** @return list<string> Every symbol the attempts resolved or tried to, in first-read order. */
     public function references(): array
     {
-        return array_keys($this->references);
+        return array_values($this->references);
     }
 }

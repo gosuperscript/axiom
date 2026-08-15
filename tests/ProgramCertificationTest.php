@@ -28,6 +28,7 @@ use function Superscript\Monads\Result\Ok;
  * being a claim and starts being a promise.
  */
 #[CoversClass(Program::class)]
+#[CoversClass(CompilationNode::class)]
 #[CoversClass(ErrorType::class)]
 #[UsesNamespace('Superscript\\Axiom')]
 final class ProgramCertificationTest extends TestCase
@@ -62,6 +63,25 @@ final class ProgramCertificationTest extends TestCase
         $this->expectExceptionMessage('The node at [$.children[1].node] failed to compile');
 
         new Program(new CompiledNode(new NumberType(), UnreachableEvaluation::refuse(...), compilation: $root));
+    }
+
+    #[Test]
+    public function a_node_carries_whether_anything_under_it_failed(): void
+    {
+        // The bit is cumulative, and that is what lets the root answer for
+        // the whole tree without anyone walking it.
+        $sound = new CompilationNode('Sound', new NumberType(), 'core');
+        $broken = new CompilationNode('Broken', new ErrorType(), 'core');
+
+        $this->assertFalse($sound->failed);
+        $this->assertTrue($broken->failed);
+        $this->assertFalse(new CompilationNode('Root', new NumberType(), 'core', [
+            new CompilationChild($sound, 'left'),
+        ])->failed);
+        $this->assertTrue(new CompilationNode('Root', new NumberType(), 'core', [
+            new CompilationChild($sound, 'left'),
+            new CompilationChild($broken, 'right'),
+        ])->failed);
     }
 
     #[Test]

@@ -15,6 +15,7 @@ use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\CompiledSources;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\CompilationAborted;
+use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Exceptions\EvaluationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
@@ -32,6 +33,7 @@ use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
@@ -106,6 +108,7 @@ final readonly class HostLiteralSource implements Source
 #[CoversClass(SourceEvaluation::class)]
 #[CoversClass(BoundOperation::class)]
 #[CoversClass(CompilationAborted::class)]
+#[CoversClass(CompilationAbsorbed::class)]
 #[CoversClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[CoversClass(\Superscript\Axiom\Analysis\CompilationRecorder::class)]
@@ -155,6 +158,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleBuilder::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithOperand::class)]
 #[UsesClass(\Superscript\Axiom\Operators\PrefixOperatorRuleWithReturn::class)]
+#[UsesClass(ErrorType::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(StringType::class)]
@@ -192,6 +196,53 @@ final class SourceCompilationTest extends TestCase
             $resolveOpaqueField,
             $recorder,
         );
+    }
+
+    #[Test]
+    public function a_judgment_is_absorbed_over_a_failed_type_from_either_side(): void
+    {
+        // Overlap is symmetric, so a compiler may hold the failed child on
+        // either side of the question and neither side may be judged.
+        $compilation = self::compilation();
+
+        foreach ([
+            'left' => [new ErrorType(), new NumberType()],
+            'right' => [new NumberType(), new ErrorType()],
+        ] as $position => [$left, $right]) {
+            try {
+                $compilation->overlaps($left, $right);
+                $this->fail("An overlap judgment with a failed {$position} operand must absorb.");
+            } catch (CompilationAbsorbed) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertTrue($compilation->overlaps(new NumberType(), new NumberType())->unwrap());
+    }
+
+    #[Test]
+    public function the_shape_of_a_failed_child_is_not_a_promise_to_judge(): void
+    {
+        $compilation = self::compilation();
+
+        $this->assertInstanceOf(
+            \Superscript\Axiom\Types\Shapes\NumberShape::class,
+            $compilation->shapeOf(CompiledSource::constant(new NumberType(), 1)),
+        );
+
+        $this->expectException(CompilationAbsorbed::class);
+
+        $compilation->shapeOf(new CompiledSource(CompiledNode::failed()));
+    }
+
+    #[Test]
+    public function a_compiler_can_absorb_a_judgment_of_its_own(): void
+    {
+        // The judgments above absorb for a compiler; one it makes itself —
+        // consulting a service, applying a rule of its own — absorbs here.
+        $this->expectException(CompilationAbsorbed::class);
+
+        self::compilation()->absorb();
     }
 
     #[Test]

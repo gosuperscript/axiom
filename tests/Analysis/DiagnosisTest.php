@@ -12,14 +12,17 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\Diagnostic;
 use Superscript\Axiom\Analysis\ErrorRecovery;
+use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Analysis\UnreachableEvaluation;
+use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -132,6 +135,9 @@ final class AbandoningExtension extends Extension
 #[CoversClass(ErrorRecovery::class)]
 #[CoversClass(UnreachableEvaluation::class)]
 #[CoversClass(TypeInference::class)]
+#[CoversClass(CompilationNode::class)]
+#[CoversClass(CompiledNode::class)]
+#[CoversClass(ResolvedOperation::class)]
 #[CoversClass(Expression::class)]
 #[CoversClass(SourceCompilation::class)]
 #[CoversClass(CompiledSource::class)]
