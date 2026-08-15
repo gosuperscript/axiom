@@ -151,7 +151,12 @@ final readonly class RecoveringCompiler
     {
         $dialect = $this->expression->dialect;
 
-        return new TypeInference(
+        // Where the attempt's reads end up. Every node hands its reads to its
+        // parent — as it finishes, or as it refuses — so the root's recorder
+        // holds the whole attempt, in the order the names were read.
+        $reads = new CompilationRecorder();
+
+        $compiled = new TypeInference(
             $dialect->operators(),
             $dialect->unaryOperators(),
             $dialect->literals(),
@@ -161,8 +166,15 @@ final readonly class RecoveringCompiler
             $recovery,
         )->compile(
             $this->expression->source,
-            new TypeEnvironment($this->expression->definitions, $this->expression->declarations, $recovery),
+            new TypeEnvironment($this->expression->definitions, $this->expression->declarations),
+            '$',
+            $reads,
         );
+
+        $compiled->inspect(static fn(CompiledNode $node) => $reads->recordReferences($node->references));
+        $recovery?->record($reads->references());
+
+        return $compiled;
     }
 
     private function program(CompiledNode $node): Program

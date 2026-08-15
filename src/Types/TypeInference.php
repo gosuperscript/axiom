@@ -82,9 +82,15 @@ final readonly class TypeInference
      *                     refusal made here is stamped with it, so a failed
      *                     compile names the node that failed in the same terms
      *                     a successful one names the nodes that passed.
+     * @param ?CompilationRecorder $parent The recorder of the node this source
+     *                     compiles under. Reads travel up it: a source that
+     *                     compiles hands its reads to the parent as it
+     *                     finishes, and a source that refuses hands up what it
+     *                     had read before it did, so the names a broken region
+     *                     touched survive it in the order they were read.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function compile(Source $source, TypeEnvironment $environment, string $path = '$'): Result
+    public function compile(Source $source, TypeEnvironment $environment, string $path = '$', ?CompilationRecorder $parent = null): Result
     {
         if ($this->recovery?->isQuarantined($path) === true) {
             return Ok($this->failedNode($source));
@@ -110,13 +116,11 @@ final readonly class TypeInference
             // of them, and at() keeps an already-located refusal from a child
             // pointing at the child. The names the node had already read
             // before it refused are kept: a broken draft still knows what it
-            // depends on.
-            $this->recovery?->record($recorder->references());
+            // depends on, and nothing else will carry them up.
+            $parent?->recordReferences($recorder->references());
 
             return Err($aborted->mismatch->at($path));
         }
-
-        $this->recovery?->record($recorder->references());
 
         return Ok($compiled->node()->forSource($source, new CompilationNode(
             $source::class,
@@ -134,14 +138,14 @@ final readonly class TypeInference
     private function compilation(TypeEnvironment $environment, Source $owner, CompilationRecorder $recorder): SourceCompilation
     {
         return new SourceCompilation(
-            fn(Source $child, string $path): Result => $this->compile($child, $environment, $path),
+            fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
             fn(Type $left, string $operator, Type $right): Result => $left instanceof ErrorType || $right instanceof ErrorType
                 ? Ok(ResolvedOperation::absorbed())
                 : (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $operand instanceof ErrorType
                 ? Ok(ResolvedOperation::absorbed())
                 : $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path),
+            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
@@ -161,7 +165,7 @@ final readonly class TypeInference
      *                     success path already does.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path): Result
+    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path, CompilationRecorder $reads): Result
     {
         if (!array_any(
             UnboundSymbols::in($owner),
@@ -179,12 +183,12 @@ final readonly class TypeInference
         // A definition on a cycle has already been reported as a property of
         // the graph, and descending into one would not terminate.
         if ($this->recovery?->isPoisoned($key) === true) {
-            $this->recovery->reference($key);
+            $reads->recordReferences([$key]);
 
             return Ok($this->failedNode($symbol));
         }
 
-        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path);
+        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $reads);
     }
 
     /**

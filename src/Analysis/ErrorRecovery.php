@@ -22,7 +22,7 @@ final class ErrorRecovery
     /** @var array<string, true> */
     private array $poisoned = [];
 
-    /** @var array<string, string> */
+    /** @var array<string, true> */
     private array $references = [];
 
     /** @param list<string> $poisoned Definition names that lie on a cycle. */
@@ -49,22 +49,22 @@ final class ErrorRecovery
         return $this->poisoned[$key] ?? false;
     }
 
-    public function reference(string $key): void
-    {
-        $this->references[$key] = $key;
-    }
-
-    /** @param list<string> $keys */
+    /**
+     * Keep what one attempt read. A name already kept holds its place, so
+     * the order is the order the first attempt to read a name met it.
+     *
+     * @param list<string> $keys
+     */
     public function record(array $keys): void
     {
         foreach ($keys as $key) {
-            $this->references[$key] = $key;
+            $this->references[$key] = true;
         }
     }
 
     /** @return list<string> Every symbol the attempts resolved or tried to, in first-read order. */
     public function references(): array
     {
-        return array_values($this->references);
+        return array_keys($this->references);
     }
 }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Types;
 
-use Superscript\Axiom\Analysis\ErrorRecovery;
+use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Runtime;
@@ -50,7 +50,6 @@ final class TypeEnvironment
     public function __construct(
         private readonly Definitions $definitions = new Definitions(),
         private readonly array $declarations = [],
-        private readonly ?ErrorRecovery $recovery = null,
     ) {}
 
     /**
@@ -64,9 +63,12 @@ final class TypeEnvironment
      *                     reference only within the attempt that made it, and
      *                     only if a compiler captured the abort rather than
      *                     letting it end the attempt.
+     * @param ?CompilationRecorder $reads The recorder of the node making this
+     *                     read, when one is recording. The name is kept there
+     *                     whether or not anything answers for it.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler, string $path = '$'): Result
+    public function nodeOfSymbol(string $name, ?string $namespace, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): Result
     {
         $key = SymbolSource::key($name, $namespace);
 
@@ -100,7 +102,7 @@ final class TypeEnvironment
         if ($source->isNone()) {
             // Nothing answers for the name, but the expression still depends
             // on it — which is the fact a broken draft is asked about most.
-            $this->recovery?->reference($key);
+            $reads?->recordReferences([$key]);
 
             return Err(new TypeMismatch(sprintf(
                 'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
@@ -109,7 +111,7 @@ final class TypeEnvironment
         }
 
         $this->inProgress[] = $key;
-        $result = $compiler->compile($source->unwrap(), $this, $path);
+        $result = $compiler->compile($source->unwrap(), $this, $path, $reads);
         array_pop($this->inProgress);
 
         return $this->memo[$key] = $result->map(fn(CompiledNode $node) => new CompiledNode(
