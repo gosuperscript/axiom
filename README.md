@@ -195,6 +195,8 @@ A refusal comes in two kinds, because hosts act on them differently:
 
 Both extend `BoundaryViolation` and carry the same aggregated `$violations` messages, plus `$inputs` — the binding each violation names. A fault dominates absence: a call that both omits one required input and supplies another badly is an `InadmissibleBinding`, so `instanceof MissingRequiredInput` reads as "nothing is wrong here except that inputs are still missing".
 
+**Whether absence is acceptable is a property of the declared type's shape**, and of nothing else — not of how a value converted, and not of the order a union lists its members. `Union(String, Option<Number>)` and `Union(Option<Number>, String)` both project `(String | Number)?`, so both take `''` as `None`; bare `String` requires presence, so `''` is an `InadmissibleBinding` (a value was supplied and does not inhabit `String`) while binding nothing at all is a `MissingRequiredInput`. Optionality is not a licence for a fault: a value that cannot convert at all is inadmissible whether or not absence is allowed.
+
 > [!NOTE]
 > The boundary is the one runtime type check that survives compilation, by design: `compile()` proves the program, not future inputs.
 

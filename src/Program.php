@@ -73,10 +73,13 @@ final readonly class Program
     private array $demanded;
 
     /**
-     * Required-ness per demanded declaration, fixed at compile time. It is a
-     * property of the projection, not the concrete class:
-     * Union(Option<Number>, String) has shape (Number | String)? and a
-     * missing binding is legal absence.
+     * Whether each demanded declaration admits absence, fixed at compile
+     * time. It is a property of the shape the type projects, not of the
+     * concrete class and not of member order: `Union(String, Option<Number>)`
+     * and `Union(Option<Number>, String)` both project `(String | Number)?`,
+     * because a union with any absence-admitting member admits absence
+     * ({@see \Superscript\Axiom\Types\Shapes\UnionShape}, where Option members
+     * hoist). Absence is then legal for that input however it arrives.
      *
      * @var array<string, bool>
      */
@@ -202,6 +205,14 @@ final readonly class Program
      * a declaration nothing reads is neither demanded nor admitted. Callers
      * bind keys exactly as declared — symbol lookup has no other reading.
      *
+     * Whether absence is acceptable for a demanded input is decided once, by
+     * the declared type's shape ({@see $optional}), and asked the same way
+     * however the absence arrived: no binding at all, or a binding that
+     * admitted to None. Nothing about the conversion decides it — a union
+     * answers `''` with `Ok(None)` or `Ok(Some(null))` depending on which
+     * member matched first, and both readings mean the same thing about a
+     * declaration whose shape admits absence.
+     *
      * Violations aggregate, named by binding, and are sorted into the kinds
      * {@see BoundaryViolation} describes: a fault dominates absence, so the
      * refusal is a {@see MissingRequiredInput} only when every violation is
@@ -241,11 +252,12 @@ final readonly class Program
                 continue;
             }
 
-            // An absence reading ('' → None). OptionType never produces one —
-            // it wraps absence as a present null — so this is always a
-            // required input that dissolved at the boundary: a value was
-            // supplied, and it does not inhabit the type it was declared at.
-            if ($admitted->unwrap()->isNone()) {
+            // An absence reading ('' → None) where the declaration requires
+            // presence: a value was supplied, and it does not inhabit the
+            // type it was declared at. Where the declaration admits absence,
+            // None is simply the value, and falls through to the overlay as
+            // the null a symbol reads back as absent.
+            if ($admitted->unwrap()->isNone() && !$this->optional[$key]) {
                 $violations[$key] = sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type));
                 $fault = true;
 

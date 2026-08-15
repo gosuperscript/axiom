@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Tests;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +39,7 @@ use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\UnionType;
 
 /**
  * The typed surface end to end: declarations as the public signature, the
@@ -214,23 +216,99 @@ final class TypedExpressionTest extends TestCase
         $this->assertSame('hi', $program(['note' => 'hi'])->unwrap()->unwrap());
     }
 
+    /**
+     * The whole classification of an absent input, enumerated. One rule
+     * decides every row: the declared type's *shape* says whether absence is
+     * acceptable, and nothing else does. A shape that admits absence takes
+     * None as the value however it arrived — no binding, a `null`, or a value
+     * that reads as absent. A shape that requires presence refuses, as a
+     * missing input when the call supplied nothing and as an inadmissible
+     * binding when it supplied something that does not inhabit the type.
+     * Optionality is not a licence for a fault: a value that cannot be
+     * converted at all is inadmissible whether or not absence is allowed.
+     *
+     * @param class-string<BoundaryViolation>|null $refusal
+     * @param array<string, mixed> $bindings
+     */
     #[Test]
-    public function a_required_input_that_reads_as_missing_is_a_violation(): void
+    #[DataProvider('absenceReadings')]
+    public function absence_is_judged_by_the_declared_shape(Type $declared, array $bindings, ?string $refusal, string $message): void
     {
         $program = (new Expression(
-            source: new SymbolSource('name'),
-            declarations: ['name' => new StringType()],
+            source: new SymbolSource('x'),
+            declarations: ['x' => $declared],
         ))->compile()->unwrap();
 
-        // '' coerces to absence — required-but-missing at the boundary.
-        $result = $program(['name' => '']);
+        $result = $program($bindings);
+
+        if ($refusal === null) {
+            $this->assertTrue($result->unwrap()->isNone(), 'the declaration admits absence, so the value is None');
+
+            return;
+        }
 
         $violation = $result->unwrapErr();
-        $this->assertStringContainsString('reads as missing, but String is required', $violation->getMessage());
+        $this->assertInstanceOf($refusal, $violation);
+        $this->assertStringContainsString($message, $violation->getMessage());
+    }
 
-        // A value was supplied and does not inhabit String: a fault, not a
-        // call still waiting for its inputs.
-        $this->assertInstanceOf(InadmissibleBinding::class, $violation);
+    /**
+     * @return iterable<string, array{Type, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
+     */
+    public static function absenceReadings(): iterable
+    {
+        // Presence required: '' is a value that does not inhabit String.
+        yield 'String, bound ""' => [new StringType(), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
+        yield 'String, unbound' => [new StringType(), [], MissingRequiredInput::class, 'required input [x] is missing'];
+        yield 'String, bound a list' => [new StringType(), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+
+        // Absence admitted, by an Option declaration.
+        yield 'String?, bound ""' => [new OptionType(new StringType()), ['x' => ''], null, ''];
+        yield 'String?, bound null' => [new OptionType(new StringType()), ['x' => null], null, ''];
+        yield 'String?, unbound' => [new OptionType(new StringType()), [], null, ''];
+        yield 'String?, bound a list' => [new OptionType(new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+
+        // Absence admitted, by a union with an absence-admitting member —
+        // the same verdict from either member order, because the shape the
+        // union projects is the same one.
+        yield 'String | Number?, bound ""' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ''], null, ''];
+        yield 'Number? | String, bound ""' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ''], null, ''];
+        yield 'String | Number?, unbound' => [new UnionType(new StringType(), new OptionType(new NumberType())), [], null, ''];
+        yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], null, ''];
+        yield 'String | Number?, bound a list' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+        yield 'Number? | String, bound a list' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+    }
+
+    #[Test]
+    public function union_member_order_does_not_change_a_boundary_verdict(): void
+    {
+        // `''` reaches the two orders differently — String answers Ok(None)
+        // and Option<Number> answers Ok(Some(null)) — and the boundary must
+        // not be able to tell, because both readings say the same thing
+        // about a declaration whose shape is (String | Number)?.
+        $verdict = static function (Type ...$members): string {
+            $program = (new Expression(
+                source: new SymbolSource('x'),
+                declarations: ['x' => new UnionType(...$members)],
+            ))->compile()->unwrap();
+
+            $result = $program(['x' => '']);
+
+            return $result->isErr()
+                ? $result->unwrapErr()::class
+                : ($result->unwrap()->isNone() ? 'None' : 'Some');
+        };
+
+        $string = new StringType();
+        $number = new OptionType(new NumberType());
+
+        $this->assertSame('None', $verdict($string, $number));
+        $this->assertSame($verdict($string, $number), $verdict($number, $string));
+
+        // The same independence where presence *is* required: neither order
+        // of a bare union admits '', and both refuse with the same class.
+        $this->assertSame(InadmissibleBinding::class, $verdict($string, new NumberType()));
+        $this->assertSame($verdict($string, new NumberType()), $verdict(new NumberType(), $string));
     }
 
     #[Test]
