@@ -43,7 +43,6 @@ use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
-use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
@@ -265,7 +264,7 @@ final class DiagnosisTest extends TestCase
             'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
         $this->assertSame(['mystery'], $diagnosis->references);
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -296,7 +295,7 @@ final class DiagnosisTest extends TestCase
 
             $this->assertCount(1, $diagnosis->diagnostics, $position);
             $this->assertStringStartsWith('Unbound symbol [mystery]', $diagnosis->diagnostics[0]->message, $position);
-            $this->assertInstanceOf(ErrorType::class, $diagnosis->returns, $position);
+            $this->assertNull($diagnosis->returns, $position);
         }
     }
 
@@ -417,7 +416,7 @@ final class DiagnosisTest extends TestCase
         );
 
         $this->assertSame(['c'], $diagnosis->references);
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -438,7 +437,7 @@ final class DiagnosisTest extends TestCase
             'The definition graph is not well-founded; evaluation would recurse without terminating.',
         ], self::messages($diagnosis));
         $this->assertSame(['a'], $diagnosis->references);
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -456,8 +455,10 @@ final class DiagnosisTest extends TestCase
         $this->assertSame('Match arm 0 cannot be typed.', $diagnosis->diagnostics[0]->message);
         $this->assertSame(['band', 'unknown_rate', 'turnover'], $diagnosis->references);
 
-        // The surviving arm still types the match: ErrorType drops out of the
-        // union of arm types.
+        // The surviving arm still types the match: the compiler's mark for
+        // the arm it gave up on drops out of the union of arm types. A
+        // diagnostic and a sound root type therefore co-occur — the root
+        // itself compiled, and only a root that did not is typeless.
         $this->assertInstanceOf(NumberType::class, $diagnosis->returns);
     }
 
@@ -509,7 +510,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -523,7 +524,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -537,7 +538,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
         $this->assertTrue($diagnosis->program()->isErr());
     }
 
@@ -564,7 +565,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -577,7 +578,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -632,7 +633,7 @@ final class DiagnosisTest extends TestCase
 
         $this->assertSame(['This source may not be a constant.'], self::messages($diagnosis));
         $this->assertSame('$.children[0].node', $diagnosis->diagnostics[0]->path);
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]

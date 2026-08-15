@@ -26,11 +26,16 @@ use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Sources\Coerce;
+use Superscript\Axiom\Sources\LiteralPattern;
+use Superscript\Axiom\Sources\MatchArm;
+use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\DictType;
 use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\ListType;
+use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OpaqueType;
 use Superscript\Axiom\Types\OptionType;
@@ -344,25 +349,56 @@ final class ProgramCertificationTest extends TestCase
     }
 
     /**
-     * The mark is public in exactly one place: a diagnosis of an expression
-     * whose root failed says so in its return type. That is the whole of
-     * what the node gate has left to refuse — a host cannot hide one inside
-     * a composite it has no instance to build with — so the gate reads the
-     * claim rather than walking into it, and pays one instanceof per node.
+     * The mark has no public appearance at all. An expression whose root
+     * failed returns nothing, and its diagnosis says nothing rather than
+     * handing out the one instance a caller could otherwise wrap in a type
+     * of its own and claim back.
      */
     #[Test]
-    public function a_diagnosis_return_type_cannot_be_claimed_back(): void
+    public function a_diagnosis_of_a_failed_root_carries_no_type(): void
     {
         $diagnosis = new Expression(new SymbolSource('missing'))->diagnose();
 
-        $this->assertInstanceOf(ErrorType::class, $diagnosis->returns);
+        $this->assertNull($diagnosis->returns);
+    }
 
+    /**
+     * A diagnosis carries a real type whenever the root itself compiled,
+     * which a non-empty diagnostics list does not rule out: a broken match
+     * arm is absorbed into the union of its siblings, so the expression is
+     * refused and the root type is sound at the same time.
+     */
+    #[Test]
+    public function a_root_that_compiled_keeps_its_type_alongside_a_diagnostic(): void
+    {
+        $diagnosis = new Expression(
+            new MatchExpression(new SymbolSource('band'), [
+                new MatchArm(new LiteralPattern('a'), new SymbolSource('unknown_rate')),
+                new MatchArm(new WildcardPattern(), new StaticSource(2)),
+            ]),
+            declarations: ['band' => new StringType()],
+        )->diagnose();
+
+        $this->assertCount(1, $diagnosis->diagnostics);
+        $this->assertInstanceOf(LiteralType::class, $diagnosis->returns);
+        $this->assertTrue($diagnosis->program()->isErr());
+    }
+
+    /**
+     * The node gate, exercised through the library's internal mint because
+     * nothing public hands the mark out: a claim made with it is refused
+     * where the claim is made, rather than as a certification that refuses a
+     * later, blameless expression.
+     */
+    #[Test]
+    public function a_claimed_mark_is_refused_where_the_node_claims_it(): void
+    {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('the type this compiled node returns is or contains one');
 
         new Expression(
             new ClaimingSource(),
-            dialect: Dialect::core()->with(new ClaimingExtension($diagnosis->returns)),
+            dialect: Dialect::core()->with(new ClaimingExtension(ErrorType::shared())),
         )->diagnose();
     }
 

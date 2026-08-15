@@ -126,7 +126,7 @@ $diagnosis = $expression->diagnose();
 
 $diagnosis->diagnostics; // list<TypeMismatch> — every refusal, in the order compilation met them
 $diagnosis->references;  // symbols read, including ones that failed to resolve
-$diagnosis->returns;     // the root type; ErrorType where the root itself failed
+$diagnosis->returns;     // the root type, or null where the root itself failed
 $diagnosis->program();   // Ok(Program) iff there are no diagnostics
 ```
 

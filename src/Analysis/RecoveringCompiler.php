@@ -8,6 +8,7 @@ use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\DefinitionGraph;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\Types\ErrorType;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -116,10 +117,13 @@ final readonly class RecoveringCompiler
             if ($attempt->isOk()) {
                 $root = $attempt->unwrap();
 
+                // A root the compiler gave up on returns nothing, and the mark
+                // it wears is the compiler's own: the diagnosis reports the
+                // absence rather than handing the mark out.
                 return new Diagnosis(
                     $diagnostics,
                     $recovery->references(),
-                    $root->returns,
+                    $root->returns instanceof ErrorType ? null : $root->returns,
                     $diagnostics === [] ? $this->program($root) : null,
                 );
             }

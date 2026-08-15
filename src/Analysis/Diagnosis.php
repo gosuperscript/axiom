@@ -24,7 +24,7 @@ use function Superscript\Monads\Result\Ok;
  *
  * $diagnosis->diagnostics; // list<TypeMismatch>, in the order the compiler met them
  * $diagnosis->references;  // symbols read, including ones that failed to resolve
- * $diagnosis->returns;     // the root type; ErrorType when the root itself failed
+ * $diagnosis->returns;     // the root type, or null when the root itself failed
  * $diagnosis->program();   // Ok(Program) iff diagnostics === []
  * ```
  *
@@ -40,10 +40,11 @@ use function Superscript\Monads\Result\Ok;
  *    is the same refusal, with the same message and the same path, that
  *    `Expression::compile()` returns; the rest are what compilation goes on
  *    to find once that node is set aside.
- *  - **No ErrorType survives certification.** {@see ErrorType} is minted
- *    only for a node a diagnostic was recorded for, so a diagnostic-free
- *    diagnosis contains none. `Program`'s constructor enforces the same
- *    claim independently, over the whole node tree.
+ *  - **A failed root has no type.** `$returns` is null exactly when the root
+ *    node itself did not compile; a type there is one compilation certified.
+ *    The compiler's internal mark for a node it gave up on ({@see ErrorType})
+ *    appears nowhere in this library's public surface, and `Program`'s
+ *    constructor independently refuses any node tree containing one.
  *  - **References survive broken regions.** A symbol read before a sibling
  *    failed is still reported, and a symbol that failed to resolve is
  *    reported too — which is the difference from `Program::$references`,
@@ -62,8 +63,14 @@ final readonly class Diagnosis
     /**
      * @param list<TypeMismatch> $diagnostics
      * @param list<string> $references
-     * @param Type $returns What the expression returns. {@see ErrorType} when
-     *                      the root node itself failed.
+     * @param ?Type $returns What the expression returns, or null when the root
+     *                      node itself did not compile and so returns nothing.
+     *                      A type here is one compilation certified, which is
+     *                      not the same as an expression that is accepted: a
+     *                      fault under a node that recovers — a broken match
+     *                      arm, absorbed into the union of its siblings —
+     *                      leaves a real root type alongside the diagnostic
+     *                      that refuses the expression.
      * @param ?Program $program The program the compiler certified, or null
      *                      when something refused. Null and a non-empty
      *                      $diagnostics are the same verdict seen from two
@@ -73,7 +80,7 @@ final readonly class Diagnosis
     public function __construct(
         public array $diagnostics,
         public array $references,
-        public Type $returns,
+        public ?Type $returns,
         private ?Program $program,
     ) {}
 
