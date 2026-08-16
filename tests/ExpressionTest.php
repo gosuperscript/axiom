@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -131,7 +132,7 @@ final class ExpressionTest extends TestCase
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(['amount', 'rate'], $program->references);
+        $this->assertEquals([new ReferencePath('amount'), new ReferencePath('rate')], $program->references);
     }
 
     #[Test]

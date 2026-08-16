@@ -17,6 +17,7 @@ use Superscript\Axiom\Fields\Field;
 use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\Ascription;
 use Superscript\Axiom\Sources\Coerce;
@@ -286,7 +287,7 @@ final class ProgramTest extends TestCase
             declarations: ['customer' => $record],
         ))->compile()->unwrap();
 
-        $this->assertSame(['customer.turnover'], $program->references);
+        $this->assertEquals([new ReferencePath('customer', 'turnover')], $program->references);
         $this->assertSame(42, $program(['customer' => ['turnover' => 42]])->unwrap()->unwrap());
 
         // An object with a true record projection reads by property.

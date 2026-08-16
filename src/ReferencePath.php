@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use InvalidArgumentException;
+use JsonSerializable;
 
 /** A root symbol followed by zero or more structural record properties. */
-final readonly class ReferencePath
+final readonly class ReferencePath implements JsonSerializable
 {
     /** @var non-empty-list<string> */
     public array $segments;
@@ -60,5 +61,14 @@ final readonly class ReferencePath
     public function describe(): string
     {
         return implode('.', $this->segments);
+    }
+
+    /** @return array{root: string, properties: list<string>} */
+    public function jsonSerialize(): array
+    {
+        return [
+            'root' => $this->root(),
+            'properties' => $this->properties(),
+        ];
     }
 }

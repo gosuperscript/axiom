@@ -123,7 +123,7 @@ final readonly class TypeInference
             // aborts every compilation above it and the tree being recorded
             // is discarded, so recording into it is work nobody collects.
             if ($this->recovery !== null && $parent !== null) {
-                $parent->recordReferences($recorder->referencePaths());
+                $parent->recordReferences($recorder->references());
             }
 
             return Err($aborted->mismatch->at($path));
@@ -150,7 +150,7 @@ final readonly class TypeInference
                 $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
                 $recorder->children(),
                 $recorder->operators(),
-            ), $recorder->referencePaths()));
+            ), $recorder->references()));
     }
 
     /**

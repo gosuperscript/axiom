@@ -25,6 +25,11 @@ final class ReferencePathTest extends TestCase
         $this->assertSame(['address', 'postcode'], $path->properties());
         $this->assertFalse($path->isRoot());
         $this->assertSame('customer.address.postcode', $path->describe());
+        $this->assertSame([
+            'root' => 'customer',
+            'properties' => ['address', 'postcode'],
+        ], $path->jsonSerialize());
+        $this->assertSame('{"root":"customer","properties":["address","postcode"]}', json_encode($path));
         $this->assertNotSame($root->key(), $path->key());
     }
 

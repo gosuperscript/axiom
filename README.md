@@ -56,6 +56,7 @@ A real program has parameters and definitions:
 ```php
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -83,7 +84,7 @@ $area->parameters(); // ['radius']
 
 $program = $area->compile()->unwrap();  // every node resolved and certified
 $program->returns;                      // NumberType — a property, not a query
-$program->references;                   // ['radius'] — declared inputs it reads
+$program->references;                   // [new ReferencePath('radius')]
 
 $program(['radius' => 5])->unwrap()->unwrap();  // ~78.54
 $program(['radius' => 10])->unwrap()->unwrap(); // ~314.16
@@ -126,12 +127,12 @@ Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignab
 $diagnosis = $expression->diagnose();
 
 $diagnosis->diagnostics; // list<TypeMismatch> — every refusal, in the order compilation met them
-$diagnosis->references;  // symbols read, including ones that failed to resolve
+$diagnosis->references;  // list<ReferencePath>, including unresolved reads
 $diagnosis->returns;     // the root type, or null where the root itself failed
 $diagnosis->program();   // Ok(Program) iff there are no diagnostics
 ```
 
-For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports `['mystery', 'postcode']` as the expression's reads. A node that refuses compiles to a *failed* source, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
+For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports the `mystery` and `postcode` access paths as the expression's reads. A node that refuses compiles to a *failed* source, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
 
 `compile()` is one attempt of the same walk, so its refusal is always the diagnosis' first diagnostic.
 
@@ -395,7 +396,7 @@ $program([
 
 Three rules keep the model honest:
 
-- **Symbols are roots; member access is structure.** `new SymbolSource('quote')` resolves the root. `MemberAccessSource` reaches `turnover` within its record. Strings such as `quote.turnover` in references and diagnostics describe that structural access path; they are not separately bindable names.
+- **Symbols are roots; member access is structure.** `new SymbolSource('quote')` resolves the root. `MemberAccessSource` reaches one property segment at a time, so dots are rejected in both names. `Program::$references` and `Diagnosis::$references` retain `ReferencePath` values; call `describe()` for `quote.turnover`. JSON keeps the same structure as `{"root":"quote","properties":["turnover"]}`.
 - **Declarations are records all the way down.** The same required-by-default/`Optional` property model governs both the outer input signature and nested records. The compiler projects this declaration record to the access paths the program actually reads, preserving presence qualifiers at every level.
 - **Declarations and definitions are disjoint root symbol sets.** A root is a *parameter* (declared and supplied by bindings) or a *derived value* (defined), never both. A collision is a constructor error. To let callers override a derived value, model the override in-language as an option-valued parameter the definition consults.
 

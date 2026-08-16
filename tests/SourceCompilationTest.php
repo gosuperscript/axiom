@@ -522,7 +522,7 @@ final class SourceCompilationTest extends TestCase
         $this->assertNotNull($compiled);
         $this->assertSame($reference, $seen);
         $this->assertSame($node->returns, $compiled->returns);
-        $this->assertSame(['customer.turnover'], $recorder->references());
+        $this->assertEquals([$reference], $recorder->references());
 
         $withoutRecorder = self::compilation(
             compileInputPath: fn(\Superscript\Axiom\ReferencePath $candidate): Result => Ok($node),
@@ -563,7 +563,7 @@ final class SourceCompilationTest extends TestCase
             fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
             $recorder->children(),
         ));
-        $this->assertSame(['amount'], $recorder->references());
+        $this->assertEquals([new \Superscript\Axiom\ReferencePath('amount')], $recorder->references());
     }
 
     #[Test]
@@ -883,7 +883,7 @@ final class SourceCompilationTest extends TestCase
         $program = $expression->compile()->unwrap();
 
         $this->assertSame(['amount'], $expression->parameters());
-        $this->assertSame(['amount'], $program->references);
+        $this->assertEquals([new \Superscript\Axiom\ReferencePath('amount')], $program->references);
         $this->assertInstanceOf(NumberType::class, $program->returns);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
@@ -960,7 +960,7 @@ final class SourceCompilationTest extends TestCase
             declarations: ['amount' => new NumberType()],
         ))->compile()->unwrap();
 
-        $this->assertSame(['amount'], $program->references);
+        $this->assertEquals([new \Superscript\Axiom\ReferencePath('amount')], $program->references);
         $this->assertSame(42, $program(['amount' => 42])->unwrap()->unwrap());
     }
 

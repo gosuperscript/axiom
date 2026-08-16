@@ -78,18 +78,9 @@ final class CompilationRecorder
         return $this->operators;
     }
 
-    /** @return list<\Superscript\Axiom\ReferencePath> */
-    public function referencePaths(): array
-    {
-        return $this->references?->all() ?? [];
-    }
-
-    /** @return list<string> Human-readable paths, in first-read order. */
+    /** @return list<\Superscript\Axiom\ReferencePath> Paths in first-read order. */
     public function references(): array
     {
-        return array_map(
-            static fn(\Superscript\Axiom\ReferencePath $reference): string => $reference->describe(),
-            $this->referencePaths(),
-        );
+        return $this->references?->all() ?? [];
     }
 }

@@ -17,6 +17,6 @@ Use “source compiler” for this seam. Do not call it a resolver: runtime sour
 
 - A **symbol** is a root name in an expression environment. It is either a declared parameter or a definition, never both.
 - A **property** is a named slot in a `RecordType`. A bare property is **required** and must exist; `Optional` is an explicit property qualifier permitting omission. `Optional` is not a `Type`.
-- An **access path** is a symbol followed by zero or more structural properties. `customer.turnover` is the description of one such path, not a flat or namespaced symbol that callers bind separately.
+- An **access path** is a symbol followed by zero or more structural properties. It remains structured when exchanged; `customer.turnover` is only its human-readable description, never its identity or a flat name that callers bind separately.
 - `OptionType` describes the value domain: an explicitly supplied value may be absent. It is independent from property presence. Consequently `T`, `OptionType<T>`, `Optional<T>`, and `Optional<OptionType<T>>` are four intentionally distinct declarations.
 - The expression's declarations are one `RecordType`. Its root properties declare symbols and its nested properties declare structure using the same required-by-default model. Compilation projects that record to the access paths the program reads while preserving every property qualifier.
