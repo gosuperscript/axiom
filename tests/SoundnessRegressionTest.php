@@ -114,14 +114,14 @@ final class SoundnessRegressionTest extends TestCase
     }
 
     #[Test]
-    public function a_nested_binding_cannot_reach_a_namespaced_definition(): void
+    public function a_nested_binding_cannot_reach_a_root_definition(): void
     {
         // Finding 2: ['customer' => ['turnover' => 42]] used to shadow the
         // customer.turnover definition through descent, past the top-level
         // shadowing check. Undeclared keys are stripped now.
         $program = (new Expression(
-            source: new SymbolSource('turnover', 'customer'),
-            definitions: new Definitions(['customer.turnover' => new StaticSource('derived')]),
+            source: new SymbolSource('turnover'),
+            definitions: new Definitions(['turnover' => new StaticSource('derived')]),
         ))->compile()->unwrap();
 
         $this->assertSame('derived', $program()->unwrap()->unwrap());
@@ -228,14 +228,14 @@ final class SoundnessRegressionTest extends TestCase
     }
 
     #[Test]
-    public function a_missing_binding_for_an_option_shaped_union_is_legal_absence(): void
+    public function an_optional_property_with_an_option_shaped_union_may_be_omitted(): void
     {
         // Finding 7a: Union(Option<Number>, String) has canonical shape
         // (Number | String)? but admit() tested instanceof OptionType and
         // demanded the input. Required-ness follows the projection now.
         $program = (new Expression(
             source: new SymbolSource('x'),
-            declarations: ['x' => new UnionType(new OptionType(new NumberType()), new StringType())],
+            declarations: ['x' => new \Superscript\Axiom\Types\Optional(new UnionType(new OptionType(new NumberType()), new StringType()))],
         ))->compile()->unwrap();
 
         $outcome = $program([]);
@@ -252,7 +252,7 @@ final class SoundnessRegressionTest extends TestCase
         // refused. Optionality follows the projection: -x is Number?.
         $program = (new Expression(
             source: new UnaryExpression(operator: '-', operand: new SymbolSource('x')),
-            declarations: ['x' => new UnionType(new OptionType(new NumberType()), new NumberType())],
+            declarations: ['x' => new \Superscript\Axiom\Types\Optional(new UnionType(new OptionType(new NumberType()), new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new NumberType()))->isOk());
@@ -310,8 +310,8 @@ final class SoundnessRegressionTest extends TestCase
         // definition (999 beat 1). Symbols are exact keys now: the
         // definition is the only reading, statically and at runtime.
         $program = (new Expression(
-            source: new SymbolSource('turnover', 'customer'),
-            definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
+            source: new SymbolSource('turnover'),
+            definitions: new Definitions(['turnover' => new StaticSource(1)]),
             declarations: ['customer' => new DictType(new NumberType())],
         ))->compile()->unwrap();
 

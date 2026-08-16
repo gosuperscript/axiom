@@ -78,7 +78,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
 #[UsesClass(Expression::class)]
-#[UsesClass(\Superscript\Axiom\Input::class)]
+#[UsesClass(\Superscript\Axiom\Types\Optional::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
@@ -151,6 +151,9 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class ProgramTest extends TestCase
 {
     /**
@@ -281,6 +284,7 @@ final class ProgramTest extends TestCase
             declarations: ['customer' => $record],
         ))->compile()->unwrap();
 
+        $this->assertSame(['customer.turnover'], $program->references);
         $this->assertSame(42, $program(['customer' => ['turnover' => 42]])->unwrap()->unwrap());
 
         // An object with a true record projection reads by property.
@@ -288,6 +292,17 @@ final class ProgramTest extends TestCase
         $object = (new Expression(new MemberAccessSource($projected, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
 
         $this->assertSame(7, $object()->unwrap()->unwrap());
+
+        // A host-projected record uses ordinary structural access rather
+        // than declared-input path compilation, for arrays as well as objects.
+        $projectedArray = self::lyingSource($record, ['turnover' => 8]);
+        $array = (new Expression(new MemberAccessSource($projectedArray, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
+        $this->assertSame(8, $array()->unwrap()->unwrap());
+
+        $optional = new RecordType(['turnover' => new \Superscript\Axiom\Types\Optional(new NumberType())]);
+        $omitted = self::lyingSource($optional, []);
+        $optionalAccess = (new Expression(new MemberAccessSource($omitted, 'turnover'), dialect: self::dialect()))->compile()->unwrap();
+        $this->assertTrue($optionalAccess()->unwrap()->isNone());
     }
 
     #[Test]
@@ -295,7 +310,7 @@ final class ProgramTest extends TestCase
     {
         $program = (new Expression(
             new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
-            declarations: ['customer' => new OptionType(new RecordType(['turnover' => new NumberType()]))],
+            declarations: ['customer' => new \Superscript\Axiom\Types\Optional(new RecordType(['turnover' => new NumberType()]))],
         ))->compile()->unwrap();
 
         $this->assertTrue($program([])->unwrap()->isNone());
@@ -435,7 +450,7 @@ final class ProgramTest extends TestCase
     {
         $program = (new Expression(
             new UnaryExpression('not', new SymbolSource('flag')),
-            declarations: ['flag' => new OptionType(new BooleanType())],
+            declarations: ['flag' => new \Superscript\Axiom\Types\Optional(new OptionType(new BooleanType()))],
         ))->compile()->unwrap();
 
         $this->assertTrue($program([])->unwrap()->isNone());
@@ -672,13 +687,14 @@ final class ProgramTest extends TestCase
     public function member_access_annotates_the_property_and_result(): void
     {
         $observer = new SpyObserver();
+        $customer = self::lyingSource(new RecordType(['age' => new NumberType()]), ['age' => 30]);
 
         $program = (new Expression(
-            source: new MemberAccessSource(new SymbolSource('customer'), 'age'),
-            declarations: ['customer' => new RecordType(['age' => new NumberType()])],
+            source: new MemberAccessSource($customer, 'age'),
+            dialect: self::dialect(),
         ))->compile()->unwrap();
 
-        $this->assertSame(30, $program(['customer' => ['age' => 30]], $observer)->unwrap()->unwrap());
+        $this->assertSame(30, $program(observer: $observer)->unwrap()->unwrap());
         $this->assertSame('.age', $observer->annotations['label']);
         $this->assertSame(30, $observer->annotations['result']);
     }

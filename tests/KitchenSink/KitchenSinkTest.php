@@ -14,11 +14,13 @@ use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchExpression;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\RecordType;
 
 #[CoversNothing]
 class KitchenSinkTest extends TestCase
@@ -92,7 +94,7 @@ class KitchenSinkTest extends TestCase
                 new MatchArm(
                     new ExpressionPattern(
                         new InfixExpression(
-                            left: new SymbolSource('claims', 'quote'),
+                            left: new MemberAccessSource(new SymbolSource('quote'), 'claims'),
                             operator: '>',
                             right: new StaticSource(2),
                         ),
@@ -109,11 +111,11 @@ class KitchenSinkTest extends TestCase
 
         $program = (new Expression(
             $source,
-            declarations: ['quote.claims' => new NumberType()],
+            declarations: ['quote' => new RecordType(['claims' => new NumberType()])],
         ))->compile()->unwrap();
 
-        $this->assertEquals(25.0, $program(['quote.claims' => 3])->unwrap()->unwrap());
-        $this->assertEquals(0, $program(['quote.claims' => 1])->unwrap()->unwrap());
+        $this->assertEquals(25.0, $program(['quote' => ['claims' => 3]])->unwrap()->unwrap());
+        $this->assertEquals(0, $program(['quote' => ['claims' => 1]])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -153,7 +155,7 @@ class KitchenSinkTest extends TestCase
                 new MatchArm(
                     new ExpressionPattern(
                         new InfixExpression(
-                            left: new SymbolSource('claims', 'quote'),
+                            left: new MemberAccessSource(new SymbolSource('quote'), 'claims'),
                             operator: '>',
                             right: new StaticSource(3),
                         ),
@@ -163,7 +165,7 @@ class KitchenSinkTest extends TestCase
                 new MatchArm(
                     new ExpressionPattern(
                         new InfixExpression(
-                            left: new SymbolSource('turnover', 'quote'),
+                            left: new MemberAccessSource(new SymbolSource('quote'), 'turnover'),
                             operator: '>',
                             right: new StaticSource(500000),
                         ),
@@ -177,14 +179,16 @@ class KitchenSinkTest extends TestCase
         $rate = (new Expression(
             $source,
             declarations: [
-                'quote.claims' => new NumberType(),
-                'quote.turnover' => new NumberType(),
+                'quote' => new RecordType([
+                    'claims' => new NumberType(),
+                    'turnover' => new NumberType(),
+                ]),
             ],
         ))->compile()->unwrap();
 
-        $this->assertEquals(0.5, $rate(['quote.claims' => 5, 'quote.turnover' => 100])->unwrap()->unwrap());
-        $this->assertEquals(0.35, $rate(['quote.claims' => 1, 'quote.turnover' => 600000])->unwrap()->unwrap());
-        $this->assertEquals(0.1, $rate(['quote.claims' => 0, 'quote.turnover' => 100])->unwrap()->unwrap());
+        $this->assertEquals(0.5, $rate(['quote' => ['claims' => 5, 'turnover' => 100]])->unwrap()->unwrap());
+        $this->assertEquals(0.35, $rate(['quote' => ['claims' => 1, 'turnover' => 600000]])->unwrap()->unwrap());
+        $this->assertEquals(0.1, $rate(['quote' => ['claims' => 0, 'turnover' => 100]])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -222,11 +226,11 @@ class KitchenSinkTest extends TestCase
         // answers yes is the same artifact it will invoke per request.
         $gate = new Expression(
             source: new InfixExpression(
-                left: new InfixExpression(new SymbolSource('turnover', 'quote'), '*', new StaticSource(1.2)),
+                left: new InfixExpression(new MemberAccessSource(new SymbolSource('quote'), 'turnover'), '*', new StaticSource(1.2)),
                 operator: '>',
                 right: new StaticSource(500_000),
             ),
-            declarations: ['quote.turnover' => new NumberType()],
+            declarations: ['quote' => new RecordType(['turnover' => new NumberType()])],
         );
 
         $this->assertTrue($gate->check(new \Superscript\Axiom\Types\BooleanType())->isOk());
@@ -236,8 +240,8 @@ class KitchenSinkTest extends TestCase
         // The same declarations then guard every call: the boundary coerces
         // a stringly CSV cell before evaluation, so the certified program
         // never sees raw input.
-        $this->assertTrue($program(['quote.turnover' => '600000'])->unwrap()->unwrap());
-        $this->assertFalse($program(['quote.turnover' => '100000'])->unwrap()->unwrap());
+        $this->assertTrue($program(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
+        $this->assertFalse($program(['quote' => ['turnover' => '100000']])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -300,7 +304,7 @@ class KitchenSinkTest extends TestCase
             ]),
             declarations: [
                 'turnover' => new NumberType(),
-                'riskFactorOverride' => new \Superscript\Axiom\Types\OptionType(new NumberType()),
+                'riskFactorOverride' => new \Superscript\Axiom\Types\Optional(new \Superscript\Axiom\Types\OptionType(new NumberType())),
             ],
         ))->compile()->unwrap();
 

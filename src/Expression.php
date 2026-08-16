@@ -9,6 +9,7 @@ use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
@@ -23,7 +24,7 @@ use Superscript\Monads\Result\Result;
  * ```php
  * $area = new Expression($source,
  *     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
- *     declarations: ['radius' => new NumberType()],
+ *     declarations: new RecordType(['radius' => new NumberType()]),
  * );
  * $program = $area->compile()->unwrap(); // every node resolved and certified
  * $program(['radius' => '5']);           // boundary coerces '5' → 5, then ~78.54
@@ -36,64 +37,40 @@ use Superscript\Monads\Result\Result;
  * admitted values presuppose the boundary — invocation lives only on
  * {@see Program}, so running an unchecked program is unrepresentable.
  *
- * The declaration list is the expression's complete public signature —
- * declarations and definitions are disjoint namespaces (a symbol is a
- * parameter or a derived value, never both; enforced at construction), so
- * shadowing a definition is unrepresentable.
- *
- * A declaration is a {@see Type}, or an {@see Input} wrapping one where the
- * host also has something to say about supply. Both normalize to `$inputs`
- * on the way in, and compilation is handed `$declarations` — the types —
- * whichever form was written.
+ * The declaration record is the expression's complete public input
+ * signature. Its root properties and definitions are disjoint symbol sets: a
+ * symbol is an input or a derived value, never both. Structure beneath a
+ * root is expressed only through record member access.
  */
 final readonly class Expression
 {
     public Dialect $dialect;
 
-    /**
-     * The declared inputs, normalized: a bare {@see Type} declaration is the
-     * {@see Input::of()} reading of itself, so every declaration is one kind
-     * of thing from here on.
-     *
-     * @var array<string, Input>
-     */
-    public array $inputs;
+    public RecordType $declarations;
 
     /**
-     * The declared types alone, in declaration order — everything
-     * compilation is told about the caller. Demandedness is a boundary fact,
-     * and is not among the facts inference can see.
-     *
-     * @var array<string, Type>
-     */
-    public array $declarations;
-
-    /**
-     * @param array<string, Type|Input> $declarations
+     * @param RecordType|array<string, Type|\Superscript\Axiom\Types\Optional> $declarations
      */
     public function __construct(
         public Source $source,
         public Definitions $definitions = new Definitions(),
         ?Dialect $dialect = null,
-        array $declarations = [],
+        RecordType|array $declarations = [],
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
-        $this->inputs = Input::normalize($declarations);
-        $this->declarations = array_map(static fn(Input $input) => $input->type, $this->inputs);
+        $this->declarations = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
 
-        // Symbol lookup is exact-key only (no descent), so declared and
-        // defined names can only collide literally: Symbol('turnover',
-        // ns: 'customer') and member access on a declared customer record
-        // are distinct, unambiguous programs.
+        // Root declarations and definitions must remain unambiguous. Nested
+        // names belong to their record and are reached by member access.
         $collisions = array_filter(
-            array_keys($this->declarations),
+            $this->declarations->names(),
             fn(string $key) => $this->definitions->has($key),
         );
 
         if ($collisions !== []) {
             throw new InvalidArgumentException(sprintf(
-                'Declarations and definitions are disjoint namespaces, but [%s] %s both declared and defined. A symbol is a parameter or a derived value, never both; model an override as an Option-typed parameter the definition consults.',
+                'Declarations and definitions have disjoint root symbols, but [%s] %s both declared and defined. A symbol is a parameter or a derived value, never both; model an override as an Option-typed parameter the definition consults.',
                 implode('], [', $collisions),
                 count($collisions) === 1 ? 'is' : 'are',
             ));
@@ -191,6 +168,6 @@ final readonly class Expression
 
     public function withDefinitions(Definitions $definitions): self
     {
-        return new self($this->source, $definitions, $this->dialect, $this->inputs, $this->boundary);
+        return new self($this->source, $definitions, $this->dialect, $this->declarations, $this->boundary);
     }
 }

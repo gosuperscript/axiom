@@ -124,7 +124,7 @@ final readonly class TypeInference
             // aborts every compilation above it and the tree being recorded
             // is discarded, so recording into it is work nobody collects.
             if ($this->recovery !== null && $parent !== null) {
-                $parent->recordReferences($recorder->references());
+                $parent->recordReferences($recorder->referencePaths());
             }
 
             return Err($aborted->mismatch->at($path));
@@ -151,7 +151,7 @@ final readonly class TypeInference
                 $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
                 $recorder->children(),
                 $recorder->operators(),
-            ), $recorder->references()));
+            ), $recorder->referencePaths()));
     }
 
     /**
@@ -164,7 +164,8 @@ final readonly class TypeInference
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol, string $path): Result => $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $recorder),
+            fn(SymbolSource $symbol, string $path): Result => $environment->nodeOfSymbol($symbol->name, $this, $path, $recorder),
+            fn(\Superscript\Axiom\ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
             function (ScopedExpression $expression, array $parameterTypes, LocalScope $scope, string $path) use ($environment, $recorder): Result {
                 $expected = $expression->parameters;
                 $actual = array_keys($parameterTypes);

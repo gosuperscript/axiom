@@ -94,6 +94,8 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class CompilationAnalysisTest extends TestCase
 {
     #[Test]
@@ -141,7 +143,7 @@ final class CompilationAnalysisTest extends TestCase
         $this->assertSame(4.5, $program()->unwrap()->unwrap());
         $this->assertSame($analysis, $program->analysis);
         $this->assertSame([
-            'version' => 1,
+            'version' => 2,
             'boundary' => 'Coerce',
             'declarations' => [],
             'root' => [
@@ -205,7 +207,7 @@ final class CompilationAnalysisTest extends TestCase
     {
         $analysis = CompilationAnalysis::certified(
             CompilationNode::certified(StaticSource::class, new LiteralType('private'), 'axiom.core'),
-            [
+            new RecordType([
                 'boolean' => new LiteralType(true),
                 'integer' => new LiteralType(7),
                 'float' => new LiteralType(2.5),
@@ -216,7 +218,7 @@ final class CompilationAnalysisTest extends TestCase
                 'dict' => new DictType(new LiteralType('private')),
                 'record' => new RecordType(['field' => new LiteralType('private')]),
                 'opaque' => new OpaqueType('Example', ['parameter' => new LiteralType('private')]),
-            ],
+            ]),
             \Superscript\Axiom\Boundary::Assert,
         );
 
@@ -225,28 +227,28 @@ final class CompilationAnalysisTest extends TestCase
         $revealed = json_encode($revealedExport, JSON_THROW_ON_ERROR);
 
         $this->assertSame([
-            'boolean' => 'Boolean',
-            'integer' => 'Number',
-            'float' => 'Number',
-            'string' => 'String',
-            'option' => 'String?',
-            'union' => 'String | Number',
-            'list' => 'List<String, 2..4>',
-            'dict' => 'Dict<String>',
-            'record' => '{field: String}',
-            'opaque' => 'Example<parameter: String>',
+            'boolean' => ['type' => 'Boolean', 'optional' => false],
+            'integer' => ['type' => 'Number', 'optional' => false],
+            'float' => ['type' => 'Number', 'optional' => false],
+            'string' => ['type' => 'String', 'optional' => false],
+            'option' => ['type' => 'String?', 'optional' => false],
+            'union' => ['type' => 'String | Number', 'optional' => false],
+            'list' => ['type' => 'List<String, 2..4>', 'optional' => false],
+            'dict' => ['type' => 'Dict<String>', 'optional' => false],
+            'record' => ['type' => '{field: String}', 'optional' => false],
+            'opaque' => ['type' => 'Example<parameter: String>', 'optional' => false],
         ], $analysis->toArray()['declarations']);
         $this->assertSame([
-            'boolean' => 'true',
-            'integer' => '7',
-            'float' => '2.5',
-            'string' => "'private'",
-            'option' => "'private'?",
-            'union' => "'private' | 7",
-            'list' => "List<'private', 2..4>",
-            'dict' => "Dict<'private'>",
-            'record' => "{field: 'private'}",
-            'opaque' => "Example<parameter: 'private'>",
+            'boolean' => ['type' => 'true', 'optional' => false],
+            'integer' => ['type' => '7', 'optional' => false],
+            'float' => ['type' => '2.5', 'optional' => false],
+            'string' => ['type' => "'private'", 'optional' => false],
+            'option' => ['type' => "'private'?", 'optional' => false],
+            'union' => ['type' => "'private' | 7", 'optional' => false],
+            'list' => ['type' => "List<'private', 2..4>", 'optional' => false],
+            'dict' => ['type' => "Dict<'private'>", 'optional' => false],
+            'record' => ['type' => "{field: 'private'}", 'optional' => false],
+            'opaque' => ['type' => "Example<parameter: 'private'>", 'optional' => false],
         ], $revealedExport['declarations']);
         $this->assertStringNotContainsString('private value', $redacted);
         $this->assertStringNotContainsString('private', $redacted);
@@ -284,7 +286,7 @@ final class CompilationAnalysisTest extends TestCase
                 ), 'left')],
                 [$rootSelection],
             ),
-            [],
+            new RecordType(),
             \Superscript\Axiom\Boundary::Coerce,
         );
 
@@ -399,7 +401,7 @@ final class CompilationAnalysisTest extends TestCase
 
         $certified = CompilationAnalysis::certified(
             CompilationNode::certified(StaticSource::class, new NumberType(), 'axiom.core'),
-            [],
+            new RecordType(),
             \Superscript\Axiom\Boundary::Coerce,
         );
 
@@ -418,7 +420,7 @@ final class CompilationAnalysisTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('something under this root failed to compile');
 
-        CompilationAnalysis::certified($absorbed, [], \Superscript\Axiom\Boundary::Coerce);
+        CompilationAnalysis::certified($absorbed, new RecordType(), \Superscript\Axiom\Boundary::Coerce);
     }
 
     /**
@@ -438,6 +440,6 @@ final class CompilationAnalysisTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('this root was abandoned');
 
-        CompilationAnalysis::certified($abandoned, [], \Superscript\Axiom\Boundary::Coerce);
+        CompilationAnalysis::certified($abandoned, new RecordType(), \Superscript\Axiom\Boundary::Coerce);
     }
 }

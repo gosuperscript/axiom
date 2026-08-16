@@ -88,10 +88,15 @@ The host composes a `Dialect` once and hands it to the `Expression`:
 ```php
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Types\RecordType;
 
 $dialect = Dialect::core()->with(new TimeExtension(), new MoneyExtension());
 
-$expression = new Expression($source, dialect: $dialect, declarations: [...]);
+$expression = new Expression(
+    $source,
+    dialect: $dialect,
+    declarations: new RecordType(['effective' => new DateType()]),
+);
 
 $expression->check(new BooleanType());              // the compiler resolves through the dialect...
 $program = $expression->compile()->unwrap();

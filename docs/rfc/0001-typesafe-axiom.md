@@ -83,7 +83,7 @@ The sealed constructors:
 | `LiteralShape(primitive, value)` | singleton of a scalar | `Literal('shop')`, `Literal(42)`. Substitutable for its base, never the reverse. |
 | `OptionShape(inner)` | possibly-absent value | **Value-set semantics**: denotes exactly `{null} ∪ values(inner)`. See laws below. |
 | `UnionShape(members)` | set of alternatives | Normalized on construction: flattened, deduplicated, order-insensitive, `Never` members eliminated, ≥2 members after normalization. An enum is a union of literals. |
-| `RecordShape(fields)` | named fields, exact | A record's value set is fully described by its fields — no open variant, no width subtyping; exactness is what makes whole-record equality total. **No presence flag**: an optional field is a field whose shape is `OptionShape` — missing-key and present-null are one absence concept (see laws). |
+| `RecordShape(properties)` | named properties, exact | A record's value set is fully described by its properties — no open variant, no width subtyping; exactness is what makes whole-record equality total. Each `RecordPropertyShape` carries a value shape and an independent presence flag. Properties are required by default; `Optional` explicitly permits omission. |
 | `DictShape(value)` | homogeneous string-keyed map, unknown keys | Distinct from a record: "all values are `T`" and "exactly these named fields" are different claims. `Dict` is the honest type for data whose keys cannot be enumerated. |
 | `ListShape(element, min, max)` | length-bounded list | A plain list is bounds `[0, ∞)`; there is no separate sized-list shape. Bounds participate in subtyping and overlap. |
 | `UnknownShape` | statically unnameable | Gradual typing, **inert**: refused at every operand, comparison, and member-access position; the ways out are the two explicit admission bridges, `Coerce` and `Ascription`. Accepted only by itself under assignability. Derived, never authored. |
@@ -147,8 +147,8 @@ Diagnostics are first-class: relations fail with a `TypeMismatch` — a message 
   - `Option<Option<T>> ≡ Option<T>` — canonicalized at construction; the runtime value domain cannot represent nesting.
   - The `null` literal infers as `Option<Never>` — the set `{null}` — assignable to every `Option<T>`.
   - `Option<T>` always overlaps `Option<U>` (shared member `null`). The authored `x == null` emptiness test is a core structural presence reading: `Option<T>` is `1 + T`, while the absence-only `Option<Never>` is `1 + 0`, so their present-present branch is uninhabited and the comparison needs no value equality for `T`. It therefore remains answerable when `T` is opaque or `Unknown`; only a bare `Unknown`, whose outer constructor is not known, stays inert.
-- Coercion law: `OptionType<T>::coerce(null)` yields a *present* `Some(null)` — absence is a legal value of the option, not a failed coercion. That is what lets an optional field live inside a record whose fields treat a `None` coercion as "required but missing".
-- **One absence axis**: missing-key and present-null are indistinguishable after record coercion (coercion canonicalizes, inserting `null` for missing optional keys). No expression can observe the difference — member access yields `null` for both, and `has`/`in` are list membership, not key presence. *Revisit trigger, recorded here deliberately: if a `keys()`-like operation over records ever enters the language, this decision must be revisited before it ships.*
+- Coercion law: `OptionType<T>::coerce(null)` yields a *present* `Some(null)` — absence is a legal value of the option, not a failed coercion.
+- **Presence and value absence are orthogonal**: a record property is required unless wrapped in `Optional`; its value admits absence only when its type is `OptionType`-shaped. Thus required `T`, required `Option<T>`, optional `T`, and optional `Option<T>` are distinct. Record coercion preserves an omitted optional property as omitted. Reading it yields absence and therefore option-lifts the accessed type, but a future `keys()` operation can still observe the record's structural presence honestly.
 
 *Value-equality support, overlap & admissibility*
 - `ValueEquality::supports(L, R)` asks whether the built-in evaluator is total over every pair in `L × R`. It is universal over reachable union members, options, and container elements; it refuses `Unknown` and opaque values. A list bounded to length zero passes vacuously because its element is unreachable. The core absence comparison is a separate structural judgment rather than an exception in this support relation.
@@ -280,7 +280,7 @@ In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw valu
 
 - A defined symbol compiles to a **definition slot**: its `Source` compiled in the **same `Definitions` the program embeds** — one registry, both semantics. At runtime a slot evaluates lazily and memoizes per invocation; it is compiled exactly once.
 - **Declared types terminate recursion**: a host-declared input type (`turnover: Money<GBP>`) enters as a declared leaf; a host source terminates via its own compile face; `StaticSource` terminates via the literal registry.
-- **Memoized**, same key scheme as the runtime slots (`namespace.name`).
+- **Memoized** by root symbol, using the same keys as the runtime definition slots.
 - **Cycle detection is a graph property, not a typing feature**: declarations answer *typing*, never *termination*, so a declared type must never terminate the cycle walk (an in-progress set inside inference misses exactly the cycles the declaration short-circuit truncates — self-cycles and mutual cycles alike). Well-foundedness is a standalone DFS over the `Definitions` symbol-reference graph, independent of declarations, run by `compile()` before typing and reported as "cyclic symbol definition: a → b → a". The former *runtime* re-entry backstop dies with unchecked evaluation: every program that runs has passed the graph check, so there is no re-entry left to guard.
 - Unbound is an error; a scope that tolerates unknown symbols binds `UnknownType` explicitly — and then must bridge it before any operation touches it.
 
@@ -322,8 +322,9 @@ A compiler that knows its result declares it with its evaluation beside it; one 
 
 Member access is **shape-driven** — it dispatches on the operand's projection, not its concrete `Type` class, so any type whose (census-verified, therefore true) projection is record-like gets field access, extension types included. Field shapes **reify** back to types (`Shape → Type` is mechanical over the sealed constructors; an opaque field reifies to `OpaqueType` — an `@internal` reification artifact, statically nominal, dynamically **fail-closed**: core cannot verify membership of a host-owned identity, so its `assert`/`coerce` reject every value with a message naming the host as the owner. The public vocabulary is `OpaqueShape` plus a host-owned `Type` class with a real `assert`; a fail-open placeholder would duplicate `Unknown`'s job while wearing a nominal certificate — and, once fixed rules dispatch on `assert`, would claim every non-null value for any rule declared over it).
 
-- Record-shaped operand, declared field → the field's shape, reified. Record coercion canonicalizes, so declared-field access never hits the missing-key error.
-- `Option<record-shaped>.field` → `Option<FieldType>` — optionality propagates, mirroring the compiled evaluation; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
+- Record-shaped operand, declared required property → the property's value shape, reified.
+- Record-shaped operand, declared optional property → `Option<PropertyType>`; an omitted property evaluates as absence.
+- `Option<record-shaped>.property` → `Option<PropertyType>` — optionality propagates, mirroring the compiled evaluation; chained optional access stays clean because `Option<Option<T>>` collapses by theorem.
 - `Unknown`-shaped operand → compile error: `Unknown` is inert; ascribe a record type first.
 - Undeclared field → compile error. Records are exact, so "the field might be there anyway" is not a representable state — the optimistic hole `admits` closes for unions cannot reopen through records.
 - **Dict-shaped operand → compile error** (strict): a dict's nature is "keys unknown statically", so every access is fallible, and the runtime's missing-key `Err` stays exactly as is. `Dict` is a transport type you *type your way out of*. Escape valve reserved for later: an explicit `get(dict, key)` function typed `Option<V>`.
@@ -351,28 +352,23 @@ Extension rules **join** core's — order carries no meaning, because no tie is 
 
 #### Typed bindings: the boundary
 
-> **Superseded (2026-08-15).** This section has the boundary admit *every* declared
-> binding on every call. The shipped boundary demands only the inputs the compiled
-> program reads — `Program::$references`, the compiler's own record — and decides
-> whether an absent input is legal from the declared type's shape rather than from
-> how a supplied value happened to convert. See the CHANGELOG entries *The boundary
-> demands bindings only for the inputs the program reads* and *Absence at the boundary
-> is judged by the declared type's shape* (gosuperscript/axiom#92). The rest of this
-> section stands: stripping, the disjoint namespaces, and the two `Boundary` modes are
-> as written.
+> **Revised (2026-08-16).** Declarations are one `RecordType`, projected during
+> compilation to the structural access paths the program reads. Record-property
+> presence is required by default and is made optional explicitly with `Optional`;
+> `OptionType` independently describes whether a supplied value may be absent.
 
-Certification is conditional — "*if* inputs inhabit their declared types, this program is sound" — and the boundary establishes the condition, on every call of the compiled `Program`. `compile()` proves the program; it cannot prove future inputs — which is why the boundary is the one runtime type check that survives compilation, *by design*. The same declarations map serves both faces: statically it seeds the `TypeEnvironment`; at invoke time each declared binding passes through its declared type (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
+Certification is conditional — "*if* inputs inhabit their declared types, this program is sound" — and the boundary establishes the condition on every call of the compiled `Program`. `compile()` proves the program; it cannot prove future inputs — which is why the boundary is the one runtime type check that survives compilation, *by design*. The same declaration record serves both faces: statically it seeds the `TypeEnvironment`; at invoke time its projection to the program's reads passes through the declared types (`coerce` by default; `assert` for strict hosts) **before** evaluation begins:
 
 - Declared input, bad value → boundary error, pre-evaluation, aggregated across all bad inputs, named by binding (`binding [customer]: field [turnover]…`) — errors speak the host's language, not the AST's.
-- Declared required input, missing → boundary error (all missing inputs reported at once). Declared `Option`, missing or null → legal absence.
-- Undeclared extra keys → **stripped** before evaluation (superset contexts stay legal — hosts may pass the whole context bag; only the declared slice enters). Undeclared *parameters* are the explicit gradual path: unbound-symbol errors, statically and at runtime, unless declared `Unknown`.
-- **Declarations and definitions are disjoint namespaces**: a symbol is a parameter *or* a derived value, never both. Collision is a **constructor error**, before any call. Together with stripping and the death of descent, this makes shadowing *unrepresentable* rather than licensed: symbol lookup consults exact keys only, so no binding value can ever answer for a definition. Shadowing is modeled in-language instead — an `Option`-typed parameter the definition consults (`riskFactorOverride: Number?`), explicit in the program, certified on both paths.
+- Required property on a read path, missing → boundary error (all missing paths reported at once). An `Optional` property may be omitted; an `OptionType` property may be explicitly bound to absence. Neither implies the other.
+- Unread properties → **stripped** before evaluation (superset contexts stay legal — hosts may pass the whole context record; only the projected declaration enters). Undeclared root symbols remain compile-time unbound-symbol errors unless declared `Unknown`.
+- **Declarations and definitions have disjoint root symbols**: a symbol is a parameter *or* a derived value, never both. Collision is a **constructor error**, before any call. Together with projection and structural access, this makes shadowing unrepresentable. Shadowing is modeled in-language instead — an option-valued parameter the definition consults (`riskFactorOverride: Number?`), explicit in the program and certified on both paths.
 
-The guarantee, stated honestly: *declared inputs cannot deliver garbage past the boundary; undeclared inputs cannot touch anything at all — they are stripped, an explicit `Unknown`, or a named error. The declaration list is the expression's complete public signature; the only trust remaining is the trust written down.*
+The guarantee, stated honestly: *declared inputs cannot deliver garbage past the boundary; undeclared inputs cannot touch anything at all — they are stripped, an explicit `Unknown`, or a named error. The declaration record is the expression's complete public signature; the only trust remaining is the trust written down.*
 
-#### Symbols are names; member access is structure
+#### Symbols are roots; member access is structure
 
-`Bindings` stores what it is given and answers **exact keys only**. The associative-array-means-namespace heuristic is dead, and so is its successor, descent: nothing ever digs into a binding's value to answer a symbol lookup. A namespaced symbol (`SymbolSource('turnover', 'customer')`) is the flat key `customer.turnover`, found among bindings or definitions by exact match — a namespace is a naming convention, exactly as `Definitions` already treats it. Reaching *into* a record value is the explicit `MemberAccessSource` node, certified against the record's declared fields. One value, one reading — the host chooses at declaration time: a namespaced parameter (`'quote.turnover' => Number`, bound as `['quote.turnover' => 600000]`) or a record parameter (`'quote' => Record`, bound whole, fields reached by member access).
+`Bindings` stores one input record. `SymbolSource('customer')` resolves only its root property; `MemberAccessSource` is the explicit structural traversal to `turnover`. There are no flat dotted or namespaced symbols. `customer.turnover` is merely the stable textual description of that access path in `Program::$references` and diagnostics, while callers bind `['customer' => ['turnover' => 600000]]`. The same structure exists statically and dynamically, so there is no flattening or descent convention to keep synchronized.
 
 Typed value objects at the call site (`TypedValue::of($type, $value)` bindings) were rejected: they put types on the wrong side of time — certification needs types *before* values exist — reopen the two-sources-of-truth drift the declarations map closed, and presuppose hosts convert values before the boundary whose job is converting. The co-location instinct is honored where it's sound: declaration-with-enforcement on the `Expression`, not type-with-value at the call site.
 
@@ -382,7 +378,7 @@ Typed value objects at the call site (`TypedValue::of($type, $value)` bindings) 
 
 ```php
 $expression = new Expression($source, definitions: $definitions,
-    declarations: ['radius' => new NumberType()]);
+    declarations: new RecordType(['radius' => new NumberType()]));
 
 $program = $expression->compile();   // Result<Program, TypeMismatch>
 // Err: cycles, unbound symbols, unresolvable or ambiguous operators,
@@ -393,7 +389,7 @@ $program->returns;                   // Type — a property of the artifact, not
 $program(['radius' => '5']);         // boundary coerces, then evaluates — no dispatch
 ```
 
-Evaluation presupposes a passed check the way admitted values presuppose the boundary: `call()`/`__invoke` live **only** on `Program`, so running an unchecked program is unrepresentable — the same move as disjoint namespaces and the compiled-in dialect, applied to the program itself. `$expression->infer()` and `->check($expected)` remain as conveniences over `compile()` (the type of the compiled artifact; compile plus one assignability test). The constructor enforces the disjointness of declarations and definitions; `compile()` runs the definition-graph well-foundedness pass before typing. Hosts with stored corpora get the natural economics: compile once at authoring or deploy time, invoke per request — no per-call inference walk, no per-node dispatch, definitions resolved once.
+Evaluation presupposes a passed check the way admitted values presuppose the boundary: `call()`/`__invoke` live **only** on `Program`, so running an unchecked program is unrepresentable — the same move as disjoint root symbol sets and the compiled-in dialect, applied to the program itself. `$expression->infer()` and `->check($expected)` remain as conveniences over `compile()` (the type of the compiled artifact; compile plus one assignability test). The constructor enforces the disjointness of declarations and definitions; `compile()` runs the definition-graph well-foundedness pass before typing. Hosts with stored corpora get the natural economics: compile once at authoring or deploy time, invoke per request — no per-call inference walk, no per-node dispatch, definitions resolved once.
 
 - **Corpus sweeps**: to migrate onto the strict runtime, a host runs `check`/`infer` across its stored programs and triages the mismatches — non-exhaustive matches, non-boolean negations, dead comparisons all surface before any evaluation happens. The sweep tool for the runtime strictness is this API, not an authoring-surface feature.
 - False `Ascription` claims (declared type disjoint from the inferred inner type) surface in the same sweep. `Coerce` nodes do not — coercion satisfiability is deliberately not modeled statically (a lint-grade `CoercionAware` opt-in may arrive later; its absence costs a diagnostic, never soundness).
@@ -508,16 +504,9 @@ A consolidated record of the decisions this design makes, with the alternatives 
 
 ### Bindings, boundary, and hosts
 
-- **Symbols are exact keys; descent is deleted.** `Bindings`/`TypeEnvironment` answer exact (dotted) keys; nothing digs into a binding's value to answer a lookup. `MemberAccessSource` is the one structural path. Any un-enumerated width — an open record, a dict's keys equally — could otherwise answer a lookup the checker refuses, and no collision check can expand unenumerable width; deleting the mechanism closes the class, where guarding (declaration-aware descent) or banning (namespace-collision errors) keeps two mechanisms in sync. Calling convention: bind keys exactly as declared.
-- **Declarations and definitions are disjoint namespaces.** Enforced at construction; the boundary strips undeclared keys. Shadowing becomes unrepresentable — no license rule, no descent hole, no declared∧defined agreement check to maintain. Overrides are modeled in-language as `Option`-typed parameters the definition consults.
-- **Typed bindings are the boundary.** The same declarations map seeds the `TypeEnvironment` statically and coerces/asserts declared inputs pre-evaluation (aggregated, named by binding). This is the one runtime type check that survives compilation, by design — `compile()` proves the program but cannot prove future inputs. Rejected typed value objects at the call site — they put types on the wrong side of time.
-
-  > **Superseded (2026-08-15).** "Declared inputs" here means every declaration.
-  > The shipped boundary coerces/asserts only the inputs the compiled program
-  > reads (`Program::$references`); a declaration nothing reads is neither
-  > demanded nor admitted. Same ruling as the note in §Typed bindings: the
-  > boundary — read it there for the absence rule that came with it. Everything
-  > else in this bullet stands.
+- **Symbols are roots; member access is the only structural path.** `Bindings` and `TypeEnvironment` share one nested record model. Dotted strings describe access paths but are never bindable keys. Any un-enumerated width — an open record or a dict's keys — remains unable to certify member access.
+- **Declarations and definitions have disjoint root symbols.** Enforced at construction; the boundary projects away unread properties. Shadowing becomes unrepresentable — no license rule and no declared∧defined agreement check to maintain. Overrides are modeled in-language as `Option`-typed parameters the definition consults.
+- **Typed bindings are the boundary.** One declaration `RecordType` seeds the `TypeEnvironment` statically and coerces/asserts the projected input record pre-evaluation (aggregated and named by root binding, with nested property causes). Required is the default; `Optional` opts a property out of presence while `OptionType` governs value absence. This is the one runtime type check that survives compilation, by design — `compile()` proves the program but cannot prove future inputs. Rejected typed value objects at the call site — they put types on the wrong side of time.
 
 - **One `Dialect` value object, consumed at compile time only.** Packages contribute via `Extension` (abstract base with empty-default hooks); duplicate literal and exact source-compiler registrations are loud errors. Extension rules join core's; order carries no meaning because no tie is resolvable. A compiled program carries no dialect, so checking with different rules than you run with is unrepresentable. (Two earlier designs died on the way here: a resolver-held stack with an install-unless-present slot was order-dependent under resolver sharing; its replacement — the dialect riding the per-call `Context` — kept evaluator and checker honest but paid runtime dispatch per node. Compilation subsumes both.)
 - **Partial-agreement conformance stays a host policy**, built on the upstreamed registry; upstream later only if a second host independently reinvents it.

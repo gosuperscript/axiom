@@ -12,6 +12,7 @@ use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
+use Superscript\Axiom\Types\Shapes\RecordPropertyShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\StringShape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
@@ -41,7 +42,13 @@ final readonly class AnalysisTypeDescriber
             $shape instanceof UnionShape => UnionShape::of(...array_map(self::redact(...), $shape->members)),
             $shape instanceof ListShape => new ListShape(self::redact($shape->element), $shape->min, $shape->max),
             $shape instanceof DictShape => new DictShape(self::redact($shape->value)),
-            $shape instanceof RecordShape => new RecordShape(array_map(self::redact(...), $shape->fields)),
+            $shape instanceof RecordShape => new RecordShape(array_map(
+                static fn(RecordPropertyShape $property): RecordPropertyShape => new RecordPropertyShape(
+                    self::redact($property->value),
+                    $property->optional,
+                ),
+                $shape->properties,
+            )),
             $shape instanceof OpaqueShape => new OpaqueShape($shape->identity, array_map(self::redact(...), $shape->parameters)),
             default => $shape,
         };

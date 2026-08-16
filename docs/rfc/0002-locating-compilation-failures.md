@@ -32,7 +32,7 @@ $source = new InfixExpression(
     new StaticSource(2),
 );
 
-$expression = new Expression($source, declarations: ['name' => new StringType()]);
+$expression = new Expression($source, declarations: new RecordType(['name' => new StringType()]));
 $expression->compile();
 ```
 

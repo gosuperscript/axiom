@@ -63,6 +63,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(UnionShape::class)]
 #[UsesClass(UnknownShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class TypeReifierTest extends TestCase
 {
     /**

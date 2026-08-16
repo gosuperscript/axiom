@@ -157,7 +157,7 @@ final readonly class RecoveringCompiler
         $compiled = $this->walk($recovery, $reads);
 
         $compiled->inspect(static fn(CompiledNode $node) => $reads->recordReferences($node->references));
-        $recovery->record($reads->references());
+        $recovery->record($reads->referencePaths());
 
         return $compiled;
     }
@@ -190,6 +190,6 @@ final readonly class RecoveringCompiler
 
     private function program(CompiledNode $node): Program
     {
-        return new Program($node, $this->expression->inputs, $this->expression->boundary);
+        return new Program($node, $this->expression->declarations, $this->expression->boundary);
     }
 }

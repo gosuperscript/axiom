@@ -6,40 +6,93 @@ namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Exceptions\TransformValueException;
+use Superscript\Axiom\ReferencePath;
+use Superscript\Axiom\Types\Shapes\OptionShape;
+use Superscript\Axiom\Types\Shapes\RecordShape;
+use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Err;
 use Superscript\Monads\Result\Result;
-use Superscript\Axiom\Types\Shapes\RecordShape;
-use Superscript\Axiom\Types\Shapes\Shape;
 
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * Named fields, exact. An optional field is a field whose type is
- * OptionType — there is no separate presence flag.
+ * Named properties, exact. Properties are required by default; wrapping a
+ * declaration in {@see Optional} permits its key to be omitted without
+ * changing the type a supplied value must inhabit.
  *
- * The two admission faces diverge on undeclared keys, by design: assert is
- * strict membership (an extra key means the value is not a member), while
- * coerce takes the declared slice of wide input — dropping undeclared keys
- * is a conversion, like '5' → 5 — so hosts may pass a whole context row
- * and only the declared fields enter.
+ * Property presence and value absence are independent:
  *
- * Coercion canonicalizes absence: a missing optional key becomes a present
- * null, so evaluation only ever sees one representation. A field coercion
- * that yields None reads as "required but missing" (OptionType never yields
- * None — it wraps absence as Some(null) — so optional fields are immune).
+ *  - `T` requires a key whose value inhabits `T`;
+ *  - `Option<T>` requires a key whose value may be absent;
+ *  - `Optional(T)` permits omission but rejects an explicitly absent value;
+ *  - `Optional(Option<T>)` permits either omission or an absent value.
+ *
+ * Missing optional keys remain missing. Member access observes omission as
+ * `Option<T>`, while retaining the distinction at admission so an omitted
+ * `Optional(T)` is legal and an explicitly null one is not.
  *
  * @implements Type<array<array-key, mixed>>
  */
 final readonly class RecordType implements Type
 {
+    /** @var array<string, RecordProperty> */
+    public array $properties;
+
     /**
-     * @param array<string, Type> $fields
+     * @param array<string, Type|Optional> $properties
      */
-    public function __construct(
-        public array $fields,
-    ) {}
+    public function __construct(array $properties = [])
+    {
+        foreach (array_keys($properties) as $name) {
+            if (!is_string($name)) {
+                throw new InvalidArgumentException('Every record property must have a non-empty name without dots.');
+            }
+
+            if ($name === '' || str_contains($name, '.')) {
+                throw new InvalidArgumentException('Every record property must have a non-empty name without dots.');
+            }
+        }
+
+        $this->properties = array_map(
+            static fn(Type|Optional $property): RecordProperty => $property instanceof Optional
+                ? new RecordProperty($property->type, true)
+                : new RecordProperty($property, false),
+            $properties,
+        );
+    }
+
+    public function has(string $name): bool
+    {
+        return isset($this->properties[$name]);
+    }
+
+    public function property(string $name): ?RecordProperty
+    {
+        return $this->properties[$name] ?? null;
+    }
+
+    /** @return list<string> */
+    public function names(): array
+    {
+        return array_keys($this->properties);
+    }
+
+    /**
+     * The smallest record containing the properties the compiled program
+     * reads. A root reference retains its complete property type; a nested
+     * reference projects nested concrete records recursively.
+     *
+     * @param list<ReferencePath> $references
+     */
+    public function project(array $references): self
+    {
+        return $this->projectSegments(array_map(
+            static fn(ReferencePath $reference): array => $reference->segments,
+            $references,
+        ));
+    }
 
     public function assert(mixed $value): Result
     {
@@ -47,16 +100,13 @@ final readonly class RecordType implements Type
             return new Err(new TransformValueException(type: 'record', value: $value));
         }
 
-        // Strict membership: records are exact, so an undeclared key means
-        // the value is not a member. Taking the declared slice belongs to
-        // coerce — asserting never converts.
         foreach (array_keys($value) as $key) {
-            if (!isset($this->fields[$key])) {
-                return new Err(new InvalidArgumentException(sprintf('Field [%s] is not part of the record.', $key)));
+            if (!isset($this->properties[$key])) {
+                return new Err(new InvalidArgumentException(sprintf('Property [%s] is not part of the record.', $key)));
             }
         }
 
-        return $this->transform($value, fn(Type $field, mixed $item) => $field->assert($item));
+        return $this->transform($value, static fn(Type $property, mixed $item): Result => $property->assert($item));
     }
 
     public function coerce(mixed $value): Result
@@ -69,14 +119,10 @@ final readonly class RecordType implements Type
             return new Err(new TransformValueException(type: 'record', value: $value));
         }
 
-        return $this->transform($value, fn(Type $field, mixed $item) => $field->coerce($item));
+        return $this->transform($value, static fn(Type $property, mixed $item): Result => $property->coerce($item));
     }
 
     /**
-     * Builds the record from the declared fields alone — undeclared keys in
-     * $value simply never enter, which is coerce's declared-slice behavior
-     * (assert has already rejected them).
-     *
      * @param array<array-key, mixed> $value
      * @param callable(Type, mixed): Result<Option<mixed>, \Throwable> $transform
      * @return Result<Option<array<array-key, mixed>>, \Throwable>
@@ -86,36 +132,46 @@ final readonly class RecordType implements Type
         /** @var array<array-key, mixed> $record */
         $record = [];
 
-        foreach ($this->fields as $name => $field) {
-            $result = $transform($field, $value[$name] ?? null);
+        foreach ($this->properties as $name => $property) {
+            if (!array_key_exists($name, $value)) {
+                if ($property->optional) {
+                    continue;
+                }
+
+                return new Err(new InvalidArgumentException(sprintf('Required property [%s] is missing.', $name)));
+            }
+
+            $result = $transform($property->type, $value[$name]);
 
             if ($result->isErr()) {
                 return new Err(new InvalidArgumentException(
-                    sprintf('Field [%s]: %s', $name, $result->unwrapErr()->getMessage()),
+                    sprintf('Property [%s]: %s', $name, $result->unwrapErr()->getMessage()),
                 ));
             }
 
-            $option = $result->unwrap();
+            $admitted = $result->unwrap();
 
-            if ($option->isNone()) {
-                return new Err(new InvalidArgumentException(sprintf('Required field [%s] is missing.', $name)));
+            if ($admitted->isNone() && !$property->type->shape() instanceof OptionShape) {
+                return new Err(new InvalidArgumentException(sprintf('Property [%s] reads as absent, but %s is required.', $name, TypeDescriber::describe($property->type))));
             }
 
-            $record[$name] = $option->unwrap();
+            $record[$name] = $admitted->unwrapOr(null);
         }
 
         return Ok(Some($record));
     }
 
-    /**
-     * @param array<string, mixed> $value
-     */
+    /** @param array<string, mixed> $value */
     public function format(mixed $value): string
     {
         $parts = [];
 
-        foreach ($this->fields as $key => $field) {
-            $parts[] = sprintf('%s: %s', $key, $field->format($value[$key]));
+        foreach ($this->properties as $key => $property) {
+            if (!array_key_exists($key, $value)) {
+                continue;
+            }
+
+            $parts[] = sprintf('%s: %s', $key, $property->type->format($value[$key]));
         }
 
         return implode(', ', $parts);
@@ -123,12 +179,55 @@ final readonly class RecordType implements Type
 
     public function shape(): Shape
     {
-        $fields = [];
+        return new RecordShape(array_map(
+            static fn(RecordProperty $property) => $property->shape(),
+            $this->properties,
+        ));
+    }
 
-        foreach ($this->fields as $name => $field) {
-            $fields[$name] = $field->shape();
+    /**
+     * @param list<non-empty-list<string>> $paths
+     */
+    private function projectSegments(array $paths): self
+    {
+        /** @var array<string, list<list<string>>> $grouped */
+        $grouped = [];
+
+        foreach ($paths as $path) {
+            $name = array_shift($path);
+
+            if ($name !== null && isset($this->properties[$name])) {
+                $grouped[$name][] = $path;
+            }
         }
 
-        return new RecordShape($fields);
+        $projected = [];
+
+        foreach ($grouped as $name => $tails) {
+            $property = $this->properties[$name];
+            $type = array_any($tails, static fn(array $tail): bool => $tail === [])
+                ? $property->type
+                : self::projectType($property->type, $tails);
+
+            $projected[$name] = $property->optional ? new Optional($type) : $type;
+        }
+
+        return new self($projected);
     }
+
+    /** @param list<list<string>> $paths */
+    private static function projectType(Type $type, array $paths): Type
+    {
+        if ($type instanceof self) {
+            /** @var list<non-empty-list<string>> $paths */
+            return $type->projectSegments($paths);
+        }
+
+        if ($type instanceof OptionType) {
+            return new OptionType(self::projectType($type->inner, $paths));
+        }
+
+        return $type;
+    }
+
 }

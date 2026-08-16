@@ -51,13 +51,14 @@ final class TypeReifier
 
     private static function record(RecordShape $shape): RecordType
     {
-        $fields = [];
+        $properties = [];
 
-        foreach ($shape->fields as $name => $field) {
-            $fields[$name] = self::reify($field);
+        foreach ($shape->properties as $name => $property) {
+            $type = self::reify($property->value);
+            $properties[$name] = $property->optional ? new Optional($type) : $type;
         }
 
-        return new RecordType($fields);
+        return new RecordType($properties);
     }
 
     private static function opaque(OpaqueShape $shape): OpaqueType

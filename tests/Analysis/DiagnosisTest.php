@@ -220,6 +220,9 @@ final class CapturingExtension extends Extension
 #[CoversClass(\Superscript\Axiom\SourceCompilers\DefaultValueSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\CompiledSources::class)]
 #[UsesNamespace('Superscript\\Axiom')]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 final class DiagnosisTest extends TestCase
 {
     /**

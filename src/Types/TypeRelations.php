@@ -388,7 +388,7 @@ final class TypeRelations
      */
     private static function listOverlapsRecord(ListShape $list, RecordShape $record): Result
     {
-        if ($record->fields === [] && $list->min === 0) {
+        if ($record->properties === [] && $list->min === 0) {
             return Ok(true);
         }
 
@@ -462,27 +462,34 @@ final class TypeRelations
      */
     private static function recordAssignable(RecordShape $source, RecordShape $target): Result
     {
-        // Records are exact — no width subtyping. A source field the target
-        // does not declare makes source values non-members; a missing
-        // optional target field is legal absence (coercion canonicalizes it
-        // to a present null).
+        // Records are exact — no width subtyping. A source property the
+        // target does not declare makes source values non-members. Presence
+        // is covariant in the useful direction: a required source may fill
+        // an optional target, but an optional source cannot promise a key a
+        // required target needs.
         $causes = [];
 
-        foreach (array_keys($source->fields) as $name) {
-            if (!isset($target->fields[$name])) {
-                $causes[] = new TypeMismatch(sprintf("Field '%s' is not part of the record.", $name));
+        foreach (array_keys($source->properties) as $name) {
+            if (!isset($target->properties[$name])) {
+                $causes[] = new TypeMismatch(sprintf("Property '%s' is not part of the record.", $name));
             }
         }
 
-        foreach ($target->fields as $name => $field) {
-            if (isset($source->fields[$name])) {
-                $result = self::assignable($source->fields[$name], $field);
+        foreach ($target->properties as $name => $property) {
+            if (isset($source->properties[$name])) {
+                $sourceProperty = $source->properties[$name];
+
+                if (!$property->optional && $sourceProperty->optional) {
+                    $causes[] = new TypeMismatch(sprintf("Required property '%s' may be omitted by the source.", $name));
+                }
+
+                $result = self::assignable($sourceProperty->value, $property->value);
 
                 if ($result->isErr()) {
-                    $causes[] = new TypeMismatch(sprintf("Field '%s' is incompatible.", $name), [$result->unwrapErr()]);
+                    $causes[] = new TypeMismatch(sprintf("Property '%s' is incompatible.", $name), [$result->unwrapErr()]);
                 }
-            } elseif (!$field instanceof OptionShape) {
-                $causes[] = new TypeMismatch(sprintf("Required field '%s' is missing.", $name));
+            } elseif (!$property->optional) {
+                $causes[] = new TypeMismatch(sprintf("Required property '%s' is missing.", $name));
             }
         }
 
@@ -496,17 +503,17 @@ final class TypeRelations
     {
         $causes = [];
 
-        foreach ($source->fields as $name => $field) {
-            if ($field instanceof OptionShape) {
-                $causes[] = new TypeMismatch(sprintf("Optional field '%s' may be null, and dict values are never null.", $name));
+        foreach ($source->properties as $name => $property) {
+            if ($property->value instanceof OptionShape) {
+                $causes[] = new TypeMismatch(sprintf("Property '%s' may contain an absent value, and dict values are never absent.", $name));
 
                 continue;
             }
 
-            $result = self::assignable($field, $target->value);
+            $result = self::assignable($property->value, $target->value);
 
             if ($result->isErr()) {
-                $causes[] = new TypeMismatch(sprintf("Field '%s' is incompatible.", $name), [$result->unwrapErr()]);
+                $causes[] = new TypeMismatch(sprintf("Property '%s' is incompatible.", $name), [$result->unwrapErr()]);
             }
         }
 
@@ -551,15 +558,16 @@ final class TypeRelations
             ...self::forbiddenRequiredFields($b, $a),
         ];
 
-        foreach ($a->fields as $name => $field) {
-            if (!isset($b->fields[$name])) {
+        foreach ($a->properties as $name => $property) {
+            if (!isset($b->properties[$name])) {
                 continue;
             }
 
-            $result = self::satisfiable($field, $b->fields[$name], $dispatch);
+            $other = $b->properties[$name];
+            $result = self::satisfiable($property->value, $other->value, $dispatch);
 
-            if ($result->isErr()) {
-                $causes[] = new TypeMismatch(sprintf("Field '%s' cannot satisfy both records.", $name), [$result->unwrapErr()]);
+            if ($result->isErr() && !($property->optional && $other->optional)) {
+                $causes[] = new TypeMismatch(sprintf("Property '%s' cannot satisfy both records.", $name), [$result->unwrapErr()]);
             }
         }
 
@@ -573,9 +581,9 @@ final class TypeRelations
     {
         $causes = [];
 
-        foreach ($requiring->fields as $name => $field) {
-            if (!$field instanceof OptionShape && !isset($other->fields[$name])) {
-                $causes[] = new TypeMismatch(sprintf("Required field '%s' is forbidden by the record.", $name));
+        foreach ($requiring->properties as $name => $property) {
+            if (!$property->optional && !isset($other->properties[$name])) {
+                $causes[] = new TypeMismatch(sprintf("Required property '%s' is forbidden by the record.", $name));
             }
         }
 
@@ -595,15 +603,15 @@ final class TypeRelations
     {
         $causes = [];
 
-        foreach ($record->fields as $name => $field) {
-            if ($field instanceof OptionShape) {
+        foreach ($record->properties as $name => $property) {
+            if ($property->optional) {
                 continue;
             }
 
-            $result = self::satisfiable($field, $dict->value, $dispatch);
+            $result = self::satisfiable($property->value, $dict->value, $dispatch);
 
             if ($result->isErr()) {
-                $causes[] = new TypeMismatch(sprintf("Required field '%s' cannot inhabit the dict.", $name), [$result->unwrapErr()]);
+                $causes[] = new TypeMismatch(sprintf("Required property '%s' cannot inhabit the dict.", $name), [$result->unwrapErr()]);
             }
         }
 

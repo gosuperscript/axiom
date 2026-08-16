@@ -55,7 +55,7 @@ final class CompilationRecorder
         $this->operators[] = $operator;
     }
 
-    /** @param list<string> $references */
+    /** @param list<\Superscript\Axiom\ReferencePath> $references */
     public function recordReferences(array $references): void
     {
         if ($references === []) {
@@ -78,9 +78,18 @@ final class CompilationRecorder
         return $this->operators;
     }
 
-    /** @return list<string> */
-    public function references(): array
+    /** @return list<\Superscript\Axiom\ReferencePath> */
+    public function referencePaths(): array
     {
         return $this->references?->all() ?? [];
+    }
+
+    /** @return list<string> Human-readable paths, in first-read order. */
+    public function references(): array
+    {
+        return array_map(
+            static fn(\Superscript\Axiom\ReferencePath $reference): string => $reference->describe(),
+            $this->referencePaths(),
+        );
     }
 }

@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use Psl\Type\Exception\AssertException;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -23,9 +22,31 @@ final class DefinitionsTest extends TestCase
     public function it_rejects_non_source_values(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Definition values must be either Source instances or arrays of Sources');
+        $this->expectExceptionMessage('Every definition must be a Source instance.');
 
         new Definitions(['test' => 42]);
+    }
+
+    #[Test]
+    public function definition_names_cannot_encode_access_paths(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('root symbol name without dots');
+
+        new Definitions(['math.pi' => new StaticSource(3.14)]);
+    }
+
+    #[Test]
+    public function definition_names_must_be_non_empty_strings(): void
+    {
+        foreach ([[new StaticSource(1)], ['' => new StaticSource(1)]] as $definitions) {
+            try {
+                new Definitions($definitions);
+                $this->fail('The invalid definition name should have been rejected.');
+            } catch (InvalidArgumentException $error) {
+                $this->assertStringContainsString('root symbol name', $error->getMessage());
+            }
+        }
     }
 
     #[Test]
@@ -43,14 +64,14 @@ final class DefinitionsTest extends TestCase
     }
 
     #[Test]
-    public function keys_lists_every_defined_symbol_as_flat_dotted_keys(): void
+    public function keys_lists_every_root_definition(): void
     {
         $definitions = new Definitions([
             'rate' => new StaticSource(1.2),
-            'customer' => ['turnover' => new StaticSource(2)],
+            'customer' => new StaticSource(['turnover' => 2]),
         ]);
 
-        $this->assertSame(['rate', 'customer.turnover'], $definitions->keys());
+        $this->assertSame(['rate', 'customer'], $definitions->keys());
     }
 
     #[Test]
@@ -62,45 +83,34 @@ final class DefinitionsTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_a_namespaced_source(): void
+    public function structured_values_are_owned_by_one_root_definition(): void
     {
         $definitions = new Definitions([
-            'math' => [
-                'pi' => new StaticSource(3.14),
-                'e' => new StaticSource(2.71),
-            ],
-            'physics' => [
-                'c' => new StaticSource(299792458),
-            ],
+            'math' => new StaticSource(['pi' => 3.14, 'e' => 2.71]),
         ]);
 
-        $this->assertSame(3.14, $definitions->get('pi', 'math')->unwrap()->value);
-        $this->assertSame(2.71, $definitions->get('e', 'math')->unwrap()->value);
-        $this->assertSame(299792458, $definitions->get('c', 'physics')->unwrap()->value);
+        $this->assertSame(['pi' => 3.14, 'e' => 2.71], $definitions->get('math')->unwrap()->value);
     }
 
     #[Test]
-    public function namespaced_and_non_namespaced_entries_are_isolated(): void
+    public function root_entries_are_isolated(): void
     {
         $definitions = new Definitions([
             'value' => new StaticSource(1),
-            'ns' => ['value' => new StaticSource(2)],
+            'other' => new StaticSource(2),
         ]);
 
         $this->assertSame(1, $definitions->get('value')->unwrap()->value);
-        $this->assertSame(2, $definitions->get('value', 'ns')->unwrap()->value);
+        $this->assertSame(2, $definitions->get('other')->unwrap()->value);
     }
 
     #[Test]
-    public function namespaced_array_must_contain_only_sources(): void
+    public function a_structural_array_is_not_a_definition_map(): void
     {
-        $this->expectException(AssertException::class);
+        $this->expectException(InvalidArgumentException::class);
 
         new Definitions([
-            'math' => [
-                'pi' => new StaticSource(3.14),
-                'invalid' => 42,
-            ],
+            'math' => ['pi' => new StaticSource(3.14)],
         ]);
     }
 
@@ -109,13 +119,12 @@ final class DefinitionsTest extends TestCase
     {
         $definitions = new Definitions([
             'A' => new StaticSource(1),
-            'math' => ['pi' => new StaticSource(3.14)],
+            'pi' => new StaticSource(3.14),
         ]);
 
         $this->assertTrue($definitions->has('A'));
         $this->assertFalse($definitions->has('B'));
-        $this->assertTrue($definitions->has('pi', 'math'));
-        $this->assertFalse($definitions->has('pi', 'physics'));
+        $this->assertTrue($definitions->has('pi'));
     }
 
     #[Test]
