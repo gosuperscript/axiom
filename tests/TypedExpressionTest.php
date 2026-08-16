@@ -18,6 +18,7 @@ use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\Input;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\ResolvedOperation;
@@ -59,6 +60,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
+#[CoversClass(Input::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
 #[CoversClass(Boundary::class)]
@@ -223,22 +225,25 @@ final class TypedExpressionTest extends TestCase
     }
 
     /**
-     * The whole classification of an absent input, enumerated. One rule
-     * decides every row: the declared type's *shape* says whether absence is
-     * acceptable, and nothing else does. A shape that admits absence takes
-     * None as the value however it arrived — no binding, a `null`, or a value
-     * that reads as absent. A shape that requires presence refuses, as a
-     * missing input when the call supplied nothing and as an inadmissible
-     * binding when it supplied something that does not inhabit the type.
-     * Optionality is not a licence for a fault: a value that cannot be
-     * converted at all is inadmissible whether or not absence is allowed.
+     * The whole classification of an absent input, enumerated. Two facts
+     * decide every row, and they are asked about different absences. A
+     * *supplied* value that reads as absent is judged by the declared type's
+     * shape, and by nothing else: a shape that admits absence takes None as
+     * the value however it arrived — a `null` or a value that reads as
+     * absent — while a shape requiring presence calls it an inadmissible
+     * binding. *No binding at all* is judged by demand, which follows the
+     * shape unless the declaration is an `Input::demanded`, and refuses as a
+     * missing input. Demanding an absence-admitting type separates the two:
+     * `''` is still None, and saying nothing is still missing. Optionality is
+     * not a licence for a fault either way: a value that cannot be converted
+     * at all is inadmissible whether or not absence is allowed.
      *
      * @param class-string<BoundaryViolation>|null $refusal
      * @param array<string, mixed> $bindings
      */
     #[Test]
     #[DataProvider('absenceReadings')]
-    public function absence_is_judged_by_the_declared_shape(Type $declared, array $bindings, ?string $refusal, string $message): void
+    public function absence_is_judged_by_the_declared_shape(Type|Input $declared, array $bindings, ?string $refusal, string $message): void
     {
         $program = (new Expression(
             source: new SymbolSource('x'),
@@ -259,7 +264,7 @@ final class TypedExpressionTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Type, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
+     * @return iterable<string, array{Type|Input, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
      */
     public static function absenceReadings(): iterable
     {
@@ -283,6 +288,67 @@ final class TypedExpressionTest extends TestCase
         yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], null, ''];
         yield 'String | Number?, bound a list' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
         yield 'Number? | String, bound a list' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+
+        // Wrapping a type in the plain reading changes no verdict: it is
+        // what a bare declaration already means.
+        yield 'Input::of(String?), unbound' => [Input::of(new OptionType(new StringType())), [], null, ''];
+        yield 'Input::of(String), unbound' => [Input::of(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
+
+        // Absence admitted, and a binding demanded anyway: the shape still
+        // rules on a value that reads as absent, and demand rules on a call
+        // that says nothing at all.
+        $demanded = Input::demanded(new OptionType(new StringType()));
+
+        yield 'demanded String?, bound ""' => [$demanded, ['x' => ''], null, ''];
+        yield 'demanded String?, bound null' => [$demanded, ['x' => null], null, ''];
+        yield 'demanded String?, unbound' => [$demanded, [], MissingRequiredInput::class, 'required input [x] is missing'];
+        yield 'demanded String?, bound a list' => [$demanded, ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+
+        // Demanding a shape that already required presence changes nothing:
+        // every verdict matches the bare String rows above.
+        yield 'demanded String, bound ""' => [Input::demanded(new StringType()), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
+        yield 'demanded String, unbound' => [Input::demanded(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
+        yield 'demanded String, bound a list' => [Input::demanded(new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+    }
+
+    #[Test]
+    public function a_demanded_option_tells_the_answer_none_from_no_answer_yet(): void
+    {
+        // A select whose "no value" option is a real answer. The type must
+        // admit absence for the chosen answer to be expressible at all, and
+        // the binding must be demanded for the unanswered question not to
+        // read as that answer.
+        $program = (new Expression(
+            source: new SymbolSource('excess'),
+            declarations: ['excess' => Input::demanded(new OptionType(new NumberType()))],
+        ))->compile()->unwrap();
+
+        $this->assertInstanceOf(MissingRequiredInput::class, $program([])->unwrapErr());
+        $this->assertTrue($program(['excess' => null])->unwrap()->isNone());
+        $this->assertSame(250, $program(['excess' => '250'])->unwrap()->unwrap());
+
+        // Demandedness is a boundary fact, and compilation is told nothing
+        // about it: the declaration it typed and explains is the type alone.
+        $this->assertEquals(['excess' => new OptionType(new NumberType())], $program->analysis->declarations);
+        $this->assertEquals(new OptionType(new NumberType()), $program->returns);
+    }
+
+    #[Test]
+    public function a_demanded_declaration_the_program_never_reads_is_still_ignored(): void
+    {
+        // Demand intersects the reads, like every other boundary fact: an
+        // input no symbol node reads has nothing to deliver a value to, so
+        // demanding it would manufacture a refusal nothing could act on.
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: [
+                'name' => new StringType(),
+                'excess' => Input::demanded(new OptionType(new NumberType())),
+            ],
+        ))->compile()->unwrap();
+
+        $this->assertSame(['name'], $program->references);
+        $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
     #[Test]

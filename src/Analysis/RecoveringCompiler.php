@@ -209,6 +209,6 @@ final readonly class RecoveringCompiler
 
     private function program(CompiledNode $node): Program
     {
-        return new Program($node, $this->expression->declarations, $this->expression->boundary);
+        return new Program($node, $this->expression->inputs, $this->expression->boundary);
     }
 }

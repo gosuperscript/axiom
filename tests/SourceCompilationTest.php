@@ -122,6 +122,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\Input::class)]
 #[UsesClass(Extension::class)]
 #[UsesClass(Runtime::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]

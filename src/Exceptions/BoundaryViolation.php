@@ -18,7 +18,11 @@ use RuntimeException;
  *  - {@see MissingRequiredInput} — the call supplied nothing for a required
  *    input the program reads, and everything it did supply was admissible.
  *    A host calling a program against a partly-filled scope reads this as
- *    "not answerable yet", an ordinary state rather than a fault.
+ *    "not answerable yet", an ordinary state rather than a fault. Which
+ *    reads are required is a per-declaration fact
+ *    ({@see \Superscript\Axiom\Input::demandsBinding()}): a type admitting
+ *    absence may be omitted unless the declaration demanded a binding anyway,
+ *    which is how a host keeps "answered none" apart from "unanswered".
  *  - {@see InadmissibleBinding} — a value was supplied and does not inhabit
  *    its declared type, including one that reads as absent where the
  *    declaration requires presence. Something upstream of the call is wrong.

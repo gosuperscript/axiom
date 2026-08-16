@@ -14,7 +14,6 @@ use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
-use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Monads\Option\Option;
@@ -54,6 +53,14 @@ use function Superscript\Monads\Result\Ok;
  * the rest is still unanswered. A declaration this program never reads is
  * ignored whether or not it is bound — reads are settled at compile time, so
  * no evaluation can observe a symbol the compiler did not record.
+ *
+ * Of the reads, a declaration answers two questions: whether a value may be
+ * absent, and whether the call must supply one at all. A bare {@see Type}
+ * ties them together — an absence-admitting shape may be omitted — and
+ * {@see Input} separates them, for a host that needs "the answer is none" to
+ * be a different outcome from "no answer yet". Demand still intersects the
+ * reads: an input this program does not read is not demanded however
+ * emphatically it was declared.
  */
 final readonly class Program
 {
@@ -65,33 +72,33 @@ final readonly class Program
     public array $references;
 
     /**
-     * The declarations this program reads, in declaration order — the
-     * boundary's entire subject. Every other declaration types a name the
-     * program never mentions, and so has nothing to demand or admit.
+     * The declared types, in declaration order — what the analysis explains.
+     * Demandedness is a boundary fact and no part of what compilation did.
      *
      * @var array<string, Type>
+     */
+    private array $declarations;
+
+    /**
+     * The inputs this program reads, in declaration order — the boundary's
+     * entire subject. Every other declaration names something the program
+     * never mentions, and so has nothing to demand or admit.
+     *
+     * Each answers the boundary's two questions separately
+     * ({@see Input}): {@see Input::admitsAbsence()} rules on a value that
+     * reads as absent, and {@see Input::demandsBinding()} rules on no value
+     * at all. Both are fixed at compile time.
+     *
+     * @var array<string, Input>
      */
     private array $demanded;
 
     /**
-     * Whether each demanded declaration admits absence, fixed at compile
-     * time. It is a property of the shape the type projects, not of the
-     * concrete class and not of member order: `Union(String, Option<Number>)`
-     * and `Union(Option<Number>, String)` both project `(String | Number)?`,
-     * because a union with any absence-admitting member admits absence
-     * ({@see \Superscript\Axiom\Types\Shapes\UnionShape}, where Option members
-     * hoist). Absence is then legal for that input however it arrives.
-     *
-     * @var array<string, bool>
-     */
-    private array $optional;
-
-    /**
-     * @param array<string, Type> $declarations
+     * @param array<string, Type|Input> $declarations
      */
     public function __construct(
         private CompiledNode $node,
-        private array $declarations = [],
+        array $declarations = [],
         private Boundary $boundary = Boundary::Coerce,
     ) {
         // Certification comes first: past it every node has a type to read,
@@ -102,10 +109,12 @@ final readonly class Program
 
         self::certify($compilation);
 
+        $inputs = Input::normalize($declarations);
+
         $this->returns = $node->returns;
         $this->references = $node->references;
-        $this->demanded = array_intersect_key($this->declarations, array_flip($this->references));
-        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->demanded);
+        $this->declarations = array_map(static fn(Input $input) => $input->type, $inputs);
+        $this->demanded = array_intersect_key($inputs, array_flip($this->references));
         $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
     }
 
@@ -206,13 +215,17 @@ final readonly class Program
      * a declaration nothing reads is neither demanded nor admitted. Callers
      * bind keys exactly as declared — symbol lookup has no other reading.
      *
-     * Whether absence is acceptable for a demanded input is decided once, by
-     * the declared type's shape ({@see $optional}), and asked the same way
-     * however the absence arrived: no binding at all, or a binding that
-     * admitted to None. Nothing about the conversion decides it — a union
-     * answers `''` with `Ok(None)` or `Ok(Some(null))` depending on which
-     * member matched first, and both readings mean the same thing about a
-     * declaration whose shape admits absence.
+     * Absence arrives two ways, and the two are answered by two different
+     * facts about the declaration. A binding that admitted to None is judged
+     * by the type's shape ({@see Input::admitsAbsence()}): nothing about the
+     * conversion decides it — a union answers `''` with `Ok(None)` or
+     * `Ok(Some(null))` depending on which member matched first, and both
+     * readings mean the same thing about a shape that admits absence. No
+     * binding at all is judged by demand ({@see Input::demandsBinding()}),
+     * which the shape settles unless the host said otherwise. So a demanded
+     * `String?` takes `''` as None and still refuses a call that says
+     * nothing: "the answer is none" and "no answer yet" are different
+     * answers, and only demand can keep them apart.
      *
      * Violations aggregate, named by binding, and are sorted into the kinds
      * {@see BoundaryViolation} describes: a fault dominates absence, so the
@@ -230,9 +243,11 @@ final readonly class Program
         $overlay = [];
         $fault = false;
 
-        foreach ($this->demanded as $key => $type) {
+        foreach ($this->demanded as $key => $input) {
+            $type = $input->type;
+
             if (!array_key_exists($key, $raw)) {
-                if (!$this->optional[$key]) {
+                if ($input->demandsBinding()) {
                     $rejections[$key] = new RejectedBinding($key, sprintf('required input [%s] is missing', $key));
                 }
 
@@ -257,8 +272,10 @@ final readonly class Program
             // presence: a value was supplied, and it does not inhabit the
             // type it was declared at. Where the declaration admits absence,
             // None is simply the value, and falls through to the overlay as
-            // the null a symbol reads back as absent.
-            if ($admitted->unwrap()->isNone() && !$this->optional[$key]) {
+            // the null a symbol reads back as absent — including on a
+            // demanded input, which was demanded so that this answer could be
+            // told apart from no answer, not so that it could be refused.
+            if ($admitted->unwrap()->isNone() && !$input->admitsAbsence()) {
                 $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type)));
                 $fault = true;
 
