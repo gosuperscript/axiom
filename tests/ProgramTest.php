@@ -78,6 +78,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
 #[UsesClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\Input::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]

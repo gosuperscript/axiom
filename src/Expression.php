@@ -40,22 +40,47 @@ use Superscript\Monads\Result\Result;
  * declarations and definitions are disjoint namespaces (a symbol is a
  * parameter or a derived value, never both; enforced at construction), so
  * shadowing a definition is unrepresentable.
+ *
+ * A declaration is a {@see Type}, or an {@see Input} wrapping one where the
+ * host also has something to say about supply. Both normalize to `$inputs`
+ * on the way in, and compilation is handed `$declarations` — the types —
+ * whichever form was written.
  */
 final readonly class Expression
 {
     public Dialect $dialect;
 
     /**
-     * @param array<string, Type> $declarations
+     * The declared inputs, normalized: a bare {@see Type} declaration is the
+     * {@see Input::of()} reading of itself, so every declaration is one kind
+     * of thing from here on.
+     *
+     * @var array<string, Input>
+     */
+    public array $inputs;
+
+    /**
+     * The declared types alone, in declaration order — everything
+     * compilation is told about the caller. Demandedness is a boundary fact,
+     * and is not among the facts inference can see.
+     *
+     * @var array<string, Type>
+     */
+    public array $declarations;
+
+    /**
+     * @param array<string, Type|Input> $declarations
      */
     public function __construct(
         public Source $source,
         public Definitions $definitions = new Definitions(),
         ?Dialect $dialect = null,
-        public array $declarations = [],
+        array $declarations = [],
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
+        $this->inputs = Input::normalize($declarations);
+        $this->declarations = array_map(static fn(Input $input) => $input->type, $this->inputs);
 
         // Symbol lookup is exact-key only (no descent), so declared and
         // defined names can only collide literally: Symbol('turnover',
@@ -166,6 +191,6 @@ final readonly class Expression
 
     public function withDefinitions(Definitions $definitions): self
     {
-        return new self($this->source, $definitions, $this->dialect, $this->declarations, $this->boundary);
+        return new self($this->source, $definitions, $this->dialect, $this->inputs, $this->boundary);
     }
 }

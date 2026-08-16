@@ -197,6 +197,24 @@ Both extend `BoundaryViolation`, whose `$rejections` is one `RejectedBinding` pe
 
 **Whether absence is acceptable is a property of the declared type's shape**, and of nothing else — not of how a value converted, and not of the order a union lists its members. `Union(String, Option<Number>)` and `Union(Option<Number>, String)` both project `(String | Number)?`, so both take `''` as `None`; bare `String` requires presence, so `''` is an `InadmissibleBinding` (a value was supplied and does not inhabit `String`) while binding nothing at all is a `MissingRequiredInput`. Optionality is not a licence for a fault: a value that cannot convert at all is inadmissible whether or not absence is allowed.
 
+**Whether a binding must be supplied at all is a separate question**, and `Input::demanded()` answers it separately. A bare `Type` declaration ties the two together — an absence-admitting shape may be omitted — which is right until a host needs "the answer is none" to be a different outcome from "no answer yet". A select whose "no value" option is a real answer needs both halves: the type must admit absence for `excess == none` to compile, and the call must still be required to say something.
+
+```php
+declarations: ['excess' => Input::demanded(new OptionType($monetary))]
+
+$program([]);                  // Err(MissingRequiredInput): nobody has answered
+$program(['excess' => null]);  // Ok(None): answered, and the answer is "none"
+$program(['excess' => '250']); // Ok(Some(250))
+```
+
+| Declared | Omitted | Bound `''` / `null` | Bound `['a']` |
+| --- | --- | --- | --- |
+| `String` | `MissingRequiredInput` | `InadmissibleBinding` | `InadmissibleBinding` |
+| `String?` | `Ok(None)` | `Ok(None)` | `InadmissibleBinding` |
+| `Input::demanded(String?)` | `MissingRequiredInput` | `Ok(None)` | `InadmissibleBinding` |
+
+`Input::of($type)` is the plain reading a bare declaration already has, and `demanded()` on a type that already requires presence adds nothing — so `demanded()` composes over a whole scope without asking which members were optional. An `Input` is not a `Type` and never reaches inference: demand cannot change what an expression means or returns, only what a call must bring. Demand also still intersects the reads — a demanded input the program never mentions is ignored like any other.
+
 > [!NOTE]
 > The boundary is the one runtime type check that survives compilation, by design: `compile()` proves the program, not future inputs.
 

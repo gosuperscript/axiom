@@ -18,6 +18,7 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\Input::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]

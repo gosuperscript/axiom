@@ -31,6 +31,7 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Input::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(Node::class)]
 #[CoversClass(Entered::class)]
