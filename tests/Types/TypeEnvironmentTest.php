@@ -498,6 +498,6 @@ final class TypeEnvironmentTest extends TestCase
         $result = new TypeEnvironment()->nodeOfSymbol('ghost', self::compiler(), '$', $reads);
 
         $this->assertTrue($result->isErr());
-        $this->assertSame(['ghost'], $reads->references());
+        $this->assertEquals([new ReferencePath('ghost')], $reads->references());
     }
 }

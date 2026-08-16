@@ -30,7 +30,7 @@ final class CompilationRecorderTest extends TestCase
         $recorder->recordReferences([new ReferencePath('turnover')]);
         $recorder->recordReferences([new ReferencePath('postcode'), new ReferencePath('turnover')]);
 
-        $this->assertSame(['turnover', 'postcode'], $recorder->references());
+        $this->assertEquals([new ReferencePath('turnover'), new ReferencePath('postcode')], $recorder->references());
     }
 
     #[Test]

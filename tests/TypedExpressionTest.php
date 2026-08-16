@@ -23,6 +23,7 @@ use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -324,7 +325,7 @@ final class TypedExpressionTest extends TestCase
             ],
         ))->compile()->unwrap();
 
-        $this->assertSame(['name'], $program->references);
+        $this->assertEquals([new ReferencePath('name')], $program->references);
         $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
@@ -373,7 +374,7 @@ final class TypedExpressionTest extends TestCase
             declarations: $scope,
         ))->compile()->unwrap();
 
-        $this->assertSame(['name'], $program->references);
+        $this->assertEquals([new ReferencePath('name')], $program->references);
         $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
@@ -446,7 +447,7 @@ final class TypedExpressionTest extends TestCase
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(['staff'], $program->references);
+        $this->assertEquals([new ReferencePath('staff')], $program->references);
         $this->assertSame(4, $program(['staff' => 3])->unwrap()->unwrap());
 
         $violation = $program([])->unwrapErr();
@@ -464,7 +465,7 @@ final class TypedExpressionTest extends TestCase
             declarations: ['name' => new StringType(), 'note' => new OptionType(new StringType())],
         ))->compile()->unwrap();
 
-        $this->assertSame(['name'], $program->references);
+        $this->assertEquals([new ReferencePath('name')], $program->references);
         $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
@@ -495,7 +496,7 @@ final class TypedExpressionTest extends TestCase
 
         $diagnosed = $expression->diagnose()->program()->unwrap();
 
-        $this->assertSame($expression->compile()->unwrap()->references, $diagnosed->references);
+        $this->assertEquals($expression->compile()->unwrap()->references, $diagnosed->references);
         $this->assertSame('Ada', $diagnosed(['name' => 'Ada'])->unwrap()->unwrap());
         $this->assertInstanceOf(MissingRequiredInput::class, $diagnosed([])->unwrapErr());
     }

@@ -42,19 +42,16 @@ final class ErrorRecovery
      * shared with the {@see CompilationRecorder} that collected the names:
      * a recorder belongs to one node of one attempt and dies with it.
      *
-     * @param list<\Superscript\Axiom\ReferencePath> $keys
+     * @param list<\Superscript\Axiom\ReferencePath> $paths
      */
-    public function record(array $keys): void
+    public function record(array $paths): void
     {
-        $this->references->record($keys);
+        $this->references->record($paths);
     }
 
-    /** @return list<string> Every path the attempts resolved or tried to, in first-read order. */
+    /** @return list<\Superscript\Axiom\ReferencePath> Every path the attempts resolved or tried to, in first-read order. */
     public function references(): array
     {
-        return array_map(
-            static fn(\Superscript\Axiom\ReferencePath $reference): string => $reference->describe(),
-            $this->references->all(),
-        );
+        return $this->references->all();
     }
 }

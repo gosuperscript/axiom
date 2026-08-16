@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Analysis;
 
 use InvalidArgumentException;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Result\Result;
@@ -15,7 +16,7 @@ use function Superscript\Monads\Result\Ok;
 
 /**
  * Everything error-tolerant compilation learned about one expression:
- * every refusal it makes, every symbol it read on the way, what the
+ * every refusal it makes, every access path it read on the way, what the
  * expression returns, and — when nothing refused — the certified
  * {@see Program} itself.
  *
@@ -23,7 +24,7 @@ use function Superscript\Monads\Result\Ok;
  * $diagnosis = $expression->diagnose();
  *
  * $diagnosis->diagnostics; // list<TypeMismatch>, in the order the compiler met them
- * $diagnosis->references;  // symbols read, including ones that failed to resolve
+ * $diagnosis->references;  // access paths read, including ones that failed to resolve
  * $diagnosis->returns;     // the root type, or null when the root itself failed
  * $diagnosis->program();   // Ok(Program) iff diagnostics === []
  * ```
@@ -45,8 +46,8 @@ use function Superscript\Monads\Result\Ok;
  *    Failure is a compilation state rather than a type, so there is no marker
  *    to appear here in a type's place, and `Program`'s constructor
  *    independently refuses any node tree in which something failed.
- *  - **References survive broken regions.** A symbol read before a sibling
- *    failed is still reported, and a symbol that failed to resolve is
+ *  - **References survive broken regions.** An access path read before a sibling
+ *    failed is still reported, and one that failed to resolve is
  *    reported too — which is the difference from `Program::$references`,
  *    the same reads minus the ones that never resolved.
  *
@@ -69,7 +70,7 @@ final readonly class Diagnosis
      * behind it, and {@see program()} would have nothing to answer with.
      *
      * @param non-empty-list<TypeMismatch>|array{} $diagnostics
-     * @param list<string> $references
+     * @param list<ReferencePath> $references
      * @param ?Type $returns What the expression returns, or null when the root
      *                      node itself did not compile and so returns nothing.
      * @param ?Program $program The program the compiler certified, or null
@@ -109,7 +110,7 @@ final readonly class Diagnosis
      * never resolved — exist nowhere else.
      *
      * @param non-empty-list<TypeMismatch> $diagnostics
-     * @param list<string> $references
+     * @param list<ReferencePath> $references
      */
     public static function refused(array $diagnostics, array $references, ?Type $returns): self
     {

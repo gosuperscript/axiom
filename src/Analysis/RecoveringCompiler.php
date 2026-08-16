@@ -157,7 +157,7 @@ final readonly class RecoveringCompiler
         $compiled = $this->walk($recovery, $reads);
 
         $compiled->inspect(static fn(CompiledNode $node) => $reads->recordReferences($node->references));
-        $recovery->record($reads->referencePaths());
+        $recovery->record($reads->references());
 
         return $compiled;
     }

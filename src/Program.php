@@ -69,7 +69,7 @@ final readonly class Program
 
     public CompilationAnalysis $analysis;
 
-    /** @var list<string> Declared input paths read by this program. */
+    /** @var list<ReferencePath> Declared input paths read by this program. */
     public array $references;
 
     /**
@@ -105,7 +105,7 @@ final readonly class Program
         $record = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
 
         $this->returns = $node->returns;
-        $this->references = array_map(static fn(ReferencePath $reference): string => $reference->describe(), $node->references);
+        $this->references = $node->references;
         $this->declarations = $record;
         $this->inputs = $record->project($node->references);
         $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);

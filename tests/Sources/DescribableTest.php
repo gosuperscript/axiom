@@ -286,6 +286,24 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function member_access_requires_a_non_empty_property(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('A member access property must be non-empty.');
+
+        new MemberAccessSource(new SymbolSource('user'), '');
+    }
+
+    #[Test]
+    public function member_access_property_is_one_structural_segment(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Nest MemberAccessSource nodes for structural access.');
+
+        new MemberAccessSource(new SymbolSource('user'), 'address.city');
+    }
+
+    #[Test]
     public function member_access_with_non_describable_object_falls_back_to_class_name(): void
     {
         $source = new MemberAccessSource(new UndescribableSource(), 'name');
