@@ -67,6 +67,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class ShapeProjectionCensusTest extends TestCase
 {
     /**
@@ -111,7 +113,11 @@ final class ShapeProjectionCensusTest extends TestCase
         $shape = $type->shape();
         $this->assertInstanceOf(RecordShape::class, $shape);
 
-        foreach ($shape->fields as $name => $field) {
+        foreach ($shape->properties as $name => $property) {
+            if ($property->optional && !array_key_exists($name, $specimen)) {
+                continue;
+            }
+
             $this->assertArrayHasKey(
                 $name,
                 $specimen,
@@ -119,7 +125,7 @@ final class ShapeProjectionCensusTest extends TestCase
             );
 
             $this->assertTrue(
-                \Superscript\Axiom\Types\TypeReifier::reify($field)->coerce($specimen[$name])->isOk(),
+                \Superscript\Axiom\Types\TypeReifier::reify($property->value)->coerce($specimen[$name])->isOk(),
                 sprintf("C2: specimen field '%s' does not inhabit its projected shape", $name),
             );
         }

@@ -22,6 +22,7 @@ use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
@@ -37,7 +38,7 @@ final class DefaultValueTest extends TestCase
     {
         $expression = new Expression(
             new DefaultValue(new SymbolSource('amount'), '12.5'),
-            declarations: ['amount' => new OptionType(new NumberType())],
+            declarations: ['amount' => new Optional(new OptionType(new NumberType()))],
         );
 
         $program = $expression->compile()->unwrap();
@@ -67,7 +68,7 @@ final class DefaultValueTest extends TestCase
     {
         $expression = new Expression(
             new DefaultValue(new SymbolSource('items'), []),
-            declarations: ['items' => new OptionType(new ListType(new StringType()))],
+            declarations: ['items' => new Optional(new OptionType(new ListType(new StringType())))],
         );
 
         $program = $expression->compile()->unwrap();
@@ -83,7 +84,7 @@ final class DefaultValueTest extends TestCase
         $default = new Money(1250, 'GBP');
         $program = (new Expression(
             new DefaultValue(new SymbolSource('premium'), $default),
-            declarations: ['premium' => new OptionType(new MoneyType('GBP'))],
+            declarations: ['premium' => new Optional(new OptionType(new MoneyType('GBP')))],
         ))->compile()->unwrap();
 
         $this->assertEquals(new MoneyType('GBP'), $program->returns);
@@ -95,7 +96,7 @@ final class DefaultValueTest extends TestCase
     {
         $program = (new Expression(
             new DefaultValue(new SymbolSource('amount'), '3'),
-            declarations: ['amount' => new ProjectedNumberOptionType()],
+            declarations: ['amount' => new Optional(new ProjectedNumberOptionType())],
         ))->compile()->unwrap();
 
         $this->assertInstanceOf(NumberType::class, $program->returns);
@@ -113,7 +114,9 @@ final class DefaultValueTest extends TestCase
     public function it_discharges_absence_behind_an_optional_owner(): void
     {
         $premium = new MemberAccessSource(new SymbolSource('quote'), 'premium');
-        $declarations = ['quote' => new OptionType(new RecordType(['premium' => new OptionType(new NumberType())]))];
+        $declarations = ['quote' => new Optional(new RecordType([
+            'premium' => new Optional(new OptionType(new NumberType())),
+        ]))];
 
         $defaulted = (new Expression(new DefaultValue($premium, 0), declarations: $declarations))->compile()->unwrap();
         $coalesced = (new Expression(

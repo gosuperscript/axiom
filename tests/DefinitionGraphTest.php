@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\DefinitionGraph;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\UnboundSymbols;
@@ -21,6 +22,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\InfixExpression::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\StaticSource::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(MemberAccessSource::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\SymbolSource::class)]
 final class DefinitionGraphTest extends TestCase
 {
@@ -111,17 +113,16 @@ final class DefinitionGraphTest extends TestCase
     }
 
     #[Test]
-    public function a_namespaced_cycle_is_walked_through_dotted_keys(): void
+    public function a_cycle_through_structural_member_access_is_a_root_cycle(): void
     {
         $definitions = new Definitions([
-            'customer' => ['rate' => new SymbolSource('base')],
-            'base' => new SymbolSource('rate', 'customer'),
+            'customer' => new MemberAccessSource(new SymbolSource('customer'), 'rate'),
         ]);
 
         $cycles = DefinitionGraph::cycles($definitions);
 
         $this->assertCount(1, $cycles);
-        $this->assertStringContainsString('customer.rate → base → customer.rate', $cycles[0]->describe());
+        $this->assertStringContainsString('customer → customer', $cycles[0]->describe());
     }
 
     #[Test]

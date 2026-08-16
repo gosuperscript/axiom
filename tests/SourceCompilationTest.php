@@ -122,7 +122,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
-#[UsesClass(\Superscript\Axiom\Input::class)]
+#[UsesClass(\Superscript\Axiom\Types\Optional::class)]
 #[UsesClass(Extension::class)]
 #[UsesClass(Runtime::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
@@ -180,6 +180,9 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 final class SourceCompilationTest extends TestCase
 {
     private static function compilation(
@@ -187,6 +190,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compileInfix = null,
         ?Closure $compilePrefix = null,
         ?Closure $compileSymbol = null,
+        ?Closure $compileInputPath = null,
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
         ?Closure $resolveOpaqueField = null,
@@ -196,6 +200,7 @@ final class SourceCompilationTest extends TestCase
             $compileInfix ?? fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
+            $compileInputPath ?? fn(\Superscript\Axiom\ReferencePath $reference): ?Result => null,
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
             $recorder,
@@ -486,10 +491,46 @@ final class SourceCompilationTest extends TestCase
             },
         );
 
-        $symbol = new SymbolSource('amount', 'billing');
+        $symbol = new SymbolSource('billing_amount');
 
         $this->assertSame($node, $compilation->symbol($symbol)->node());
         $this->assertSame([$symbol], $seen);
+    }
+
+    #[Test]
+    public function input_path_delegates_and_records_the_structural_read(): void
+    {
+        $reference = new \Superscript\Axiom\ReferencePath('customer', 'turnover');
+        $node = CompiledNode::returning(
+            new NumberType(),
+            fn(Runtime $runtime) => Ok(Some(1)),
+            references: [$reference],
+        );
+        $seen = null;
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileInputPath: function (\Superscript\Axiom\ReferencePath $candidate) use (&$seen, $node): Result {
+                $seen = $candidate;
+
+                return Ok($node);
+            },
+            recorder: $recorder,
+        );
+
+        $compiled = $compilation->inputPath($reference);
+
+        $this->assertNotNull($compiled);
+        $this->assertSame($reference, $seen);
+        $this->assertSame($node->returns, $compiled->returns);
+        $this->assertSame(['customer.turnover'], $recorder->references());
+
+        $withoutRecorder = self::compilation(
+            compileInputPath: fn(\Superscript\Axiom\ReferencePath $candidate): Result => Ok($node),
+        )->inputPath($reference);
+        $this->assertNotNull($withoutRecorder);
+        $this->assertSame($node->returns, $withoutRecorder->returns);
+
+        $this->assertNull(self::compilation()->inputPath($reference));
     }
 
     #[Test]
@@ -504,9 +545,9 @@ final class SourceCompilationTest extends TestCase
         $node = (CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => Ok(Some(1)),
-            references: ['stale'],
+            references: [new \Superscript\Axiom\ReferencePath('stale')],
         ))
-            ->forSource($source, $analysis, ['amount']);
+            ->forSource($source, $analysis, [new \Superscript\Axiom\ReferencePath('amount')]);
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
             compileNode: fn(Source $candidate): Result => Ok($node),
@@ -861,13 +902,13 @@ final class SourceCompilationTest extends TestCase
         };
 
         $expression = new Expression(
-            new HiddenSymbolSource('amount', new SymbolSource('amount', 'billing')),
+            new HiddenSymbolSource('amount', new SymbolSource('billing_amount')),
             dialect: Dialect::core()->with($extension),
             declarations: ['amount' => new NumberType()],
         );
         $result = $expression->compile();
 
-        $this->assertSame(['billing.amount'], $expression->parameters());
+        $this->assertSame(['billing_amount'], $expression->parameters());
         $this->assertStringContainsString(
             'symbol dependencies belong in the persisted source tree',
             $result->unwrapErr()->message,

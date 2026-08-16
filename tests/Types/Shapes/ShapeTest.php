@@ -35,6 +35,7 @@ use Superscript\Axiom\Types\Shapes\UnknownShape;
 #[CoversClass(NeverShape::class)]
 #[CoversClass(OpaqueShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[CoversClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class ShapeTest extends TestCase
 {
     #[Test]
@@ -169,10 +170,26 @@ final class ShapeTest extends TestCase
         $this->assertNull($plain->max);
 
         $record = new RecordShape(['a' => new NumberShape()]);
-        $this->assertInstanceOf(NumberShape::class, $record->fields['a']);
+        $this->assertInstanceOf(NumberShape::class, $record->properties['a']->value);
 
         $opaque = new OpaqueShape('ClaimId');
         $this->assertSame('ClaimId', $opaque->identity);
+    }
+
+    #[Test]
+    public function record_property_presence_is_independent_of_value_absence(): void
+    {
+        $required = new \Superscript\Axiom\Types\Shapes\RecordPropertyShape(new NumberShape(), false);
+        $optional = new \Superscript\Axiom\Types\Shapes\RecordPropertyShape(new NumberShape(), true);
+        $optionalOption = new \Superscript\Axiom\Types\Shapes\RecordPropertyShape(new OptionShape(new NumberShape()), true);
+
+        $this->assertInstanceOf(NumberShape::class, $required->accessed());
+        $this->assertInstanceOf(OptionShape::class, $optional->accessed());
+        $this->assertSame($optionalOption->value, $optionalOption->accessed());
+        $this->assertTrue($required->equals(new \Superscript\Axiom\Types\Shapes\RecordPropertyShape(new NumberShape(), false)));
+        $this->assertFalse($required->equals($optional));
+        $this->assertSame($optional, (new RecordShape(['value' => $optional]))->properties['value']);
+        $this->assertFalse((new RecordShape(['value' => new NumberShape()]))->properties['value']->optional);
     }
 
     #[Test]

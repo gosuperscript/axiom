@@ -10,8 +10,8 @@ namespace Superscript\Axiom;
  * boundaries are exactly where leniency belongs); Assert verifies strict
  * membership for hosts that pre-validate and want refusal over conversion.
  *
- * The dial governs conversion only. Whether an input must be bound at all is
- * a per-declaration fact ({@see Input}), and both policies enforce it alike.
+ * The dial governs conversion only. Whether a property may be omitted is
+ * declared with {@see Types\Optional}, and both policies enforce it alike.
  */
 enum Boundary
 {

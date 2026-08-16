@@ -123,7 +123,7 @@ final readonly class TypeInference
             // aborts every compilation above it and the tree being recorded
             // is discarded, so recording into it is work nobody collects.
             if ($this->recovery !== null && $parent !== null) {
-                $parent->recordReferences($recorder->references());
+                $parent->recordReferences($recorder->referencePaths());
             }
 
             return Err($aborted->mismatch->at($path));
@@ -150,7 +150,7 @@ final readonly class TypeInference
                 $this->sourceCompilerExtensions[$source::class] ?? 'unattributed',
                 $recorder->children(),
                 $recorder->operators(),
-            ), $recorder->references()));
+            ), $recorder->referencePaths()));
     }
 
     /**
@@ -164,6 +164,7 @@ final readonly class TypeInference
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
+            fn(\Superscript\Axiom\ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
@@ -187,26 +188,26 @@ final readonly class TypeInference
     {
         if (!array_any(
             UnboundSymbols::in($owner),
-            fn(SymbolSource $candidate) => $candidate->name === $symbol->name && $candidate->namespace === $symbol->namespace,
+            fn(SymbolSource $candidate) => $candidate->name === $symbol->name,
         )) {
             return Err(new TypeMismatch(sprintf(
                 'Symbol [%s] is not represented by a SymbolSource in [%s]; symbol dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
-                SymbolSource::key($symbol->name, $symbol->namespace),
+                $symbol->name,
                 $owner::class,
             )));
         }
 
-        $key = SymbolSource::key($symbol->name, $symbol->namespace);
+        $key = $symbol->name;
 
         // A definition on a cycle has already been reported as a property of
         // the graph, and descending into one would not terminate.
         if ($this->recovery?->isPoisoned($key) === true) {
-            $reads->recordReferences([$key]);
+            $reads->recordReferences([new \Superscript\Axiom\ReferencePath($key)]);
 
             return Ok($this->failedNode($symbol));
         }
 
-        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $reads);
+        return $environment->nodeOfSymbol($symbol->name, $this, $path, $reads);
     }
 
     /**

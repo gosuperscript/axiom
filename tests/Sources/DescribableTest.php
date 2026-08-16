@@ -47,6 +47,24 @@ use Superscript\Axiom\Types\StringType;
 class DescribableTest extends TestCase
 {
     #[Test]
+    public function symbol_names_cannot_encode_access_paths(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Use MemberAccessSource for structural access.');
+
+        new SymbolSource('customer.turnover');
+    }
+
+    #[Test]
+    public function symbol_names_cannot_be_empty(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('A symbol name cannot be empty.');
+
+        new SymbolSource('');
+    }
+
+    #[Test]
     public function static_source_describes_string_value(): void
     {
         $source = new StaticSource('hello');
@@ -82,17 +100,10 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
-    public function symbol_source_describes_namespaced_name(): void
+    public function symbol_source_describes_its_exact_name(): void
     {
-        $source = new SymbolSource('pi', 'math');
-        $this->assertSame('math.pi', $source->describe());
-    }
-
-    #[Test]
-    public function the_symbol_key_is_the_flat_dotted_name(): void
-    {
-        $this->assertSame('pi', SymbolSource::key('pi', null));
-        $this->assertSame('math.pi', SymbolSource::key('pi', 'math'));
+        $source = new SymbolSource('pi');
+        $this->assertSame('pi', $source->describe());
     }
 
     #[Test]
@@ -385,7 +396,7 @@ class DescribableTest extends TestCase
                 '-',
                 new Coerce(
                     new NumberType(),
-                    new SymbolSource('discount', 'rates'),
+                    new MemberAccessSource(new SymbolSource('rates'), 'discount'),
                 ),
             ),
         );

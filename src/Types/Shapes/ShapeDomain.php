@@ -61,7 +61,7 @@ final class ShapeDomain
         }
 
         if ($shape instanceof RecordShape) {
-            return array_all($shape->fields, fn(Shape $field) => self::all($field, $leaf));
+            return array_all($shape->properties, fn(RecordPropertyShape $property) => self::all($property->value, $leaf));
         }
 
         return $leaf($shape);

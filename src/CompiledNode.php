@@ -70,7 +70,7 @@ final class CompiledNode
 
     /**
      * @param ?Closure(Runtime): Result<Option<mixed>, Throwable> $evaluation
-     * @param list<string> $references
+     * @param list<ReferencePath> $references
      */
     private function __construct(
         ?Type $returns,
@@ -89,7 +89,7 @@ final class CompiledNode
      * A node returning what its compiler certified.
      *
      * @param Closure(Runtime): Result<Option<mixed>, Throwable> $evaluation
-     * @param list<string> $references
+     * @param list<ReferencePath> $references
      */
     public static function returning(
         Type $returns,
@@ -142,7 +142,7 @@ final class CompiledNode
      *
      * @internal
      *
-     * @param list<string> $references
+     * @param list<ReferencePath> $references
      */
     public function forSource(Source $source, CompilationNode $compilation, array $references = []): self
     {

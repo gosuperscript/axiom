@@ -6,9 +6,11 @@ namespace Superscript\Axiom\SourceCompilers;
 
 use RuntimeException;
 use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\MemberAccessSource;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -42,6 +44,12 @@ final readonly class MemberAccessSourceCompiler
      */
     public static function compile(MemberAccessSource $source, SourceCompilation $compilation): CompiledSource
     {
+        $reference = self::referencePath($source);
+
+        if ($reference !== null && ($input = $compilation->inputPath($reference)) !== null) {
+            return $input;
+        }
+
         $object = $compilation->child($source->object, 'object');
 
         $access = self::resolveAccess($compilation->shapeOf($object), $source->property, $compilation);
@@ -78,7 +86,7 @@ final readonly class MemberAccessSourceCompiler
      *
      * @return Result<Option<mixed>, Throwable>
      */
-    private static function accessValue(mixed $value, string $property): Result
+    private static function accessValue(mixed $value, string $property, bool $optional): Result
     {
         if (is_array($value) && array_key_exists($property, $value)) {
             return Ok(Option::from($value[$property]));
@@ -88,7 +96,9 @@ final readonly class MemberAccessSourceCompiler
             return Ok(Option::from($value->{$property}));
         }
 
-        return Err(new RuntimeException(sprintf("Property '%s' does not exist on %s.", $property, get_debug_type($value))));
+        return $optional
+            ? Ok(Option::from(null))
+            : Err(new RuntimeException(sprintf("Property '%s' does not exist on %s.", $property, get_debug_type($value))));
     }
 
     /**
@@ -111,10 +121,12 @@ final readonly class MemberAccessSourceCompiler
         }
 
         if ($object instanceof Shapes\RecordShape) {
-            if (isset($object->fields[$property])) {
+            if (isset($object->properties[$property])) {
+                $recordProperty = $object->properties[$property];
+
                 return Ok(new FieldAccess(
-                    TypeReifier::reify($object->fields[$property]),
-                    static fn(mixed $value): Result => self::accessValue($value, $property),
+                    TypeReifier::reify($recordProperty->accessed()),
+                    static fn(mixed $value): Result => self::accessValue($value, $property, $recordProperty->optional),
                 ));
             }
 
@@ -145,5 +157,21 @@ final readonly class MemberAccessSourceCompiler
         }
 
         return Err(new TypeMismatch(sprintf("Cannot access field '%s' on %s.", $property, TypeDescriber::describeShape($object))));
+    }
+
+    /** A syntactic member chain rooted directly in a symbol. */
+    private static function referencePath(MemberAccessSource $source): ?ReferencePath
+    {
+        $properties = [];
+        $current = $source;
+
+        while ($current instanceof MemberAccessSource) {
+            array_unshift($properties, $current->property);
+            $current = $current->object;
+        }
+
+        return $current instanceof SymbolSource
+            ? new ReferencePath($current->name, ...$properties)
+            : null;
     }
 }

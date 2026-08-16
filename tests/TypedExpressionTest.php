@@ -18,7 +18,6 @@ use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
-use Superscript\Axiom\Input;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\ResolvedOperation;
@@ -35,6 +34,7 @@ use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -60,7 +60,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
-#[CoversClass(Input::class)]
+#[CoversClass(Optional::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
 #[CoversClass(Boundary::class)]
@@ -136,6 +136,8 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function gate(): Expression
@@ -143,11 +145,11 @@ final class TypedExpressionTest extends TestCase
         // quote.turnover > 500000
         return new Expression(
             source: new InfixExpression(
-                left: new SymbolSource('turnover', 'quote'),
+                left: new MemberAccessSource(new SymbolSource('quote'), 'turnover'),
                 operator: '>',
                 right: new StaticSource(500000),
             ),
-            declarations: ['quote.turnover' => new NumberType()],
+            declarations: ['quote' => new RecordType(['turnover' => new NumberType()])],
         );
     }
 
@@ -168,7 +170,7 @@ final class TypedExpressionTest extends TestCase
         // it; the boundary converts it before evaluation begins.
         $program = $this->gate()->compile()->unwrap();
 
-        $this->assertTrue($program(['quote.turnover' => '600000'])->unwrap()->unwrap());
+        $this->assertTrue($program(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -212,14 +214,14 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function an_option_declared_input_may_be_missing_or_null(): void
+    public function an_option_declared_input_requires_its_key_but_may_be_null(): void
     {
         $program = (new Expression(
             source: new SymbolSource('note'),
             declarations: ['note' => new OptionType(new StringType())],
         ))->compile()->unwrap();
 
-        $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertInstanceOf(MissingRequiredInput::class, $program([])->unwrapErr());
         $this->assertTrue($program(['note' => null])->unwrap()->isNone());
         $this->assertSame('hi', $program(['note' => 'hi'])->unwrap()->unwrap());
     }
@@ -227,23 +229,16 @@ final class TypedExpressionTest extends TestCase
     /**
      * The whole classification of an absent input, enumerated. Two facts
      * decide every row, and they are asked about different absences. A
-     * *supplied* value that reads as absent is judged by the declared type's
-     * shape, and by nothing else: a shape that admits absence takes None as
-     * the value however it arrived — a `null` or a value that reads as
-     * absent — while a shape requiring presence calls it an inadmissible
-     * binding. *No binding at all* is judged by demand, which follows the
-     * shape unless the declaration is an `Input::demanded`, and refuses as a
-     * missing input. Demanding an absence-admitting type separates the two:
-     * `''` is still None, and saying nothing is still missing. Optionality is
-     * not a licence for a fault either way: a value that cannot be converted
-     * at all is inadmissible whether or not absence is allowed.
+     * supplied value that reads as absent is judged by its value type. An
+     * omitted key is judged independently: properties are required unless
+     * wrapped in Optional. This gives the four combinations directly.
      *
      * @param class-string<BoundaryViolation>|null $refusal
      * @param array<string, mixed> $bindings
      */
     #[Test]
     #[DataProvider('absenceReadings')]
-    public function absence_is_judged_by_the_declared_shape(Type|Input $declared, array $bindings, ?string $refusal, string $message): void
+    public function absence_is_judged_by_property_presence_and_value_type(Type|Optional $declared, array $bindings, ?string $refusal, string $message): void
     {
         $program = (new Expression(
             source: new SymbolSource('x'),
@@ -264,7 +259,7 @@ final class TypedExpressionTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Type|Input, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
+     * @return iterable<string, array{Type|Optional, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
      */
     public static function absenceReadings(): iterable
     {
@@ -276,7 +271,7 @@ final class TypedExpressionTest extends TestCase
         // Absence admitted, by an Option declaration.
         yield 'String?, bound ""' => [new OptionType(new StringType()), ['x' => ''], null, ''];
         yield 'String?, bound null' => [new OptionType(new StringType()), ['x' => null], null, ''];
-        yield 'String?, unbound' => [new OptionType(new StringType()), [], null, ''];
+        yield 'String?, unbound' => [new OptionType(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
         yield 'String?, bound a list' => [new OptionType(new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
 
         // Absence admitted, by a union with an absence-admitting member —
@@ -284,35 +279,21 @@ final class TypedExpressionTest extends TestCase
         // union projects is the same one.
         yield 'String | Number?, bound ""' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ''], null, ''];
         yield 'Number? | String, bound ""' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ''], null, ''];
-        yield 'String | Number?, unbound' => [new UnionType(new StringType(), new OptionType(new NumberType())), [], null, ''];
-        yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], null, ''];
+        yield 'String | Number?, unbound' => [new UnionType(new StringType(), new OptionType(new NumberType())), [], MissingRequiredInput::class, 'required input [x] is missing'];
+        yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
         yield 'String | Number?, bound a list' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
         yield 'Number? | String, bound a list' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
 
-        // Wrapping a type in the plain reading changes no verdict: it is
-        // what a bare declaration already means.
-        yield 'Input::of(String?), unbound' => [Input::of(new OptionType(new StringType())), [], null, ''];
-        yield 'Input::of(String), unbound' => [Input::of(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
-
-        // Absence admitted, and a binding demanded anyway: the shape still
-        // rules on a value that reads as absent, and demand rules on a call
-        // that says nothing at all.
-        $demanded = Input::demanded(new OptionType(new StringType()));
-
-        yield 'demanded String?, bound ""' => [$demanded, ['x' => ''], null, ''];
-        yield 'demanded String?, bound null' => [$demanded, ['x' => null], null, ''];
-        yield 'demanded String?, unbound' => [$demanded, [], MissingRequiredInput::class, 'required input [x] is missing'];
-        yield 'demanded String?, bound a list' => [$demanded, ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
-
-        // Demanding a shape that already required presence changes nothing:
-        // every verdict matches the bare String rows above.
-        yield 'demanded String, bound ""' => [Input::demanded(new StringType()), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
-        yield 'demanded String, unbound' => [Input::demanded(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
-        yield 'demanded String, bound a list' => [Input::demanded(new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+        // Optional controls only key omission.
+        yield 'Optional(String), bound ""' => [new Optional(new StringType()), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
+        yield 'Optional(String), unbound' => [new Optional(new StringType()), [], null, ''];
+        yield 'Optional(String), bound null' => [new Optional(new StringType()), ['x' => null], InadmissibleBinding::class, 'binding [x]:'];
+        yield 'Optional(String?), bound null' => [new Optional(new OptionType(new StringType())), ['x' => null], null, ''];
+        yield 'Optional(String?), unbound' => [new Optional(new OptionType(new StringType())), [], null, ''];
     }
 
     #[Test]
-    public function a_demanded_option_tells_the_answer_none_from_no_answer_yet(): void
+    public function a_required_option_tells_the_answer_none_from_no_answer_yet(): void
     {
         // A select whose "no value" option is a real answer. The type must
         // admit absence for the chosen answer to be expressible at all, and
@@ -320,21 +301,19 @@ final class TypedExpressionTest extends TestCase
         // read as that answer.
         $program = (new Expression(
             source: new SymbolSource('excess'),
-            declarations: ['excess' => Input::demanded(new OptionType(new NumberType()))],
+            declarations: ['excess' => new OptionType(new NumberType())],
         ))->compile()->unwrap();
 
         $this->assertInstanceOf(MissingRequiredInput::class, $program([])->unwrapErr());
         $this->assertTrue($program(['excess' => null])->unwrap()->isNone());
         $this->assertSame(250, $program(['excess' => '250'])->unwrap()->unwrap());
 
-        // Demandedness is a boundary fact, and compilation is told nothing
-        // about it: the declaration it typed and explains is the type alone.
-        $this->assertEquals(['excess' => new OptionType(new NumberType())], $program->analysis->declarations);
+        $this->assertEquals(new RecordType(['excess' => new OptionType(new NumberType())]), $program->analysis->declarations);
         $this->assertEquals(new OptionType(new NumberType()), $program->returns);
     }
 
     #[Test]
-    public function a_demanded_declaration_the_program_never_reads_is_still_ignored(): void
+    public function a_required_declaration_the_program_never_reads_is_still_ignored(): void
     {
         // Demand intersects the reads, like every other boundary fact: an
         // input no symbol node reads has nothing to deliver a value to, so
@@ -343,7 +322,7 @@ final class TypedExpressionTest extends TestCase
             source: new SymbolSource('name'),
             declarations: [
                 'name' => new StringType(),
-                'excess' => Input::demanded(new OptionType(new NumberType())),
+                'excess' => new OptionType(new NumberType()),
             ],
         ))->compile()->unwrap();
 
@@ -524,23 +503,18 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function a_record_declaration_and_a_namesake_definition_are_distinct_programs(): void
+    public function a_nested_property_and_a_namesake_root_definition_are_distinct(): void
     {
-        // No descent: Symbol('turnover', ns: 'customer') is the exact key
-        // customer.turnover — a definition — while the declared customer
-        // record is reachable only by member access. The caller's record
-        // content can never answer the symbol, so it can never shadow the
-        // definition (the second-opinion finding, closed structurally).
         $expression = new Expression(
-            source: new SymbolSource('turnover', 'customer'),
-            definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
-            declarations: ['customer' => new RecordType(['name' => new StringType()])],
+            source: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
+            definitions: new Definitions(['turnover' => new StaticSource(1)]),
+            declarations: ['customer' => new RecordType(['turnover' => new NumberType()])],
         );
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(1, $program(['customer' => ['name' => 'Ada']])->unwrap()->unwrap());
-        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $program->returns);
+        $this->assertSame(2, $program(['customer' => ['turnover' => 2]])->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]
@@ -560,9 +534,9 @@ final class TypedExpressionTest extends TestCase
             declarations: ['customer' => $record],
         ))->compile()->unwrap();
 
-        // The whole record coerces at the boundary ('2' → 2, missing
-        // optional note canonicalizes) and member access — the one
-        // structural path — reads the coerced record's field.
+        // The projected record coerces at the boundary ('2' → 2, while the
+        // unread note is stripped) and member access — the one structural
+        // path — reads the coerced record's property.
         $this->assertSame(4, $program(['customer' => ['turnover' => '2']])->unwrap()->unwrap());
 
         // Statically, the member access types as the record's field.
@@ -591,7 +565,7 @@ final class TypedExpressionTest extends TestCase
                     ],
                 ),
             ]),
-            declarations: ['rateOverride' => new OptionType(new NumberType())],
+            declarations: ['rateOverride' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertSame(1.2, $program()->unwrap()->unwrap());
@@ -662,7 +636,7 @@ final class TypedExpressionTest extends TestCase
                 right: new StaticSource(2),
             ),
             dialect: Dialect::core()->with($extension),
-            declarations: ['maybe' => new OptionType(new NumberType())],
+            declarations: ['maybe' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         // The compiled program embeds the extension's resolution: absence
@@ -791,15 +765,18 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function multi_dot_declaration_keys_split_on_the_first_dot(): void
+    public function deeply_nested_inputs_are_structural_paths(): void
     {
-        // Definitions flatten one namespace level, so a declared key may
-        // carry dots in its name part: ns + 'deep.key'.
         $program = (new Expression(
-            source: new SymbolSource('deep.key', 'ns'),
-            declarations: ['ns.deep.key' => new NumberType()],
+            source: new MemberAccessSource(
+                new MemberAccessSource(new SymbolSource('root'), 'deep'),
+                'key',
+            ),
+            declarations: ['root' => new RecordType([
+                'deep' => new RecordType(['key' => new NumberType()]),
+            ])],
         ))->compile()->unwrap();
 
-        $this->assertSame(5, $program(['ns.deep.key' => '5'])->unwrap()->unwrap());
+        $this->assertSame(5, $program(['root' => ['deep' => ['key' => '5']]])->unwrap()->unwrap());
     }
 }

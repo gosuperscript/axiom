@@ -85,10 +85,10 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
-    public function namespace_and_name_together_form_the_identity(): void
+    public function different_root_names_have_distinct_identity(): void
     {
         $bare = new SymbolSource('value');
-        $namespaced = new SymbolSource('value', 'ns');
+        $namespaced = new SymbolSource('other_value');
 
         $source = new InfixExpression(
             left: $bare,
@@ -100,10 +100,10 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
-    public function different_names_within_the_same_namespace_are_distinct(): void
+    public function different_names_are_distinct(): void
     {
-        $pi = new SymbolSource('pi', 'math');
-        $e = new SymbolSource('e', 'math');
+        $pi = new SymbolSource('pi');
+        $e = new SymbolSource('e');
 
         $source = new InfixExpression(
             left: $pi,

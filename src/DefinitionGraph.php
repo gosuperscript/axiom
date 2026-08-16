@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom;
 
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\TypeMismatch;
 
 /**
@@ -101,7 +100,7 @@ final class DefinitionGraph
 
             // Keys come from the definitions themselves, so the source exists.
             foreach (UnboundSymbols::in($definitions->get($key)->unwrap()) as $reference) {
-                $referenced = SymbolSource::key($reference->name, $reference->namespace);
+                $referenced = $reference->name;
 
                 if ($definitions->has($referenced) && !in_array($referenced, $edges[$key], strict: true)) {
                     $edges[$key][] = $referenced;

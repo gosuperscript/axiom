@@ -38,6 +38,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
+     * @param Closure(ReferencePath): ?Result<CompiledNode, TypeMismatch> $compileInputPath
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
@@ -46,6 +47,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileSymbol,
+        private Closure $compileInputPath,
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
@@ -114,6 +116,24 @@ final readonly class SourceCompilation
 
         if ($this->recorder !== null && $compilation !== null) {
             $this->recorder->child($compilation, 'definition');
+        }
+
+        return new CompiledSource($node);
+    }
+
+    /** Compile a structural path rooted in the declared input record. */
+    public function inputPath(ReferencePath $reference): ?CompiledSource
+    {
+        $compiled = ($this->compileInputPath)($reference);
+
+        if ($compiled === null) {
+            return null;
+        }
+
+        $node = $this->compiled($compiled, new Sources\SymbolSource($reference->root()), null);
+
+        if ($this->recorder !== null) {
+            $this->recorder->recordReferences($node->references);
         }
 
         return new CompiledSource($node);

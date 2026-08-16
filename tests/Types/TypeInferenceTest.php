@@ -148,6 +148,9 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference
@@ -487,7 +490,7 @@ final class TypeInferenceTest extends TestCase
         $env = self::env(declarations: ['turnover' => new NumberType()]);
 
         $sum = $inference->infer(
-            new InfixExpression(new SymbolSource('turnover', null), '*', new StaticSource(1.2)),
+            new InfixExpression(new SymbolSource('turnover'), '*', new StaticSource(1.2)),
             $env,
         );
         $this->assertInstanceOf(NumberType::class, $sum->unwrap());

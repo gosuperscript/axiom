@@ -67,7 +67,7 @@ final class UnboundSymbols
     private static function contains(array $symbols, SymbolSource $needle): bool
     {
         foreach ($symbols as $existing) {
-            if ($existing->name === $needle->name && $existing->namespace === $needle->namespace) {
+            if ($existing->name === $needle->name) {
                 return true;
             }
         }

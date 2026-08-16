@@ -47,16 +47,14 @@ final class BindingsTest extends TestCase
     }
 
     #[Test]
-    public function a_namespaced_lookup_is_the_flat_dotted_key(): void
+    public function nested_records_are_kept_under_their_root_key(): void
     {
         $bindings = new Bindings([
-            'quote.claims' => 3,
-            'quote.turnover' => 500000,
+            'quote' => ['claims' => 3, 'turnover' => 500000],
             'tier' => 'small',
         ]);
 
-        $this->assertSame(3, $bindings->get('claims', 'quote')->unwrap());
-        $this->assertSame(500000, $bindings->get('turnover', 'quote')->unwrap());
+        $this->assertSame(['claims' => 3, 'turnover' => 500000], $bindings->get('quote')->unwrap());
         $this->assertSame('small', $bindings->get('tier')->unwrap());
     }
 
@@ -77,16 +75,16 @@ final class BindingsTest extends TestCase
     }
 
     #[Test]
-    public function namespaced_lookup_returns_none_if_missing(): void
+    public function lookup_returns_none_if_missing(): void
     {
         $bindings = new Bindings(['quote' => ['claims' => 3]]);
 
-        $this->assertTrue($bindings->get('claims', 'policy')->isNone());
-        $this->assertFalse($bindings->has('claims', 'policy'));
+        $this->assertTrue($bindings->get('policy')->isNone());
+        $this->assertFalse($bindings->has('policy'));
     }
 
     #[Test]
-    public function an_array_binding_never_answers_a_namespaced_lookup(): void
+    public function an_array_binding_answers_only_its_root_symbol(): void
     {
         // Exact keys only: a record value is data, not a namespace. Digging
         // into it is member access — an explicit Source node — never symbol
@@ -96,7 +94,7 @@ final class BindingsTest extends TestCase
 
         $this->assertSame(['name' => 'Ada', 'turnover' => 600000], $bindings->get('customer')->unwrap());
         $this->assertTrue($bindings->has('customer'));
-        $this->assertFalse($bindings->has('turnover', 'customer'));
-        $this->assertTrue($bindings->get('turnover', 'customer')->isNone());
+        $this->assertFalse($bindings->has('turnover'));
+        $this->assertTrue($bindings->get('turnover')->isNone());
     }
 }
