@@ -100,4 +100,24 @@ abstract class Extension
     {
         return [];
     }
+
+    /**
+     * Exact host Source class → how to descend into it and rebuild it, for
+     * {@see \Superscript\Axiom\Rewrite\Rewriter}. Registration mirrors
+     * {@see sourceCompilers()} — exact ownership, no precedence — so one
+     * package declares both how its node compiles and how a rewrite reaches
+     * through it, and the two cannot end up in different places. A class no
+     * extension claims is an opaque leaf: never descended, never rewritten,
+     * and named in the run's report.
+     *
+     * An arm receives its source and a {@see \Superscript\Axiom\Rewrite\Descent},
+     * asks for each child by the property holding it, and returns the same
+     * instance when no child moved.
+     *
+     * @return array<class-string<Source>, callable(Source, \Superscript\Axiom\Rewrite\Descent): Source>
+     */
+    public function sourceDescenders(): array
+    {
+        return [];
+    }
 }

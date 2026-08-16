@@ -18,6 +18,7 @@ The design principle is **compile, then trust**: `Expression::compile()` type-ch
     - [Operators](#operators)
     - [Execution Observation](#execution-observation)
 - [Extending Axiom](#extending-axiom)
+- [Rewriting Stored Source](#rewriting-stored-source)
 - [Development](#development)
 - [License](#license)
 
@@ -538,6 +539,23 @@ Use **[the extension guide](docs/extending-axiom.md)** for a progressive tutoria
 | Add a data source | `Extension::sourceCompilers()` plus composable `CompiledSource` values; sources stay data-only | Host sources |
 | Add match pattern kinds | (reserved: an `Extension::matchers()` hook can be added without breaking implementors) | — |
 | Prove your rules honest | the totality harness + admission-honesty law patterns | Testing your extension |
+| Rewrite a stored corpus | `Extension::sourceDescenders()` plus `RewriteRule` implementations | [Rewriting Stored Source](docs/rewriting.md) |
+
+## Rewriting Stored Source
+
+A host that stores expressions eventually has to change them in bulk. `Rewrite\Rewriter` applies a set of `RewriteRule`s bottom-up over an immutable source tree and returns the new tree with a report of what it did:
+
+```php
+$run = (new Rewriter([new RemoveDoubleNegation()]))->rewrite($expression);
+
+$run->report->describe(); // dry run: read this, take nothing
+$run->changed;            // false when every subtree came back identical
+$run->source;             // the tree to store
+```
+
+Nothing is applied that was not proved. Every replacement is compiled against the expression's own declarations and must certify the same type as what it replaces — or refuse identically; a rule may also claim verdict preservation, which the run checks against a host `BindingsCorpus`. A broken obligation refuses that one site and reports it, because a fold that type-checks can still invert the meaning of a condition. A node class with no descent arm is an opaque leaf: never descended, never rewritten, and always named in the report.
+
+See **[Rewriting Stored Source](docs/rewriting.md)** for rules, descent, obligations, and the report.
 
 ## Development
 
