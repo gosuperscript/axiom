@@ -8,10 +8,10 @@ This reference covers the supported API for packages and applications that exten
     - [`Source`](#source)
     - [Compiler registration](#compiler-registration)
     - [`SourceCompilation`](#sourcecompilation)
-    - [`Subexpression`](#subexpression)
+    - [`ScopedExpression`](#scopedexpression)
     - [`CompiledSource`](#compiledsource)
     - [`CompiledSources`](#compiledsources)
-    - [`CompiledSubprogram`](#compiledsubprogram)
+    - [`CompiledScopedExpression`](#compiledscopedexpression)
     - [`BoundOperation`](#boundoperation)
     - [`SourceEvaluation`](#sourceevaluation)
     - [Callback results and failures](#callback-results-and-failures)
@@ -138,8 +138,8 @@ final readonly class ProductSource implements Source
 
 A source should contain only the data needed to describe the operation. In particular:
 
-- store nested sources in public properties, directly or in arrays, so parameter discovery and definition-cycle analysis can walk them;
-- store a `SymbolSource` as a public child when the compiler will resolve that symbol;
+- compile every semantic child through `child()`, `children()`, `scope()`, or `symbol()`; this compiler descent supplies parameter and definition-cycle analysis, so property visibility has no structural meaning;
+- use `symbol()` for a symbol reference owned by the source compiler; resolution records the dependency whether the `SymbolSource` was persisted directly or derived by the compiler;
 - do not store repositories, HTTP clients, filesystems, containers, or other live services;
 - persist the source tree, reconstruct the extension with its services, and then compile;
 - optionally implement `Describable::describe(): string` to provide a human-readable representation of the source.
@@ -180,7 +180,7 @@ The compiler capability passed to every source compiler.
 | `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Operand types come from `typeOf()`, which absorbs a failed child, so both operands are certified by construction. |
 | `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Its operand type comes from `typeOf()`, as `infix()`'s does. |
 | `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
-| `subprogram(Subexpression $expression, array $parameterTypes, ?string $role = null): CompiledSubprogram` | Compile a separately-bound body once through the current dialect. Parameter names must exactly match the names persisted on the Subexpression; enclosing inputs and definitions are not captured. |
+| `scope(ScopedExpression $expression, array $parameterTypes, ?string $role = null): CompiledScopedExpression` | Compile a lexically scoped body once through the current dialect. Parameter names must exactly match those persisted on the ScopedExpression. They shadow equal outer names; every other symbol resolves through the enclosing inputs and definitions. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
 | `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |
 | `produces(Type $returns, callable $evaluate): CompiledSource` | Build a source without compiled children, commonly around an injected service. |
@@ -194,22 +194,22 @@ The compiler capability passed to every source compiler.
 
 `child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
 
-### `Subexpression`
+### `ScopedExpression`
 
 A persistable source body together with the root symbol names its owner binds:
 
 ```php
-new Subexpression(
-    parameters: ['item'],
+new ScopedExpression(
+    parameters: ['candidate'],
     body: new InfixExpression(
-        new SymbolSource('item'),
+        new SymbolSource('candidate'),
         '>',
-        new StaticSource(10),
+        new SymbolSource('threshold'),
     ),
 );
 ```
 
-It is not itself a `Source`: without parameter types it has no type or evaluation. The owning source compiler supplies those types to `SourceCompilation::subprogram()`. Keeping the names structurally beside the body lets `Expression::parameters()` and definition-cycle analysis exclude bound symbols while retaining every genuinely free symbol.
+It is not itself a `Source`: without parameter types it has no type or evaluation. The owning source compiler supplies those types to `SourceCompilation::scope()`. The compiler descends the body in that nested scope, excludes locally resolved parameters from its recorded references, and retains every genuinely free symbol. In the example, `candidate` is local and `threshold` is captured from the enclosing expression.
 
 ### `CompiledSource`
 
@@ -262,13 +262,13 @@ return $compilation->combine([
 
 Use numeric keys for ordinary positional arguments.
 
-### `CompiledSubprogram`
+### `CompiledScopedExpression`
 
-The certified result of `SourceCompilation::subprogram()`. `$returns` is the body's inferred type, and `expectPresent(Type $expected)` checks its present member like the equivalent method on `CompiledSource`.
+The certified result of `SourceCompilation::scope()`. `$returns` is the body's inferred type, and `expectPresent(Type $expected)` checks its present member like the equivalent method on `CompiledSource`.
 
-Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the Subexpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation.
+Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the ScopedExpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation.
 
-Each invocation uses a fresh runtime. Subprogram definitions and input capture are deliberately absent; every value crossing the isolated scope is an explicit parameter. Expected evaluation failures propagate into the enclosing program, and the enclosing invocation's observer receives the nested source events.
+Each invocation adds its exact local bindings to the current runtime. Free symbols retain their lexical meaning, definitions stay memoized across repeated invocation, expected failures propagate into the enclosing program, and its observer receives the nested source events. Opaque scope identities—not names—select local bindings, so a local parameter cannot accidentally rebind an outer definition compiled against an equal name.
 
 ### `BoundOperation`
 
@@ -292,7 +292,7 @@ Available only inside `SourceCompilation::custom()`:
 | Method | Meaning |
 | --- | --- |
 | `value(CompiledSource $source): mixed` | Evaluate an already-compiled child in the current invocation. Returns its value or `null` for absence; propagates its expected failure. |
-| `invoke(CompiledSubprogram $program, array $bindings): mixed` | Evaluate a separately-bound compiled body with exact, already-certified parameter bindings. Returns its value or `null` for absence; propagates its expected failure. |
+| `invoke(CompiledScopedExpression $expression, array $bindings): mixed` | Evaluate a lexically scoped compiled body with exact, already-certified local bindings. Returns its value or `null` for absence; propagates its expected failure. |
 | `annotate(string $key, mixed $value): void` | Attach domain-specific metadata to the current source's observation node. No-op when the invocation has no observer. |
 
 Use `custom()` only when ordinary mapping cannot express the source, such as lazy fallback, conditional child evaluation, or source-specific annotations. It is not a way to recover `Runtime` or perform dynamic compilation.
@@ -597,10 +597,7 @@ $failure->causes[0]->path;   // null
 
 `$path` is the [compilation-analysis](#compilation-analysis) path of that node — the same string `$analysis->toArray()` gives it when the tree compiles — so one addressing scheme serves both channels, and the ancestor chain falls out of the prefixes. The path names the **deepest** node that refused, since that is the one to point at.
 
-`null` means the verdict is not about a node, and reads as "not a node's fault" rather than "location unknown". Two kinds keep it:
-
-- **Whole-program properties.** A definition cycle is a property of the definition graph, refused before any node is walked.
-- **Claims about types rather than nodes.** The cause above, `String is not assignable to Number.`, comes from a relation given two types; nothing at that level knows which node produced either, because `infix()` receives types, not the children they came from.
+`null` means the verdict is not about a node, and reads as "not a node's fault" rather than "location unknown". Claims about types rather than nodes keep it: the cause above, `String is not assignable to Number.`, comes from a relation given two types; nothing at that level knows which node produced either, because `infix()` receives types, not the children they came from. Definition cycles, by contrast, are refused at the symbol read that closes the cycle because cycle analysis now follows the compiler's descent.
 
 Refusals that a compiler wraps with `within()` carry one path per level, outermost first — a match arm body that will not type gives the match node's path on the wrapper and the arm's path on the cause.
 
@@ -666,10 +663,10 @@ Events are ordered and nested. Observation does not change evaluation results. P
 
 Plugin code is expected to depend on the APIs documented here. The following classes may be public for compiler implementation or testing but are not extension-facing APIs:
 
-- `CompiledNode` and `Runtime`;
+- `CompiledNode`, `Runtime`, and `LocalScope`;
 - `CompilationAborted` and `EvaluationAborted`;
 - `CoreSourceCompilers` and classes under `SourceCompilers`;
-- direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `CompiledSubprogram`, `BoundOperation`, or `SourceEvaluation`;
+- direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `CompiledScopedExpression`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
 - `TypeInference` and `TypeEnvironment` for implementing source compilers;
 - `Analysis\CompilationState`, the compiler's record of what became of each source. Failure is one of its cases, not a type: there is no type standing for a node that failed, so there is nothing to be handed, nothing to wrap in a type of your own, and nothing for certification to search a type for. A `Program` refuses to be built from a tree in which anything failed, and your own types — including composites Axiom cannot see inside — are never inspected. See "Report Failures at the Right Boundary" in the extension guide.

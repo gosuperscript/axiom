@@ -38,7 +38,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
-     * @param Closure(Subexpression, array<string, Type>, string): Result<CompiledNode, TypeMismatch> $compileSubprogram
+     * @param Closure(ScopedExpression, array<string, Type>, LocalScope, string): Result<CompiledNode, TypeMismatch> $compileScope
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
@@ -47,7 +47,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileSymbol,
-        private Closure $compileSubprogram,
+        private Closure $compileScope,
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
@@ -126,13 +126,14 @@ final readonly class SourceCompilation
      *
      * @param array<string, Type> $parameterTypes
      */
-    public function subprogram(
-        Subexpression $expression,
+    public function scope(
+        ScopedExpression $expression,
         array $parameterTypes,
         ?string $role = null,
-    ): CompiledSubprogram {
+    ): CompiledScopedExpression {
         $path = $this->childPath();
-        $node = $this->require(($this->compileSubprogram)($expression, $parameterTypes, $path));
+        $scope = new LocalScope();
+        $node = $this->require(($this->compileScope)($expression, $parameterTypes, $scope, $path));
 
         $this->recorder?->recordReferences($node->references);
 
@@ -140,7 +141,11 @@ final readonly class SourceCompilation
             $this->recorder->child($compiled, $role);
         }
 
-        return new CompiledSubprogram($node, $expression->parameters, $path);
+        if ($node->failed) {
+            $this->absorb();
+        }
+
+        return new CompiledScopedExpression($node, $expression->parameters, $path, $scope);
     }
 
     /**

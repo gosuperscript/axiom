@@ -11,17 +11,17 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Subexpression;
+use Superscript\Axiom\ScopedExpression;
 
-#[CoversClass(Subexpression::class)]
+#[CoversClass(ScopedExpression::class)]
 #[UsesClass(StaticSource::class)]
-final class SubexpressionTest extends TestCase
+final class ScopedExpressionTest extends TestCase
 {
     #[Test]
     public function it_keeps_its_parameters_and_body(): void
     {
         $body = new StaticSource(true);
-        $expression = new Subexpression(['item'], $body);
+        $expression = new ScopedExpression(['item'], $body);
 
         $this->assertSame(['item'], $expression->parameters);
         $this->assertSame($body, $expression->body);
@@ -42,6 +42,6 @@ final class SubexpressionTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new Subexpression($parameters, new StaticSource(true));
+        new ScopedExpression($parameters, new StaticSource(true));
     }
 }

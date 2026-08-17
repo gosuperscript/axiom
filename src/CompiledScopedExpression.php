@@ -6,21 +6,20 @@ namespace Superscript\Axiom;
 
 use LogicException;
 use Superscript\Axiom\Exceptions\CompilationAborted;
-use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Types\Type;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
 /**
- * A separately-bound compiled source body.
+ * A lexically scoped compiled source body.
  *
  * Source compilers receive this only from
- * {@see SourceCompilation::subprogram()}. Its argument values therefore come
- * from already-certified compiled parents and enter a fresh Runtime directly,
- * without pretending to cross a Program's public admission boundary again.
+ * {@see SourceCompilation::scope()}. Its local values therefore come from
+ * already-certified compiled parents, while every free symbol resolves
+ * lexically through the enclosing program.
  */
-final readonly class CompiledSubprogram
+final readonly class CompiledScopedExpression
 {
     public Type $returns;
 
@@ -32,6 +31,7 @@ final readonly class CompiledSubprogram
         private CompiledNode $node,
         private array $parameters,
         private string $path,
+        private LocalScope $scope,
     ) {
         $this->returns = $node->returns;
     }
@@ -53,7 +53,7 @@ final readonly class CompiledSubprogram
      * @param array<string, mixed> $bindings
      * @return Result<Option<mixed>, Throwable>
      */
-    public function invoke(array $bindings, ?Observer $observer = null): Result
+    public function invoke(array $bindings, Runtime $runtime): Result
     {
         $actual = array_keys($bindings);
         $expected = $this->parameters;
@@ -61,9 +61,13 @@ final readonly class CompiledSubprogram
         sort($expected);
 
         if ($actual !== $expected) {
-            throw new LogicException('A compiled subprogram requires exactly its declared bindings.');
+            throw new LogicException('A compiled scoped expression requires exactly its declared bindings.');
         }
 
-        return $this->node->evaluate(new Runtime(new Bindings($bindings), $observer));
+        return $runtime->within(
+            $this->scope,
+            new Bindings($bindings),
+            fn(): Result => $this->node->evaluate($runtime),
+        );
     }
 }

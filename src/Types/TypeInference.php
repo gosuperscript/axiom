@@ -10,16 +10,16 @@ use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
-use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
-use Superscript\Axiom\Subexpression;
+use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Result\Result;
 
@@ -165,7 +165,7 @@ final readonly class TypeInference
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(SymbolSource $symbol, string $path): Result => $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $recorder),
-            function (Subexpression $expression, array $parameterTypes, string $path) use ($recorder): Result {
+            function (ScopedExpression $expression, array $parameterTypes, LocalScope $scope, string $path) use ($environment, $recorder): Result {
                 $expected = $expression->parameters;
                 $actual = array_keys($parameterTypes);
                 sort($expected);
@@ -173,7 +173,7 @@ final readonly class TypeInference
 
                 if ($actual !== $expected) {
                     return Err(new TypeMismatch(sprintf(
-                        'Subexpression parameters [%s] require matching type declarations; received [%s].',
+                        'Scoped expression parameters [%s] require matching type declarations; received [%s].',
                         implode(', ', $expression->parameters),
                         implode(', ', array_keys($parameterTypes)),
                     ), path: $path));
@@ -181,7 +181,7 @@ final readonly class TypeInference
 
                 return $this->compile(
                     $expression->body,
-                    new TypeEnvironment(new Definitions(), $parameterTypes),
+                    $environment->nested($scope, $parameterTypes),
                     $path,
                     $recorder,
                 );

@@ -11,8 +11,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Superscript\Axiom\CompiledSubprogram;
+use Superscript\Axiom\CompiledScopedExpression;
 use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
@@ -23,7 +24,7 @@ use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\Subexpression;
+use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\ListType;
@@ -34,12 +35,12 @@ use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
 
-/** @internal Host fixture: whether any item satisfies one separately-bound predicate. */
-final readonly class SubprogramAnySource implements Source
+/** @internal Host fixture: whether any item satisfies one lexically scoped predicate. */
+final readonly class ScopedAnySource implements Source
 {
     public function __construct(
         public Source $items,
-        public Subexpression $predicate,
+        public ScopedExpression $predicate,
     ) {}
 }
 
@@ -49,29 +50,29 @@ final readonly class CountedPredicateSource implements Source
     public function __construct(public Source $body) {}
 }
 
-/** @internal Host fixture for a value-dependent failure inside a separately-bound predicate. */
+/** @internal Host fixture for a value-dependent failure inside a scoped predicate. */
 final readonly class FailingPredicateSource implements Source
 {
     public function __construct(public RuntimeException $failure) {}
 }
 
-/** @internal Host fixture exposing direct subprogram invocation cases. */
-final readonly class InvokeSubprogramSource implements Source
+/** @internal Host fixture exposing direct scoped-expression invocation cases. */
+final readonly class InvokeScopedExpressionSource implements Source
 {
     /**
      * @param array<string, Type> $parameterTypes
      * @param array<string, mixed> $bindings
      */
     public function __construct(
-        public Subexpression $expression,
+        public ScopedExpression $expression,
         public array $parameterTypes,
         public array $bindings,
         public ?Type $expectedPresent = null,
     ) {}
 }
 
-/** @internal Dialect fixture implementing the callers the subprogram interface is for. */
-final class SubprogramExtension extends Extension
+/** @internal Dialect fixture implementing the callers the scoped-expression interface is for. */
+final class ScopedExpressionExtension extends Extension
 {
     public int $anyCompilations = 0;
 
@@ -82,30 +83,35 @@ final class SubprogramExtension extends Extension
     public function sourceCompilers(): array
     {
         return [
-            SubprogramAnySource::class => $this->compileAny(...),
+            ScopedAnySource::class => $this->compileAny(...),
             CountedPredicateSource::class => $this->compileCountedPredicate(...),
             FailingPredicateSource::class => $this->compileFailingPredicate(...),
-            InvokeSubprogramSource::class => $this->compileInvocation(...),
+            InvokeScopedExpressionSource::class => $this->compileInvocation(...),
         ];
     }
 
-    private function compileAny(SubprogramAnySource $source, SourceCompilation $compilation): CompiledSource
+    private function compileAny(ScopedAnySource $source, SourceCompilation $compilation): CompiledSource
     {
         $this->anyCompilations++;
         $items = $compilation->child($source->items, 'items');
-        $itemsType = PresentType::of($compilation->typeOf($items));
+        $itemsType = PresentType::of($items->returns);
 
         if (!$itemsType instanceof ListType) {
             $compilation->reject('Any needs a list.');
         }
 
+        if (count($source->predicate->parameters) !== 1) {
+            $compilation->reject('Any needs exactly one predicate parameter.');
+        }
+
+        $parameter = $source->predicate->parameters[0];
         $predicate = $compilation
-            ->subprogram($source->predicate, ['item' => $itemsType->type], 'predicate')
+            ->scope($source->predicate, [$parameter => $itemsType->type], 'predicate')
             ->expectPresent(new BooleanType());
 
-        return $compilation->custom(new BooleanType(), static function (SourceEvaluation $evaluation) use ($items, $predicate): bool {
+        return $compilation->custom(new BooleanType(), static function (SourceEvaluation $evaluation) use ($items, $parameter, $predicate): bool {
             foreach ($evaluation->value($items) ?? [] as $item) {
-                if ($evaluation->invoke($predicate, ['item' => $item]) === true) {
+                if ($evaluation->invoke($predicate, [$parameter => $item]) === true) {
                     return true;
                 }
             }
@@ -120,7 +126,7 @@ final class SubprogramExtension extends Extension
         $body = $compilation->child($source->body, 'body');
 
         return $compilation->custom(
-            $compilation->typeOf($body),
+            $body->returns,
             function (SourceEvaluation $evaluation) use ($body): mixed {
                 $this->predicateEvaluations++;
 
@@ -134,27 +140,26 @@ final class SubprogramExtension extends Extension
         return $compilation->custom(new BooleanType(), fn(): Result => Err($source->failure));
     }
 
-    private function compileInvocation(InvokeSubprogramSource $source, SourceCompilation $compilation): CompiledSource
+    private function compileInvocation(InvokeScopedExpressionSource $source, SourceCompilation $compilation): CompiledSource
     {
-        $subprogram = $compilation->subprogram($source->expression, $source->parameterTypes, 'expression');
+        $scoped = $compilation->scope($source->expression, $source->parameterTypes, 'expression');
 
         if ($source->expectedPresent !== null) {
-            $subprogram->expectPresent($source->expectedPresent);
+            $scoped->expectPresent($source->expectedPresent);
         }
 
         return $compilation->custom(
-            $subprogram->returns,
-            static fn(SourceEvaluation $evaluation): mixed => $evaluation->invoke($subprogram, $source->bindings),
+            $scoped->returns,
+            static fn(SourceEvaluation $evaluation): mixed => $evaluation->invoke($scoped, $source->bindings),
         );
     }
 }
 
-#[CoversClass(Subexpression::class)]
-#[CoversClass(CompiledSubprogram::class)]
+#[CoversClass(ScopedExpression::class)]
+#[CoversClass(CompiledScopedExpression::class)]
 #[CoversClass(SourceCompilation::class)]
 #[CoversClass(SourceEvaluation::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
-#[CoversClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom')]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(CompiledSource::class)]
@@ -162,16 +167,10 @@ final class SubprogramExtension extends Extension
 #[UsesClass(\Superscript\Axiom\Program::class)]
 #[UsesClass(\Superscript\Axiom\Runtime::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
-#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
-#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationAnalysis::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationNode::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationRecorder::class)]
-#[UsesClass(\Superscript\Axiom\Analysis\References::class)]
-#[UsesClass(\Superscript\Axiom\Analysis\RecoveringCompiler::class)]
-#[UsesClass(\Superscript\Axiom\Analysis\Diagnosis::class)]
-#[UsesClass(\Superscript\Axiom\Analysis\ErrorRecovery::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(Expression::class)]
@@ -202,7 +201,6 @@ final class SubprogramExtension extends Extension
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(RecordType::class)]
-#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
@@ -215,23 +213,22 @@ final class SubprogramExtension extends Extension
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
-#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
 #[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
-final class SubprogramTest extends TestCase
+final class ScopedExpressionCompilationTest extends TestCase
 {
     #[Test]
     public function it_compiles_once_invokes_repeatedly_and_short_circuits(): void
     {
-        $extension = new SubprogramExtension();
+        $extension = new ScopedExpressionExtension();
         $expression = new Expression(
-            new SubprogramAnySource(
+            new ScopedAnySource(
                 new SymbolSource('items'),
-                new Subexpression(['item'], new CountedPredicateSource(new InfixExpression(
+                new ScopedExpression(['item'], new CountedPredicateSource(new InfixExpression(
                     new SymbolSource('item'),
                     '>',
                     new StaticSource(1),
@@ -250,7 +247,7 @@ final class SubprogramTest extends TestCase
         $this->assertSame(1, $extension->predicateCompilations);
         $this->assertSame(4, $extension->predicateEvaluations);
         $this->assertSame(['items'], $expression->parameters());
-        $this->assertSame(['items'], array_map(static fn($reference): string => $reference->describe(), $program->references));
+        $this->assertSame(['items'], $program->references);
         $this->assertContains(CountedPredicateSource::class, array_map(
             static fn($event): string => $event->node->sourceType,
             $observer->events,
@@ -262,86 +259,154 @@ final class SubprogramTest extends TestCase
     }
 
     #[Test]
-    public function nested_subprograms_shadow_the_same_parameter_name(): void
+    public function nested_scopes_capture_outer_parameters_without_conventions(): void
     {
-        $extension = new SubprogramExtension();
+        $extension = new ScopedExpressionExtension();
         $number = new \Superscript\Axiom\Types\NumberType();
         $expression = new Expression(
-            new SubprogramAnySource(
+            new ScopedAnySource(
                 new SymbolSource('groups'),
-                new Subexpression(['item'], new SubprogramAnySource(
-                    new MemberAccessSource(new SymbolSource('item'), 'values'),
-                    new Subexpression(['item'], new InfixExpression(
+                new ScopedExpression(['group'], new ScopedAnySource(
+                    new MemberAccessSource(new SymbolSource('group'), 'values'),
+                    new ScopedExpression(['item'], new InfixExpression(
                         new SymbolSource('item'),
                         '>',
-                        new StaticSource(1),
+                        new MemberAccessSource(new SymbolSource('group'), 'minimum'),
                     )),
                 )),
             ),
             dialect: Dialect::core()->with($extension),
-            declarations: ['groups' => new ListType(new RecordType(['values' => new ListType($number)]))],
+            declarations: ['groups' => new ListType(new RecordType([
+                'minimum' => $number,
+                'values' => new ListType($number),
+            ]))],
         );
 
         $program = $expression->compile()->unwrap();
 
         $this->assertTrue($program(['groups' => [
-            ['values' => [0, 1]],
-            ['values' => [0, 2]],
+            ['minimum' => 1, 'values' => [0, 1]],
+            ['minimum' => 2, 'values' => [0, 3]],
         ]])->unwrap()->unwrap());
         $this->assertSame(2, $extension->anyCompilations);
         $this->assertSame(['groups'], $expression->parameters());
-        $this->assertSame(['groups'], array_map(static fn($reference): string => $reference->describe(), $program->references));
     }
 
     #[Test]
     public function it_locates_a_wrong_return_type_at_the_subexpression(): void
     {
-        $expression = $this->anyExpression(new Subexpression(['item'], new StaticSource('not boolean')));
+        $expression = $this->anyExpression(new ScopedExpression(['item'], new StaticSource('not boolean')));
         $refusal = $expression->compile()->unwrapErr();
-        $diagnosis = $expression->diagnose();
-
-        $this->assertSame('$.children[1].node', $refusal->deepestPath());
+        $this->assertSame('$.children[1].node', $refusal->path);
         $this->assertStringContainsString('must provide Boolean', $refusal->describe());
-        $this->assertCount(1, $diagnosis->diagnostics);
-        $this->assertSame($refusal->describe(), $diagnosis->diagnostics[0]->describe());
     }
 
     #[Test]
-    public function a_free_symbol_stays_visible_but_cannot_capture_the_enclosing_program(): void
+    public function a_free_symbol_is_captured_from_the_enclosing_program(): void
     {
         $expression = new Expression(
-            new SubprogramAnySource(
+            new ScopedAnySource(
                 new SymbolSource('items'),
-                new Subexpression(['item'], new InfixExpression(
+                new ScopedExpression(['item'], new InfixExpression(
                     new SymbolSource('item'),
                     '>',
                     new SymbolSource('threshold'),
                 )),
             ),
-            dialect: Dialect::core()->with(new SubprogramExtension()),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
             declarations: [
                 'items' => new ListType(new \Superscript\Axiom\Types\NumberType()),
                 'threshold' => new \Superscript\Axiom\Types\NumberType(),
             ],
         );
 
-        $refusal = $expression->compile()->unwrapErr();
-        $diagnosis = $expression->diagnose();
+        $program = $expression->compile()->unwrap();
 
         $this->assertSame(['items', 'threshold'], $expression->parameters());
-        $this->assertSame('$.children[1].node.children[1].node', $refusal->deepestPath());
-        $this->assertStringStartsWith('Unbound symbol [threshold]', $refusal->message);
-        $this->assertSame(
-            ['items', 'threshold'],
-            array_map(static fn($reference): string => $reference->describe(), $diagnosis->references),
-        );
+        $this->assertSame(['items', 'threshold'], $program->references);
+        $this->assertTrue($program(['items' => [1, 3], 'threshold' => 2])->unwrap()->unwrap());
     }
 
     #[Test]
-    public function a_subprogram_runtime_failure_is_the_outer_programs_failure(): void
+    public function an_undeclared_free_symbol_refuses_as_an_enclosing_input(): void
+    {
+        $expression = new Expression(
+            new ScopedAnySource(
+                new SymbolSource('items'),
+                new ScopedExpression(['candidate'], new InfixExpression(
+                    new SymbolSource('candidate'),
+                    '>',
+                    new SymbolSource('threshold'),
+                )),
+            ),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
+            declarations: ['items' => new ListType(new \Superscript\Axiom\Types\NumberType())],
+        );
+
+        $refusal = $expression->compile()->unwrapErr();
+        $this->assertSame(['items', 'threshold'], $expression->parameters());
+        $this->assertSame('$.children[1].node.children[1].node', $refusal->path);
+        $this->assertStringStartsWith('Unbound symbol [threshold]', $refusal->message);
+    }
+
+    #[Test]
+    public function an_enclosing_definition_is_shared_across_every_invocation(): void
+    {
+        $extension = new ScopedExpressionExtension();
+        $expression = new Expression(
+            new ScopedAnySource(
+                new SymbolSource('items'),
+                new ScopedExpression(['candidate'], new InfixExpression(
+                    new SymbolSource('candidate'),
+                    '>',
+                    new SymbolSource('threshold'),
+                )),
+            ),
+            definitions: new Definitions([
+                'threshold' => new CountedPredicateSource(new StaticSource(1)),
+            ]),
+            dialect: Dialect::core()->with($extension),
+            declarations: ['items' => new ListType(new \Superscript\Axiom\Types\NumberType())],
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertTrue($program(['items' => [0, 1, 2]])->unwrap()->unwrap());
+        $this->assertSame(1, $extension->predicateCompilations);
+        $this->assertSame(1, $extension->predicateEvaluations);
+    }
+
+    #[Test]
+    public function a_local_parameter_does_not_rebind_an_outer_definition_dependency(): void
+    {
+        $number = new \Superscript\Axiom\Types\NumberType();
+        $expression = new Expression(
+            new ScopedAnySource(
+                new SymbolSource('items'),
+                new ScopedExpression(['item'], new InfixExpression(
+                    new SymbolSource('item'),
+                    '<',
+                    new SymbolSource('outer'),
+                )),
+            ),
+            definitions: new Definitions(['outer' => new SymbolSource('item')]),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
+            declarations: [
+                'item' => $number,
+                'items' => new ListType($number),
+            ],
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertTrue($program(['item' => 10, 'items' => [2]])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_scoped_expression_runtime_failure_is_the_outer_programs_failure(): void
     {
         $failure = new RuntimeException('predicate failed');
-        $program = $this->anyExpression(new Subexpression(['item'], new FailingPredicateSource($failure)))
+        $program = $this->anyExpression(new ScopedExpression(['item'], new FailingPredicateSource($failure)))
             ->compile()
             ->unwrap();
 
@@ -352,8 +417,8 @@ final class SubprogramTest extends TestCase
     public function invocation_binding_order_carries_no_meaning(): void
     {
         $number = new \Superscript\Axiom\Types\NumberType();
-        $program = $this->invocationExpression(new InvokeSubprogramSource(
-            new Subexpression(['right', 'left', 'middle'], new InfixExpression(
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['right', 'left', 'middle'], new InfixExpression(
                 new SymbolSource('left'),
                 '+',
                 new SymbolSource('right'),
@@ -378,8 +443,8 @@ final class SubprogramTest extends TestCase
     public function invocation_requires_exactly_the_declared_bindings(array $bindings): void
     {
         $number = new \Superscript\Axiom\Types\NumberType();
-        $program = $this->invocationExpression(new InvokeSubprogramSource(
-            new Subexpression(['item'], new SymbolSource('item')),
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new SymbolSource('item')),
             ['item' => $number],
             $bindings,
         ))->compile()->unwrap();
@@ -394,24 +459,24 @@ final class SubprogramTest extends TestCase
     public function parameter_types_must_name_the_subexpressions_parameters(): void
     {
         $number = new \Superscript\Axiom\Types\NumberType();
-        $expression = $this->invocationExpression(new InvokeSubprogramSource(
-            new Subexpression(['item'], new SymbolSource('item')),
+        $expression = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new SymbolSource('item')),
             ['other' => $number],
             ['other' => 1],
         ));
 
         $refusal = $expression->compile()->unwrapErr();
 
-        $this->assertSame('$.children[0].node', $refusal->deepestPath());
+        $this->assertSame('$.children[0].node', $refusal->path);
         $this->assertStringContainsString('parameters [item]', $refusal->message);
         $this->assertStringContainsString('received [other]', $refusal->message);
     }
 
     #[Test]
-    public function a_parameterless_subprogram_can_return_absence(): void
+    public function a_parameterless_scope_can_return_absence(): void
     {
-        $program = $this->invocationExpression(new InvokeSubprogramSource(
-            new Subexpression([], new StaticSource(null)),
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression([], new StaticSource(null)),
             [],
             [],
         ))->compile()->unwrap();
@@ -419,20 +484,20 @@ final class SubprogramTest extends TestCase
         $this->assertTrue($program()->unwrap()->isNone());
     }
 
-    private function anyExpression(Subexpression $predicate): Expression
+    private function anyExpression(ScopedExpression $predicate): Expression
     {
         return new Expression(
-            new SubprogramAnySource(new SymbolSource('items'), $predicate),
-            dialect: Dialect::core()->with(new SubprogramExtension()),
+            new ScopedAnySource(new SymbolSource('items'), $predicate),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
             declarations: ['items' => new ListType(new \Superscript\Axiom\Types\NumberType())],
         );
     }
 
-    private function invocationExpression(InvokeSubprogramSource $source): Expression
+    private function invocationExpression(InvokeScopedExpressionSource $source): Expression
     {
         return new Expression(
             $source,
-            dialect: Dialect::core()->with(new SubprogramExtension()),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
         );
     }
 }

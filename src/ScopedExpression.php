@@ -9,13 +9,13 @@ use InvalidArgumentException;
 /**
  * A persistable source body whose named parameters are bound by its owner.
  *
- * A Subexpression is not itself a Source: it has no type until the owning
+ * A ScopedExpression is not itself a Source: it has no type until the owning
  * source compiler supplies parameter types through
- * {@see SourceCompilation::subprogram()}. Keeping the binder beside the body
- * nevertheless makes its free symbols structurally knowable before that
- * compilation, which keeps parameter and definition analysis complete.
+ * {@see SourceCompilation::scope()}. The compiler then resolves its named
+ * parameters locally and records every other symbol as a lexical read from
+ * the enclosing expression.
  */
-final readonly class Subexpression
+final readonly class ScopedExpression
 {
     /** @param list<string> $parameters */
     public function __construct(
@@ -24,12 +24,12 @@ final readonly class Subexpression
     ) {
         foreach ($parameters as $parameter) {
             if (!is_string($parameter) || $parameter === '' || str_contains($parameter, '.')) {
-                throw new InvalidArgumentException('Subexpression parameters must be non-empty root symbol names.');
+                throw new InvalidArgumentException('Scoped expression parameters must be non-empty root symbol names.');
             }
         }
 
         if (count(array_unique($parameters)) !== count($parameters)) {
-            throw new InvalidArgumentException('Subexpression parameter names must be distinct.');
+            throw new InvalidArgumentException('Scoped expression parameter names must be distinct.');
         }
     }
 }
