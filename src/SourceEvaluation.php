@@ -28,6 +28,23 @@ final readonly class SourceEvaluation
         return $result->unwrap()->unwrapOr(null);
     }
 
+    /**
+     * Invoke a separately-bound compiled body with values produced by its
+     * owning compiled source.
+     *
+     * @param array<string, mixed> $bindings
+     */
+    public function invoke(CompiledSubprogram $program, array $bindings): mixed
+    {
+        $result = $program->invoke($bindings, $this->runtime->observer);
+
+        if ($result->isErr()) {
+            throw new EvaluationAborted($result->unwrapErr());
+        }
+
+        return $result->unwrap()->unwrapOr(null);
+    }
+
     public function annotate(string $key, mixed $value): void
     {
         $this->runtime->annotate($key, $value);

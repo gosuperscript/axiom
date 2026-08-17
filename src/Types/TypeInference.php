@@ -10,6 +10,7 @@ use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\CompilationAbsorbed;
 use Superscript\Axiom\Fields\OpaqueField;
@@ -19,6 +20,7 @@ use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\Subexpression;
 use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
@@ -164,6 +166,36 @@ final readonly class TypeInference
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(ReferencePath $reference, string $path): Result => $this->compileOwnedReference($reference, $owner, $environment, $path, $recorder),
+            function (Subexpression $expression, array $parameterTypes, string $path) use ($recorder): Result {
+                $expected = $expression->parameters;
+                $actual = array_keys($parameterTypes);
+                sort($expected);
+                sort($actual);
+
+                if ($actual !== $expected) {
+                    return Err(new TypeMismatch(sprintf(
+                        'Subexpression parameters [%s] require matching type declarations; received [%s].',
+                        implode(', ', $expression->parameters),
+                        implode(', ', array_keys($parameterTypes)),
+                    ), path: $path));
+                }
+
+                $reads = new CompilationRecorder($path);
+                $compiled = $this->compile(
+                    $expression->body,
+                    new TypeEnvironment(new Definitions(), $parameterTypes),
+                    $path,
+                    $reads,
+                );
+
+                foreach ($reads->references() as $reference) {
+                    if (!in_array($reference->root(), $expression->parameters, true)) {
+                        $recorder->recordReferences([$reference]);
+                    }
+                }
+
+                return $compiled;
+            },
             fn(ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
             fn(ReferencePath $reference): ?string => $environment->definitionKeyOf($reference),
             fn(mixed $value): Result => $this->inferValue($value),

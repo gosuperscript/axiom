@@ -50,6 +50,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(ReferencePath, string): Result<CompiledNode, TypeMismatch> $compileReference
+     * @param Closure(Subexpression, array<string, Type>, string): Result<CompiledNode, TypeMismatch> $compileSubprogram
      * @param Closure(ReferencePath): ?Result<CompiledNode, TypeMismatch> $compileInputPath
      * @param Closure(ReferencePath): ?string $definitionKeyOf
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
@@ -60,6 +61,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileReference,
+        private Closure $compileSubprogram,
         private Closure $compileInputPath,
         private Closure $definitionKeyOf,
         private Closure $typeOfValue,
@@ -150,6 +152,39 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * Compile one separately-bound body through this compilation's dialect.
+     *
+     * The parameter names are persisted on the Subexpression; the owning
+     * source compiler supplies their types, commonly from another child's
+     * certified type. The body sees only those parameters: definitions and
+     * enclosing inputs do not cross this scope implicitly.
+     *
+     * @param array<string, Type> $parameterTypes
+     */
+    public function subprogram(
+        Subexpression $expression,
+        array $parameterTypes,
+        ?string $role = null,
+    ): CompiledSubprogram {
+        $path = $this->childPath();
+        $node = $this->compiled(
+            ($this->compileSubprogram)($expression, $parameterTypes, $path),
+            $expression->body,
+            $role,
+        );
+
+        if ($this->recorder !== null && ($compiled = $node->compilation()) !== null) {
+            $this->recorder->child($compiled, $role);
+        }
+
+        if ($node->failed) {
+            $this->absorb();
+        }
+
+        return new CompiledSubprogram($node, $expression->parameters, $path);
     }
 
     /**
