@@ -21,6 +21,7 @@ use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\ScopedExpression;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
@@ -166,6 +167,7 @@ final readonly class TypeInference
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(ReferencePath $reference, string $path): Result => $environment->nodeOfReference($reference, $this, $path, $recorder),
             fn(ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
+            fn(SymbolSource $symbol, string $path): ?Result => $environment->nodeOfDefinition(SymbolSource::key($symbol->name, $symbol->namespace), $this, $path, $recorder),
             function (ScopedExpression $expression, array $parameterTypes, LocalScope $scope, string $path) use ($environment, $recorder): Result {
                 $expected = $expression->parameters;
                 $actual = array_keys($parameterTypes);

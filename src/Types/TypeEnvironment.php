@@ -94,61 +94,72 @@ final class TypeEnvironment
             return $this->parent->nodeOfReference($reference, $compiler, $path, $reads);
         }
 
-        if (isset($this->memo[$name])) {
-            return $this->memo[$name];
+        $definition = $this->nodeOfDefinition($name, $compiler, $path, $reads);
+
+        if ($definition !== null) {
+            return $definition;
         }
 
-        $position = array_search($name, $this->inProgress, strict: true);
+        $reads?->recordReferences([$reference]);
+
+        return Err(new TypeMismatch(sprintf(
+            'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            $reference->describe(),
+        )));
+    }
+
+    /** @return ?Result<CompiledNode, TypeMismatch> */
+    public function nodeOfDefinition(string $key, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): ?Result
+    {
+        if (!$this->definitions->has($key)) {
+            return null;
+        }
+
+        if (isset($this->memo[$key])) {
+            return $this->memo[$key];
+        }
+
+        $position = array_search($key, $this->inProgress, strict: true);
 
         if ($position !== false) {
-            $reads?->recordReferences([new ReferencePath($name)]);
+            $reads?->recordReferences([self::referenceOfKey($key)]);
 
             return Err(new TypeMismatch(sprintf(
                 'Cyclic symbol definition: %s.',
-                implode(' → ', [...array_slice($this->inProgress, $position), $name]),
+                implode(' → ', [...array_slice($this->inProgress, $position), $key]),
             )));
         }
 
-        $source = $this->definitions->get($name);
-
-        if ($source->isNone()) {
-            $reads?->recordReferences([$reference]);
-
-            return Err(new TypeMismatch(sprintf(
-                'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
-                $reference->describe(),
-            )));
-        }
-
-        $this->inProgress[] = $name;
-        $compiled = $compiler->compile($source->unwrap(), $this, $path, $reads);
+        $source = $this->definitions->get($key)->unwrap();
+        $this->inProgress[] = $key;
+        $compiled = $compiler->compile($source, $this, $path, $reads);
         array_pop($this->inProgress);
 
-        $this->memo[$name] = $compiled->map(fn(CompiledNode $node): CompiledNode => $node->evaluatedBy(
-            static function (Runtime $runtime) use ($node, $name) {
-                $result = $runtime->slot($name, fn() => $node->evaluate($runtime));
+        $this->memo[$key] = $compiled->map(fn(CompiledNode $node): CompiledNode => $node->evaluatedBy(
+            static function (Runtime $runtime) use ($node, $key) {
+                $result = $runtime->slot($key, fn() => $node->evaluate($runtime));
 
-                $runtime->annotate('label', $name);
+                $runtime->annotate('label', $key);
                 $result->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->annotate('result', $value)));
 
                 return $result;
             },
         ));
 
-        return $this->memo[$name];
+        return $this->memo[$key];
     }
 
     /**
      * Compile a path rooted in a declared input or lexical parameter as one
      * structural read. Definition-rooted, root-only, and arbitrary paths
-     * return null; the
-     * reference compiler resolves the root and projects any remaining members.
+     * return null; the reference compiler resolves the root and projects any
+     * remaining members.
      *
      * @return ?Result<CompiledNode, TypeMismatch>
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
-        if ($reference->isRoot() || $this->definitions->has($reference->root())) {
+        if ($reference->isRoot() || $this->definitions->keyOf($reference) !== null) {
             return null;
         }
 
@@ -214,6 +225,13 @@ final class TypeEnvironment
         }
 
         return $current;
+    }
+
+    private static function referenceOfKey(string $key): ReferencePath
+    {
+        $segments = explode('.', $key);
+
+        return new ReferencePath($segments[0], ...array_slice($segments, 1));
     }
 
     /** @return Option<mixed> */

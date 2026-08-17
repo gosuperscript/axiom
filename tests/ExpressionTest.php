@@ -285,6 +285,36 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
+    public function deprecated_namespaced_symbols_read_structural_inputs(): void
+    {
+        $program = (new Expression(
+            source: new SymbolSource('business.turnover', 'answers'),
+            declarations: new \Superscript\Axiom\Types\RecordType([
+                'answers' => new \Superscript\Axiom\Types\RecordType([
+                    'business' => new \Superscript\Axiom\Types\RecordType([
+                        'turnover' => new NumberType(),
+                    ]),
+                ]),
+            ]),
+        ))->compile()->unwrap();
+
+        $this->assertSame(42, $program(['answers' => ['business' => ['turnover' => 42]]])->unwrap()->unwrap());
+        $this->assertEquals([new ReferencePath('answers', 'business', 'turnover')], $program->references);
+    }
+
+    #[Test]
+    public function deprecated_namespaced_symbols_read_legacy_definitions(): void
+    {
+        $expression = new Expression(
+            source: new SymbolSource('score', 'variables'),
+            definitions: new Definitions(['variables' => ['score' => new StaticSource(7)]]),
+        );
+
+        $this->assertSame([], $expression->parameters());
+        $this->assertSame(7, $expression->compile()->unwrap()->call()->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function a_symbol_cannot_be_both_declared_and_defined(): void
     {
         // Disjoint namespaces: a symbol is a parameter or a derived value,

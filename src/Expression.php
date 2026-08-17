@@ -65,7 +65,10 @@ final readonly class Expression
         // names belong to their record and are reached by ReferencePath.
         $collisions = array_filter(
             $this->declarations->names(),
-            fn(string $key) => $this->definitions->has($key),
+            fn(string $key) => array_any(
+                $this->definitions->keys(),
+                static fn(string $definition): bool => explode('.', $definition)[0] === $key,
+            ),
         );
 
         if ($collisions !== []) {
@@ -101,7 +104,7 @@ final readonly class Expression
         foreach ($this->diagnose()->references as $reference) {
             $root = $reference->root();
 
-            if ($this->definitions->has($root) || in_array($root, $parameters, strict: true)) {
+            if ($this->definitions->keyOf($reference) !== null || in_array($root, $parameters, strict: true)) {
                 continue;
             }
 
