@@ -860,21 +860,37 @@ Catch only domain exceptions your callback owns. A broad `catch (RuntimeExceptio
 
 `custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
 
-### Step 9: Compile a Separately-Bound Body
+### Step 9: Compile a Lexically Scoped Body
 
-A host source may own a body that runs repeatedly with a value supplied by another child. Persist that body as a `Subexpression`, so the parameter is visibly bound rather than misreported as a public input:
+A host source may own a body that runs repeatedly with a value supplied by another child. Persist that body as a `ScopedExpression`, so its explicit parameter names are visibly bound rather than misreported as public inputs:
 
 ```php
 final readonly class AnySource implements Source
 {
     public function __construct(
         public Source $items,
-        public Subexpression $predicate,
+        public ScopedExpression $predicate,
     ) {}
 }
 ```
 
-Compile the collection first, because its element type supplies the predicate parameter's type. The predicate compiles once; invocation only supplies a new binding:
+The binder is not a reserved `item` convention. The author chooses it, and free symbols remain ordinary lexical references:
+
+```php
+new AnySource(
+    new SymbolSource('quotes'),
+    new ScopedExpression(
+        ['candidate'],
+        new InfixExpression(
+            new MemberAccessSource(new SymbolSource('candidate'), 'premium'),
+            '<',
+            new SymbolSource('budget'),
+        ),
+    ),
+);
+```
+
+Here `candidate` is local to the predicate and `budget` comes from the enclosing expression. Compile the collection first, because its element type supplies the local parameter's type. The predicate compiles once; invocation only supplies a new binding:
 
 ```php
 private function compileAny(
@@ -888,19 +904,24 @@ private function compileAny(
         $compilation->reject('Any needs a list.');
     }
 
+    if (count($source->predicate->parameters) !== 1) {
+        $compilation->reject('Any needs exactly one predicate parameter.');
+    }
+
+    $parameter = $source->predicate->parameters[0];
     $predicate = $compilation
-        ->subprogram(
+        ->scope(
             $source->predicate,
-            ['item' => $itemsType->type],
+            [$parameter => $itemsType->type],
             'predicate',
         )
         ->expectPresent(new BooleanType());
 
     return $compilation->custom(
         new BooleanType(),
-        static function (SourceEvaluation $evaluation) use ($items, $predicate): bool {
+        static function (SourceEvaluation $evaluation) use ($items, $parameter, $predicate): bool {
             foreach ($evaluation->value($items) ?? [] as $item) {
-                if ($evaluation->invoke($predicate, ['item' => $item]) === true) {
+                if ($evaluation->invoke($predicate, [$parameter => $item]) === true) {
                     return true;
                 }
             }
@@ -911,9 +932,9 @@ private function compileAny(
 }
 ```
 
-The body compiles through the same dialect in a fresh type environment containing only the declared parameters. It cannot implicitly capture the enclosing expression's inputs or definitions. Each invocation receives a fresh runtime and shares the enclosing observer, while the supplied values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents.
+The body compiles through the same dialect in a nested lexical environment. Its parameters shadow equal outer names; every other symbol resolves through the enclosing inputs and definitions. Repeated invocations share definition memoization and observation with the enclosing runtime, while opaque scope identities ensure a local name cannot change what an already-compiled outer definition reads.
 
-`subprogram()` certifies Axiom semantics only. A host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
+The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
 
 ### References Must Stay Visible
 

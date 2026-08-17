@@ -29,14 +29,14 @@ final readonly class SourceEvaluation
     }
 
     /**
-     * Invoke a separately-bound compiled body with values produced by its
-     * owning compiled source.
+     * Invoke a lexically scoped compiled body with local values produced by
+     * its owning compiled source.
      *
      * @param array<string, mixed> $bindings
      */
-    public function invoke(CompiledSubprogram $program, array $bindings): mixed
+    public function invoke(CompiledScopedExpression $expression, array $bindings): mixed
     {
-        $result = $program->invoke($bindings, $this->runtime->observer);
+        $result = $expression->invoke($bindings, $this->runtime);
 
         if ($result->isErr()) {
             throw new EvaluationAborted($result->unwrapErr());

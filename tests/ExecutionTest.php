@@ -18,6 +18,7 @@ use Superscript\Axiom\Execution\Event;
 use Superscript\Axiom\Execution\Exited;
 use Superscript\Axiom\Execution\Node;
 use Superscript\Axiom\Execution\Threw;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\StaticSource;
@@ -39,6 +40,7 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(Threw::class)]
 #[UsesClass(Program::class)]
 #[UsesClass(Bindings::class)]
+#[UsesClass(LocalScope::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 final class ExecutionTest extends TestCase
@@ -150,5 +152,29 @@ final class ExecutionTest extends TestCase
         $runtime->annotate('ignored', true);
 
         $this->addToAssertionCount(1);
+    }
+
+    #[Test]
+    public function lexical_bindings_are_identity_based_and_restored(): void
+    {
+        $outer = new LocalScope();
+        $inner = new LocalScope();
+        $runtime = new Runtime(new Bindings(['item' => 10]));
+
+        $result = $runtime->within($outer, new Bindings(['item' => 2]), function () use ($inner, $outer, $runtime) {
+            return $runtime->within($inner, new Bindings(['item' => 3]), function () use ($inner, $outer, $runtime) {
+                $this->assertSame(2, $runtime->local($outer, 'item')->unwrap());
+                $this->assertSame(3, $runtime->local($inner, 'item')->unwrap());
+                $this->assertSame(10, $runtime->bindings->get('item')->unwrap());
+
+                return Ok(Some(true));
+            });
+        });
+
+        $this->assertTrue($result->unwrap()->unwrap());
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('only be evaluated while its local bindings are active');
+
+        $runtime->local($outer, 'item');
     }
 }

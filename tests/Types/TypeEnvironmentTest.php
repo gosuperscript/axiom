@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Bindings;
 use Superscript\Axiom\Dialect;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
@@ -39,6 +40,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(Runtime::class)]
+#[UsesClass(LocalScope::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
 #[UsesClass(\Superscript\Axiom\BoundOperation::class)]
@@ -136,6 +138,39 @@ final class TypeEnvironmentTest extends TestCase
 
         $missing = $node->evaluate(new Runtime(new Bindings()));
         $this->assertTrue($missing->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function nested_declarations_shadow_by_scope_identity_and_free_reads_resolve_outward(): void
+    {
+        $number = new NumberType();
+        $candidate = new RecordType(['amount' => $number]);
+        $scope = new LocalScope();
+        $environment = new TypeEnvironment(declarations: [
+            'candidate' => $number,
+            'outside' => $candidate,
+            'threshold' => $number,
+        ])->nested($scope, ['candidate' => $candidate]);
+
+        $local = $environment->nodeOfSymbol('candidate', self::compiler())->unwrap();
+        $outer = $environment->nodeOfSymbol('threshold', self::compiler())->unwrap();
+        $localPath = $environment->nodeOfInputPath(new ReferencePath('candidate', 'amount'))->unwrap();
+        $outerPath = $environment->nodeOfInputPath(new ReferencePath('outside', 'amount'))->unwrap();
+        $runtime = new Runtime(new Bindings([
+            'candidate' => 99,
+            'outside' => ['amount' => 10],
+            'threshold' => 5,
+        ]));
+        $bindings = new Bindings(['candidate' => ['amount' => 2]]);
+
+        $this->assertSame(['amount' => 2], $runtime->within($scope, $bindings, fn() => $local->evaluate($runtime))->unwrap()->unwrap());
+        $this->assertSame(5, $runtime->within($scope, $bindings, fn() => $outer->evaluate($runtime))->unwrap()->unwrap());
+        $this->assertSame(2, $runtime->within($scope, $bindings, fn() => $localPath->evaluate($runtime))->unwrap()->unwrap());
+        $this->assertSame(10, $runtime->within($scope, $bindings, fn() => $outerPath->evaluate($runtime))->unwrap()->unwrap());
+        $this->assertSame([], $local->references);
+        $this->assertSame([], $localPath->references);
+        $this->assertEquals([new ReferencePath('threshold')], $outer->references);
+        $this->assertEquals([new ReferencePath('outside', 'amount')], $outerPath->references);
     }
 
     #[Test]

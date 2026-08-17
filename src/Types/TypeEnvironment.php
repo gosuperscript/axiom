@@ -7,6 +7,7 @@ namespace Superscript\Axiom\Types;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Runtime;
 use Superscript\Monads\Option\Option;
@@ -16,10 +17,12 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * The symbol table for one compilation. Root symbols are either properties
- * of the declared input record or definitions; the root symbol sets are disjoint.
- * Structural input paths resolve as {@see ReferencePath}s so the
- * compiled program can project the smallest honest input record.
+ * The symbol table for one compilation. The root environment holds the
+ * disjoint declared inputs and definitions; nested environments add lexical
+ * declarations that shadow equal outer names. Structural public input paths
+ * resolve as {@see ReferencePath}s so the compiled program can project
+ * the smallest honest input record. Local reads carry an opaque scope identity
+ * instead and never masquerade as public input references.
  */
 final class TypeEnvironment
 {
@@ -31,12 +34,32 @@ final class TypeEnvironment
 
     private readonly RecordType $declarations;
 
+    private ?self $parent = null;
+
+    private ?LocalScope $localScope = null;
+
     /** @param RecordType|array<string, Type|Optional> $declarations */
     public function __construct(
         private readonly Definitions $definitions = new Definitions(),
         RecordType|array $declarations = [],
     ) {
         $this->declarations = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
+    }
+
+    /**
+     * Add declarations that shadow this environment while every other symbol
+     * continues to resolve lexically through it.
+     *
+     * @internal Scoped expression compilation owns lexical environments.
+     * @param RecordType|array<string, Type|Optional> $declarations
+     */
+    public function nested(LocalScope $scope, RecordType|array $declarations): self
+    {
+        $nested = new self(declarations: $declarations);
+        $nested->parent = $this;
+        $nested->localScope = $scope;
+
+        return $nested;
     }
 
     /** @return Result<CompiledNode, TypeMismatch> */
@@ -46,18 +69,22 @@ final class TypeEnvironment
 
         if ($property !== null) {
             $reference = new ReferencePath($name);
+            $scope = $this->localScope;
 
             return Ok(CompiledNode::returning(
                 $property->accessedType(),
-                static function (Runtime $runtime) use ($name) {
-                    $value = $runtime->bindings->get($name)->andThen(static fn(mixed $item) => Option::from($item));
+                static function (Runtime $runtime) use ($name, $scope) {
+                    $binding = $scope === null
+                        ? $runtime->bindings->get($name)
+                        : $runtime->local($scope, $name);
+                    $value = $binding->andThen(static fn(mixed $item) => Option::from($item));
 
                     $runtime->annotate('label', $name);
                     $value->inspect(fn(mixed $item) => $runtime->annotate('result', $item));
 
                     return Ok($value);
                 },
-                references: [$reference],
+                references: $scope === null ? [$reference] : [],
             ));
         }
 
@@ -65,6 +92,10 @@ final class TypeEnvironment
 
         if ($definition !== null) {
             return $definition;
+        }
+
+        if ($this->parent !== null) {
+            return $this->parent->nodeOfSymbol($name, $compiler, $path, $reads);
         }
 
         $reads?->recordReferences([new ReferencePath($name)]);
@@ -82,9 +113,12 @@ final class TypeEnvironment
      */
     public function definitionKeyOf(ReferencePath $reference): ?string
     {
-        return $this->declarations->has($reference->root())
-            ? null
-            : $this->definitions->keyOf($reference);
+        if ($this->declarations->has($reference->root())) {
+            return null;
+        }
+
+        return $this->definitions->keyOf($reference)
+            ?? $this->parent?->definitionKeyOf($reference);
     }
 
     /** @return ?Result<CompiledNode, TypeMismatch> */
@@ -134,6 +168,10 @@ final class TypeEnvironment
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
+        if ($this->declarations->property($reference->root()) === null && $this->parent !== null) {
+            return $this->parent->nodeOfInputPath($reference);
+        }
+
         if ($reference->isRoot() || !$this->declarations->has($reference->root())) {
             return null;
         }
@@ -144,10 +182,14 @@ final class TypeEnvironment
             return null;
         }
 
+        $scope = $this->localScope;
+
         return Ok(CompiledNode::returning(
             $type,
-            static function (Runtime $runtime) use ($reference) {
-                $current = $runtime->bindings->get($reference->root());
+            static function (Runtime $runtime) use ($reference, $scope) {
+                $current = $scope === null
+                    ? $runtime->bindings->get($reference->root())
+                    : $runtime->local($scope, $reference->root());
 
                 foreach ($reference->properties() as $property) {
                     $current = $current->andThen(static function (mixed $value) use ($property): Option {
@@ -171,7 +213,7 @@ final class TypeEnvironment
 
                 return Ok($current);
             },
-            references: [$reference],
+            references: $scope === null ? [$reference] : [],
         ));
     }
 

@@ -51,7 +51,7 @@ final class UnboundSymbols
             return;
         }
 
-        if ($node instanceof Subexpression) {
+        if ($node instanceof ScopedExpression) {
             self::walk($node->body, $symbols, [...$bound, ...$node->parameters]);
 
             return;

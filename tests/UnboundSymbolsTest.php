@@ -21,15 +21,15 @@ use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\Subexpression;
+use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\UnboundSymbols;
 
 /** @internal Source fixture containing one nested binder. */
-final readonly class NestedSubexpressionSource implements \Superscript\Axiom\Source
+final readonly class NestedScopedExpressionSource implements \Superscript\Axiom\Source
 {
     public function __construct(
         public \Superscript\Axiom\Source $outer,
-        public Subexpression $inner,
+        public ScopedExpression $inner,
     ) {}
 }
 
@@ -47,7 +47,7 @@ final readonly class NestedSubexpressionSource implements \Superscript\Axiom\Sou
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(Coerce::class)]
 #[UsesClass(NumberType::class)]
-#[UsesClass(Subexpression::class)]
+#[UsesClass(ScopedExpression::class)]
 final class UnboundSymbolsTest extends TestCase
 {
     #[Test]
@@ -212,7 +212,7 @@ final class UnboundSymbolsTest extends TestCase
     public function a_subexpression_hides_its_parameters_but_not_its_free_symbols(): void
     {
         $threshold = new SymbolSource('threshold');
-        $source = new Subexpression(['item'], new InfixExpression(
+        $source = new ScopedExpression(['item'], new InfixExpression(
             new SymbolSource('item'),
             '>',
             $threshold,
@@ -220,7 +220,7 @@ final class UnboundSymbolsTest extends TestCase
 
         $this->assertSame(
             [$threshold],
-            UnboundSymbols::in(new NestedSubexpressionSource(new StaticSource(null), $source)),
+            UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
         );
     }
 
@@ -228,9 +228,9 @@ final class UnboundSymbolsTest extends TestCase
     public function nested_subexpressions_keep_outer_parameters_bound_and_shadow_equal_names(): void
     {
         $outside = new SymbolSource('outside');
-        $source = new Subexpression(['item', 'outer'], new NestedSubexpressionSource(
+        $source = new ScopedExpression(['item', 'outer'], new NestedScopedExpressionSource(
             new SymbolSource('outer'),
-            new Subexpression(['item'], new InfixExpression(
+            new ScopedExpression(['item'], new InfixExpression(
                 new InfixExpression(new SymbolSource('item'), '+', new SymbolSource('outer')),
                 '+',
                 $outside,
@@ -239,7 +239,7 @@ final class UnboundSymbolsTest extends TestCase
 
         $this->assertSame(
             [$outside],
-            UnboundSymbols::in(new NestedSubexpressionSource(new StaticSource(null), $source)),
+            UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
         );
     }
 }
