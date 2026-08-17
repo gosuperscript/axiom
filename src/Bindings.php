@@ -11,8 +11,8 @@ use Superscript\Monads\Option\Some;
 /**
  * A per-call map of input values for an expression.
  *
- * Bindings answer root symbols. Reaching into a record value is structural
- * member access, represented by an explicit Source node and ReferencePath.
+ * Bindings answer root symbols. Reaching into a record value is represented
+ * by a structural ReferencePath Source.
  *
  * Bindings hold raw values and are typically constructed fresh for each
  * expression invocation. For stable named expressions (constants, named

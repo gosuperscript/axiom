@@ -39,8 +39,8 @@ use Superscript\Monads\Result\Result;
  *
  * The declaration record is the expression's complete public input
  * signature. Its root properties and definitions are disjoint symbol sets: a
- * symbol is an input or a derived value, never both. Structure beneath a
- * root is expressed only through record member access.
+ * root is an input or a derived value, never both. Structure beneath it is
+ * retained in a ReferencePath.
  */
 final readonly class Expression
 {
@@ -62,7 +62,7 @@ final readonly class Expression
         $this->declarations = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
 
         // Root declarations and definitions must remain unambiguous. Nested
-        // names belong to their record and are reached by member access.
+        // names belong to their record and are reached by ReferencePath.
         $collisions = array_filter(
             $this->declarations->names(),
             fn(string $key) => $this->definitions->has($key),
@@ -96,10 +96,19 @@ final readonly class Expression
      */
     public function parameters(): array
     {
-        return array_values(array_filter(
-            $this->diagnose()->references,
-            fn(string $key) => !$this->definitions->has($key),
-        ));
+        $parameters = [];
+
+        foreach ($this->diagnose()->references as $reference) {
+            $root = $reference->root();
+
+            if ($this->definitions->has($root) || in_array($root, $parameters, strict: true)) {
+                continue;
+            }
+
+            $parameters[] = $root;
+        }
+
+        return $parameters;
     }
 
     /**
@@ -123,7 +132,7 @@ final readonly class Expression
 
     /**
      * Compile for the sake of what compilation *learns*: every refusal in
-     * the expression rather than only the first, the symbols it reads even
+     * the expression rather than only the first, the references it reads even
      * through the parts that refuse, and the certified {@see Program} when
      * there is nothing to report. compile() is one attempt of this same
      * walk, so its refusal is this diagnosis' first diagnostic. What the

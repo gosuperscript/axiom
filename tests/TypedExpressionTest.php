@@ -24,6 +24,7 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\ReferencePath;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -52,6 +53,8 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\CoerceSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
@@ -59,6 +62,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
+#[UsesClass(Coerce::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Optional::class)]
@@ -127,6 +131,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
@@ -136,6 +141,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
 #[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 final class TypedExpressionTest extends TestCase
 {
@@ -438,9 +444,9 @@ final class TypedExpressionTest extends TestCase
         // is the one that definition reads. `employees` is declared, read by
         // nothing, and demanded by nothing.
         $expression = new Expression(
-            source: new SymbolSource('headcount'),
+            source: new ReferencePath('headcount'),
             definitions: new Definitions([
-                'headcount' => new InfixExpression(new SymbolSource('staff'), '+', new StaticSource(1)),
+                'headcount' => new InfixExpression(new ReferencePath('staff'), '+', new StaticSource(1)),
             ]),
             declarations: ['staff' => new NumberType(), 'employees' => new NumberType()],
         );
@@ -505,7 +511,7 @@ final class TypedExpressionTest extends TestCase
     public function a_nested_property_and_a_namesake_root_definition_are_distinct(): void
     {
         $expression = new Expression(
-            source: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
+            source: new ReferencePath('customer', 'turnover'),
             definitions: new Definitions(['turnover' => new StaticSource(1)]),
             declarations: ['customer' => new RecordType(['turnover' => new NumberType()])],
         );
@@ -526,7 +532,7 @@ final class TypedExpressionTest extends TestCase
 
         $program = (new Expression(
             source: new InfixExpression(
-                left: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
+                left: new ReferencePath('customer', 'turnover'),
                 operator: '*',
                 right: new StaticSource(2),
             ),
@@ -544,6 +550,22 @@ final class TypedExpressionTest extends TestCase
         // Field errors are named under the input.
         $bad = $program(['customer' => ['turnover' => 'lots']]);
         $this->assertStringContainsString('binding [customer]:', $bad->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function a_reference_path_can_project_a_record_returned_by_a_definition(): void
+    {
+        $record = new RecordType(['turnover' => new NumberType()]);
+        $program = (new Expression(
+            source: new ReferencePath('customer', 'turnover'),
+            definitions: new Definitions([
+                'customer' => new Coerce($record, new StaticSource(['turnover' => 600000])),
+            ]),
+        ))->compile()->unwrap();
+
+        $this->assertSame([], $program->references);
+        $this->assertSame(600000, $program()->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]

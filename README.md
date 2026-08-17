@@ -59,18 +59,17 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\RecordType;
 
 // area = PI * radius * radius
 $source = new InfixExpression(
-    left: new SymbolSource('PI'),
+    left: new ReferencePath('PI'),
     operator: '*',
     right: new InfixExpression(
-        left: new SymbolSource('radius'),
+        left: new ReferencePath('radius'),
         operator: '*',
-        right: new SymbolSource('radius'),
+        right: new ReferencePath('radius'),
     ),
 );
 
@@ -161,20 +160,16 @@ Declare your input types once on the `Expression`, and `compile()` certifies the
 
 ```php
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
-use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 
-$turnover = new MemberAccessSource(
-    object: new SymbolSource('customer'),
-    property: 'turnover',
-);
+$turnover = new ReferencePath('customer', 'turnover');
 $condition = new InfixExpression(
     left: new InfixExpression($turnover, '*', new StaticSource(1.2)),
     operator: '>',
@@ -318,13 +313,14 @@ Both return `Result<Option<T>, Throwable>` — no exceptions for normal control 
 Sources are the nodes a program is described with:
 
 - **`StaticSource`** — direct values
-- **`SymbolSource`** — named references: a declared parameter (read from bindings) or a defined derived value (compiled once, memoized per invocation)
+- **`ReferencePath`** — rooted references: a declared input path (read from the binding record) or a defined derived value, optionally followed by structural properties
 - **`Coerce`** — the conversion bridge: converts a resolved value into the declared type via coercion (statically opaque by design)
 - **`Ascription`** — the author's checked type claim: verified by `assert()` at runtime, checked for overlap at compile time
 - **`DefaultValue`** — replaces absence with a fallback coerced at compile time to the source's present type
 - **`InfixExpression`** / **`UnaryExpression`** — operator applications
 - **`MatchExpression`** — conditional matching with ordered arms
-- **`MemberAccessSource`** — chained property/array-key access
+- **`MemberAccessSource`** — property/array-key access on an arbitrary computed source
+- **`SymbolSource`** — deprecated compatibility source for migrating stored root references; new programs use `ReferencePath`
 
 When do you reach for `Coerce` vs `Ascription` in practice?
 
@@ -350,7 +346,7 @@ new DefaultValue($optionalTags, [])
 The `??` operator spells the same policy where the fallback is itself an expression rather than data:
 
 ```php
-new InfixExpression($optionalPremium, '??', new SymbolSource('standard_premium'))
+new InfixExpression($optionalPremium, '??', new ReferencePath('standard_premium'))
 ```
 
 Both discharge absence and both keep the assumption in the stored program. They differ in two ways. `DefaultValue` **coerces** its fallback to the present type at compile time, so `0` becomes the correct domain zero and `[]` the correctly typed empty collection; `??` requires its right operand to be **assignable** to the present type, since an expression has a type of its own to honor. And where `DefaultValue` on a source that can never be absent is silently the identity, `??` refuses it as *dead* — a fallback that can never fire is an author's mistake, not a no-op.
@@ -358,22 +354,21 @@ Both discharge absence and both keep the assumption in the stored program. They 
 > [!TIP]
 > Converting? `Coerce`, preferably via declarations at the boundary. Claiming? `Ascription`. If you find yourself ascribing to paper over a conversion, the value wanted a boundary declaration instead. These two nodes plus the binding boundary are the **only** places a compiled program ever inspects a value's type — everything else was proven at compile time.
 
-### Records, Symbols, and Definitions
+### Records, References, and Definitions
 
 Inputs are **bindings** — passed at the call site — and their declaration is one `RecordType`. Its root properties are symbols; nested properties are ordinary record structure. Stable named expressions (constants and named sub-expressions) are **definitions**, compiled once and evaluated lazily at most once per invocation. Definitions are root symbols too; there is no second namespace mechanism.
 
 ```php
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Sources\MemberAccessSource;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\RecordType;
 
 $expression = new Expression(
-    source: new MemberAccessSource(new SymbolSource('quote'), 'turnover'),
+    source: new ReferencePath('quote', 'turnover'),
     definitions: new Definitions([
         'version' => new StaticSource('1.0.0'),
     ]),
@@ -396,7 +391,7 @@ $program([
 
 Three rules keep the model honest:
 
-- **Symbols are roots; member access is structure.** `new SymbolSource('quote')` resolves the root. `MemberAccessSource` reaches one property segment at a time, so dots are rejected in both names. `Program::$references` and `Diagnosis::$references` retain `ReferencePath` values; call `describe()` for `quote.turnover`. JSON keeps the same structure as `{"root":"quote","properties":["turnover"]}`.
+- **References are rooted paths.** `new ReferencePath('quote', 'turnover')` is the persisted source and the compiler-reported read. `MemberAccessSource` is reserved for accessing a member of an arbitrary computed source. Dots are rejected in path segments; call `describe()` for the human-facing `quote.turnover`. JSON keeps the structure as `{"root":"quote","properties":["turnover"]}`.
 - **Declarations are records all the way down.** The same required-by-default/`Optional` property model governs both the outer input signature and nested records. The compiler projects this declaration record to the access paths the program actually reads, preserving presence qualifiers at every level.
 - **Declarations and definitions are disjoint root symbol sets.** A root is a *parameter* (declared and supplied by bindings) or a *derived value* (defined), never both. A collision is a constructor error. To let callers override a derived value, model the override in-language as an option-valued parameter the definition consults.
 
@@ -422,7 +417,7 @@ new MatchExpression(
         new MatchArm(
             new ExpressionPattern(
                 new InfixExpression(
-                    new MemberAccessSource(new SymbolSource('quote'), 'claims'),
+                    new ReferencePath('quote', 'claims'),
                     '>',
                     new StaticSource(2),
                 ),
@@ -439,7 +434,7 @@ Dispatch table:
 ```php
 // match tier { "micro" => 1.3, "small" => 1.1, _ => 1.0 }
 new MatchExpression(
-    subject: new SymbolSource('tier'),
+    subject: new ReferencePath('tier'),
     arms: [
         new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
         new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),

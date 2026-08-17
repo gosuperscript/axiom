@@ -79,7 +79,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
-#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilation::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(Coerce::class)]

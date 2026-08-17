@@ -935,27 +935,27 @@ The body compiles through the same dialect in a nested lexical environment. Its 
 
 The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
 
-### Compile Owned Symbols Explicitly
+### Compile Owned References Explicitly
 
-When a host source owns a symbol reference, compile it through `symbol()`:
+When a host source owns a rooted reference, store the actual `ReferencePath` as a public persisted child and compile it through `reference()`:
 
 ```php
-use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\ReferencePath;
 
 final readonly class NamedValueSource implements Source
 {
-    public function __construct(public SymbolSource $symbol) {}
+    public function __construct(public ReferencePath $reference) {}
 }
 
 private function compileNamedValue(
     NamedValueSource $source,
     SourceCompilation $compilation,
 ): CompiledSource {
-    return $compilation->symbol($source->symbol);
+    return $compilation->reference($source->reference);
 }
 ```
 
-This preserves ordinary declared-input, definition, and per-invocation memoization semantics. Symbol resolution itself records the dependency for parameter and definition-cycle analysis, so property visibility does not participate. A compiler may derive a `SymbolSource` from its persisted data when that is the source's intended description; persisting the symbol directly is a domain-model choice, not an analysis requirement.
+This preserves ordinary declared-input, definition, structural projection, and per-invocation memoization semantics. Reference resolution itself records the dependency for parameter and definition-cycle analysis, so property visibility does not participate. A compiler may derive a `ReferencePath` from its persisted data when that is the source's intended description; persisting the reference directly is a domain-model choice, not an analysis requirement. `SymbolSource` and `SourceCompilation::symbol()` remain deprecated compatibility adapters for persisted-source migrations.
 
 The extension map simply grows as the package gains source kinds:
 

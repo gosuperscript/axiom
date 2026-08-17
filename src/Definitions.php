@@ -9,8 +9,8 @@ use Superscript\Monads\Option\Option;
 
 /**
  * A map of stable, root-named expressions. Structure belongs in the value a
- * definition returns and is reached through member access; dotted namespace
- * keys are not a second naming system.
+ * definition returns and is reached through a ReferencePath or member access
+ * on a computed value; dotted namespace keys are not a second naming system.
  */
 final readonly class Definitions
 {

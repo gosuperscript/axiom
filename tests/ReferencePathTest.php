@@ -31,6 +31,8 @@ final class ReferencePathTest extends TestCase
         ], $path->jsonSerialize());
         $this->assertSame('{"root":"customer","properties":["address","postcode"]}', json_encode($path));
         $this->assertNotSame($root->key(), $path->key());
+        $this->assertInstanceOf(\Superscript\Axiom\Source::class, $path);
+        $this->assertInstanceOf(\Superscript\Axiom\Describable::class, $path);
     }
 
     #[Test]

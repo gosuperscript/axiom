@@ -140,14 +140,15 @@ final class TypeEnvironment
 
     /**
      * Compile a path rooted in a declared input or lexical parameter as one
-     * structural read. Definition-rooted and arbitrary paths return null and
-     * use the ordinary member-access compiler instead.
+     * structural read. Definition-rooted, root-only, and arbitrary paths
+     * return null; the
+     * reference compiler resolves the root and projects any remaining members.
      *
      * @return ?Result<CompiledNode, TypeMismatch>
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
-        if ($this->definitions->has($reference->root())) {
+        if ($reference->isRoot() || $this->definitions->has($reference->root())) {
             return null;
         }
 

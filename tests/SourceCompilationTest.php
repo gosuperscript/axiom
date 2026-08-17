@@ -25,6 +25,7 @@ use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\ResolvedOperation;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -191,7 +192,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compileNode = null,
         ?Closure $compileInfix = null,
         ?Closure $compilePrefix = null,
-        ?Closure $compileSymbol = null,
+        ?Closure $compileReference = null,
         ?Closure $compileInputPath = null,
         ?Closure $compileScope = null,
         ?Closure $typeOfValue = null,
@@ -202,8 +203,8 @@ final class SourceCompilationTest extends TestCase
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
             $compileInfix ?? fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
-            $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
-            $compileInputPath ?? fn(\Superscript\Axiom\ReferencePath $reference): ?Result => null,
+            $compileReference ?? fn(ReferencePath $reference): Result => Err(new TypeMismatch('No reference expected.')),
+            $compileInputPath ?? fn(ReferencePath $reference): ?Result => null,
             $compileScope ?? fn(\Superscript\Axiom\ScopedExpression $expression, array $parameters): Result => Err(new TypeMismatch('No scope expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
@@ -522,13 +523,13 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
-    public function symbol_delegates_the_owned_source(): void
+    public function the_deprecated_symbol_capability_delegates_as_a_reference(): void
     {
         $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
         $seen = [];
         $compilation = self::compilation(
-            compileSymbol: function (SymbolSource $symbol) use (&$seen, $node): Result {
-                $seen[] = $symbol;
+            compileReference: function (ReferencePath $reference) use (&$seen, $node): Result {
+                $seen[] = $reference;
 
                 return Ok($node);
             },
@@ -537,13 +538,13 @@ final class SourceCompilationTest extends TestCase
         $symbol = new SymbolSource('billing_amount');
 
         $this->assertSame($node, $compilation->symbol($symbol)->node());
-        $this->assertSame([$symbol], $seen);
+        $this->assertEquals([new ReferencePath('billing_amount')], $seen);
     }
 
     #[Test]
-    public function input_path_delegates_and_records_the_structural_read(): void
+    public function reference_delegates_and_records_a_structural_input_read(): void
     {
-        $reference = new \Superscript\Axiom\ReferencePath('customer', 'turnover');
+        $reference = new ReferencePath('customer', 'turnover');
         $node = CompiledNode::returning(
             new NumberType(),
             fn(Runtime $runtime) => Ok(Some(1)),
@@ -552,7 +553,8 @@ final class SourceCompilationTest extends TestCase
         $seen = null;
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
-            compileInputPath: function (\Superscript\Axiom\ReferencePath $candidate) use (&$seen, $node): Result {
+            compileReference: fn(ReferencePath $candidate): Result => Ok($node),
+            compileInputPath: function (ReferencePath $candidate) use (&$seen, $node): Result {
                 $seen = $candidate;
 
                 return Ok($node);
@@ -560,20 +562,17 @@ final class SourceCompilationTest extends TestCase
             recorder: $recorder,
         );
 
-        $compiled = $compilation->inputPath($reference);
+        $compiled = $compilation->reference($reference);
 
-        $this->assertNotNull($compiled);
         $this->assertSame($reference, $seen);
         $this->assertSame($node->returns, $compiled->returns);
         $this->assertEquals([$reference], $recorder->references());
 
         $withoutRecorder = self::compilation(
-            compileInputPath: fn(\Superscript\Axiom\ReferencePath $candidate): Result => Ok($node),
-        )->inputPath($reference);
-        $this->assertNotNull($withoutRecorder);
+            compileReference: fn(ReferencePath $candidate): Result => Ok($node),
+            compileInputPath: fn(ReferencePath $candidate): Result => Ok($node),
+        )->reference($reference);
         $this->assertSame($node->returns, $withoutRecorder->returns);
-
-        $this->assertNull(self::compilation()->inputPath($reference));
     }
 
     #[Test]
@@ -594,7 +593,7 @@ final class SourceCompilationTest extends TestCase
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
             compileNode: fn(Source $candidate): Result => Ok($node),
-            compileSymbol: fn(SymbolSource $symbol): Result => Ok($node),
+            compileReference: fn(ReferencePath $reference): Result => Ok($node),
             recorder: $recorder,
         );
 
@@ -629,7 +628,7 @@ final class SourceCompilationTest extends TestCase
 
         $located = self::compilation(
             compileNode: fn(Source $candidate, string $path): Result => $record($path),
-            compileSymbol: fn(SymbolSource $symbol, string $path): Result => $record($path),
+            compileReference: fn(ReferencePath $reference, string $path): Result => $record($path),
             recorder: new \Superscript\Axiom\Analysis\CompilationRecorder('$.children[7].node'),
         );
 
@@ -956,7 +955,7 @@ final class SourceCompilationTest extends TestCase
         $program = $expression->compile()->unwrap();
 
         $this->assertSame(['amount'], $expression->parameters());
-        $this->assertSame(['amount'], $program->references);
+        $this->assertEquals([new ReferencePath('amount')], $program->references);
         $this->assertSame(7, $program(['amount' => 7])->unwrap()->unwrap());
     }
 
