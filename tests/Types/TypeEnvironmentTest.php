@@ -279,6 +279,30 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
+    public function references_consume_the_longest_definition_prefix_unless_the_root_is_declared(): void
+    {
+        $definitions = new Definitions([
+            'answers' => new StaticSource(['risk' => ['flood' => 1]]),
+            'answers.risk' => new StaticSource(['flood' => 2]),
+        ]);
+        $reference = new ReferencePath('answers', 'risk', 'flood');
+
+        $defined = new TypeEnvironment(definitions: $definitions);
+        $this->assertSame('answers.risk', $defined->definitionKeyOf($reference));
+
+        $declared = new TypeEnvironment(
+            definitions: $definitions,
+            declarations: ['answers' => new RecordType([
+                'risk' => new RecordType(['flood' => new NumberType()]),
+            ])],
+        );
+
+        $this->assertNull($declared->definitionKeyOf($reference));
+        $this->assertNotNull($declared->nodeOfInputPath($reference));
+        $this->assertInstanceOf(RecordType::class, $declared->nodeOfSymbol('answers', self::compiler())->unwrap()->returns);
+    }
+
+    #[Test]
     public function a_derived_symbol_compiles_through_the_symbol_graph(): void
     {
         $environment = new TypeEnvironment(

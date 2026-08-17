@@ -15,6 +15,7 @@ use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Optional;
+use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
@@ -78,7 +79,7 @@ final readonly class Program
     private RecordType $declarations;
 
     /**
-     * The inputs this program reads, in declaration order — the boundary's
+     * The inputs this program reads, in first-read order — the boundary's
      * entire subject. Every other declaration names something the program
      * never mentions, and so has nothing to demand or admit.
      *
@@ -244,7 +245,7 @@ final readonly class Program
 
             $admitted = match ($this->boundary) {
                 Boundary::Coerce => $type->coerce($value),
-                Boundary::Assert => $type->assert($value),
+                Boundary::Assert => $type->assert(self::declaredSlice($type, $value)),
             };
 
             if ($admitted->isErr()) {
@@ -278,5 +279,31 @@ final readonly class Program
         }
 
         return Ok(new Bindings($overlay));
+    }
+
+    /**
+     * Strip unread nested properties before strict membership is asserted,
+     * just as {@see admit()} strips unread root inputs. RecordType itself
+     * remains exact; this is projection of one program's runtime signature.
+     */
+    private static function declaredSlice(Type $type, mixed $value): mixed
+    {
+        while ($type instanceof OptionType) {
+            $type = $type->inner;
+        }
+
+        if (!$type instanceof RecordType || !is_array($value)) {
+            return $value;
+        }
+
+        $slice = [];
+
+        foreach ($type->properties as $name => $property) {
+            if (array_key_exists($name, $value)) {
+                $slice[$name] = self::declaredSlice($property->type, $value[$name]);
+            }
+        }
+
+        return $slice;
     }
 }

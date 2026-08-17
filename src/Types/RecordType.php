@@ -33,6 +33,11 @@ use function Superscript\Monads\Result\Ok;
  * `Option<T>`, while retaining the distinction at admission so an omitted
  * `Optional(T)` is legal and an explicitly null one is not.
  *
+ * Records are exact under {@see assert()}: undeclared keys are rejected.
+ * {@see coerce()} deliberately accepts wider input and retains only this
+ * record's declared slice. A Program likewise slices its projected input
+ * paths before applying its selected boundary policy.
+ *
  * @implements Type<array<array-key, mixed>>
  */
 final readonly class RecordType implements Type

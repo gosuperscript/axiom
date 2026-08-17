@@ -137,6 +137,8 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
@@ -189,6 +191,8 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 final class SourceCompilationTest extends TestCase
 {
     private static function compilation(
@@ -197,7 +201,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compilePrefix = null,
         ?Closure $compileReference = null,
         ?Closure $compileInputPath = null,
-        ?Closure $compileLegacyDefinition = null,
+        ?Closure $definitionKeyOf = null,
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
         ?Closure $resolveOpaqueField = null,
@@ -208,7 +212,7 @@ final class SourceCompilationTest extends TestCase
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileReference ?? fn(ReferencePath $reference): Result => Err(new TypeMismatch('No reference expected.')),
             $compileInputPath ?? fn(ReferencePath $reference): ?Result => null,
-            $compileLegacyDefinition ?? fn(SymbolSource $symbol): ?Result => null,
+            $definitionKeyOf ?? fn(ReferencePath $reference): ?string => null,
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
             $recorder,
@@ -519,7 +523,8 @@ final class SourceCompilationTest extends TestCase
             ->forSource($source, $analysis, [$reference]);
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compilation = self::compilation(
-            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok($node),
+            compileReference: fn(ReferencePath $candidate): Result => Ok($node),
+            definitionKeyOf: fn(ReferencePath $candidate): string => 'variables.score',
             recorder: $recorder,
         );
 
@@ -533,7 +538,8 @@ final class SourceCompilationTest extends TestCase
         ));
 
         $withoutRecorder = self::compilation(
-            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok($node),
+            compileReference: fn(ReferencePath $candidate): Result => Ok($node),
+            definitionKeyOf: fn(ReferencePath $candidate): string => 'variables.score',
         )->symbol(new SymbolSource('score', 'variables'));
         $this->assertSame($node, $withoutRecorder->node());
     }
@@ -543,7 +549,8 @@ final class SourceCompilationTest extends TestCase
     {
         $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
         $compiled = self::compilation(
-            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok(CompiledNode::failed()),
+            compileReference: fn(ReferencePath $candidate): Result => Ok(CompiledNode::failed()),
+            definitionKeyOf: fn(ReferencePath $candidate): string => 'variables.score',
             recorder: $recorder,
         )->symbol(new SymbolSource('score', 'variables'));
 
@@ -973,6 +980,28 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function a_namespaced_definition_can_be_projected_by_legacy_and_canonical_references(): void
+    {
+        $definitions = new Definitions([
+            'answers' => ['risk' => new StaticSource(['flood' => 9])],
+        ]);
+
+        $legacy = (new Expression(
+            new MemberAccessSource(new SymbolSource('risk', 'answers'), 'flood'),
+            definitions: $definitions,
+        ))->compile()->unwrap();
+        $canonical = (new Expression(
+            new ReferencePath('answers', 'risk', 'flood'),
+            definitions: $definitions,
+        ))->compile()->unwrap();
+
+        $this->assertSame(9, $legacy()->unwrap()->unwrap());
+        $this->assertSame(9, $canonical()->unwrap()->unwrap());
+        $this->assertSame([], $legacy->references);
+        $this->assertSame([], $canonical->references);
+    }
+
+    #[Test]
     public function a_host_compiler_cannot_hide_a_symbol_dependency_from_source_analysis(): void
     {
         $extension = new class extends Extension {
@@ -1020,7 +1049,7 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame(
             sprintf(
-                'Symbol [variables.amount] is not represented by a SymbolSource in [%s]; dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
+                'Reference [variables.amount] is not represented by a ReferencePath in [%s]; dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
                 HiddenSymbolSource::class,
             ),
             $expression->compile()->unwrapErr()->message,

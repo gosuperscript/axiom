@@ -258,10 +258,11 @@ final class EmailType implements Type
 
 ### Optional Values
 
-Optionality is a type, not a flag: `OptionType<T>` denotes `{null} ∪ T`. Your extension inherits the consequences for free:
+Value absence is a type: `OptionType<T>` denotes `{null} ∪ T`. Property omission is the independent `Optional` qualifier. Your extension inherits the consequences for free:
 
 - A present `T` fills an `Option<T>` slot, and `Option<Option<T>>` collapses.
-- `OptionType::coerce(null)` yields a **present** `Some(null)` — absence is a legal value of the option, not a failed coercion. An optional record field is simply a field whose type is `OptionType`, and `RecordType` coercion canonicalizes a missing optional key to a present `null`.
+- `OptionType::coerce(null)` yields a **present** `Some(null)` — absence is a legal value of the option, not a failed coercion.
+- `new Optional($type)` permits a record property to be omitted. A missing optional property remains omitted; it is not canonicalized to `null`. Wrap the property type in `OptionType` separately when an explicitly supplied absent value is also legal.
 - Don't hand-roll "nullable" variants of your types — wrap them.
 
 ## Literal Registration

@@ -110,10 +110,10 @@ final class TypeDescriber
 
         foreach ($shape->properties as $name => $property) {
             $properties[] = sprintf(
-                '%s%s: %s',
+                '%s: %s%s',
                 $name,
-                $property->optional ? '?' : '',
-                self::describeShape($property->value),
+                $property->optional ? 'Optional<' : '',
+                self::describeShape($property->value) . ($property->optional ? '>' : ''),
             );
         }
 

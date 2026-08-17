@@ -75,9 +75,16 @@ final class TypeEnvironment
         )));
     }
 
-    public function hasDefinition(string $key): bool
+    /**
+     * The longest definition prefix consumed by a structural reference.
+     * A declared root wins when callers construct an environment directly
+     * with the otherwise-forbidden declaration/definition collision.
+     */
+    public function definitionKeyOf(ReferencePath $reference): ?string
     {
-        return $this->definitions->has($key);
+        return $this->declarations->has($reference->root())
+            ? null
+            : $this->definitions->keyOf($reference);
     }
 
     /** @return ?Result<CompiledNode, TypeMismatch> */
@@ -127,7 +134,7 @@ final class TypeEnvironment
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
-        if ($reference->isRoot() || $this->definitions->has($reference->root())) {
+        if ($reference->isRoot() || !$this->declarations->has($reference->root())) {
             return null;
         }
 
