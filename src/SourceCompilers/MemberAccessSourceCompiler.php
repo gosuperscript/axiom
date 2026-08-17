@@ -37,8 +37,16 @@ final readonly class MemberAccessSourceCompiler
             $current = $current->object;
         }
 
-        return $current instanceof SymbolSource
-            ? new ReferencePath($current->name, ...$properties)
-            : null;
+        if (!$current instanceof SymbolSource) {
+            return null;
+        }
+
+        $reference = $current->reference();
+
+        foreach ($properties as $property) {
+            $reference = $reference->append($property);
+        }
+
+        return $reference;
     }
 }

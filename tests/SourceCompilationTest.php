@@ -31,6 +31,7 @@ use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceCompilers\AdmissionNode;
 use Superscript\Axiom\SourceEvaluation;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Tests\Fixtures\CountingSource;
@@ -40,6 +41,7 @@ use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
@@ -133,6 +135,8 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
+#[UsesClass(MemberAccessSource::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
@@ -948,6 +952,24 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame([], $expression->parameters());
         $this->assertSame(42, $program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function member_access_preserves_a_deprecated_symbols_namespace(): void
+    {
+        $expression = new Expression(
+            new MemberAccessSource(new SymbolSource('risk_score', 'answers'), 'flood'),
+            declarations: new RecordType([
+                'answers' => new RecordType([
+                    'risk_score' => new RecordType(['flood' => new NumberType()]),
+                ]),
+            ]),
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertEquals([new ReferencePath('answers', 'risk_score', 'flood')], $program->references);
+        $this->assertSame(9, $program(['answers' => ['risk_score' => ['flood' => 9]]])->unwrap()->unwrap());
     }
 
     #[Test]
