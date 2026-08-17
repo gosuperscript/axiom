@@ -19,6 +19,7 @@ use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
@@ -165,6 +166,7 @@ final readonly class TypeInference
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
             fn(ReferencePath $reference, string $path): Result => $this->compileOwnedReference($reference, $owner, $environment, $path, $recorder),
             fn(ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
+            fn(SymbolSource $symbol, string $path): ?Result => $this->compileOwnedLegacyDefinition($symbol, $owner, $environment, $path, $recorder),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
@@ -208,6 +210,48 @@ final readonly class TypeInference
         }
 
         return $environment->nodeOfSymbol($key, $this, $path, $reads);
+    }
+
+    /**
+     * Compile an old namespaced definition without making its flat key part of
+     * the canonical ReferencePath model. Returning null lets the same legacy
+     * symbol fall through to its structural input-path meaning.
+     *
+     * @return ?Result<CompiledNode, TypeMismatch>
+     */
+    private function compileOwnedLegacyDefinition(
+        SymbolSource $symbol,
+        Source $owner,
+        TypeEnvironment $environment,
+        string $path,
+        CompilationRecorder $reads,
+    ): ?Result {
+        $key = SymbolSource::key($symbol->name, $symbol->namespace);
+
+        if (!$environment->hasDefinition($key)) {
+            return null;
+        }
+
+        $reference = $symbol->reference();
+
+        if (!array_any(
+            UnboundSymbols::in($owner),
+            fn(ReferencePath $candidate) => $candidate->key() === $reference->key(),
+        )) {
+            return Err(new TypeMismatch(sprintf(
+                'Symbol [%s] is not represented by a SymbolSource in [%s]; dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
+                $symbol->describe(),
+                $owner::class,
+            )));
+        }
+
+        if ($this->recovery?->isPoisoned($key) === true) {
+            $reads->recordReferences([$reference]);
+
+            return Ok($this->failedNode($symbol));
+        }
+
+        return $environment->nodeOfDefinition($key, $this, $path, $reads);
     }
 
     /**

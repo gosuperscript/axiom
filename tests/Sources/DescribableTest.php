@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -44,15 +45,21 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(StringType::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(ListType::class)]
+#[UsesClass(ReferencePath::class)]
 class DescribableTest extends TestCase
 {
     #[Test]
-    public function symbol_names_cannot_encode_access_paths(): void
+    public function deprecated_symbols_retain_their_flat_spelling(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Use MemberAccessSource for structural access.');
+        $dotted = new SymbolSource('customer.turnover');
+        $namespaced = new SymbolSource('turnover', 'customer');
 
-        new SymbolSource('customer.turnover');
+        $this->assertSame('customer.turnover', $dotted->describe());
+        $this->assertSame('customer.turnover', $namespaced->describe());
+        $this->assertEquals(new ReferencePath('customer', 'turnover'), $dotted->reference());
+        $this->assertEquals(new ReferencePath('customer', 'turnover'), $namespaced->reference());
+        $this->assertSame('customer.turnover', SymbolSource::key('turnover', 'customer'));
+        $this->assertSame('customer.turnover', SymbolSource::key('customer.turnover'));
     }
 
     #[Test]

@@ -453,11 +453,11 @@ final class DiagnosisTest extends TestCase
         // a → c → b → a, so reading c must stop at c — descending into its
         // body would follow the cycle and report a name further along it.
         $diagnosis = self::diagnose(
-            new SymbolSource('c'),
+            new ReferencePath('c'),
             definitions: new Definitions([
-                'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
-                'b' => new SymbolSource('a'),
-                'c' => new SymbolSource('b'),
+                'a' => new InfixExpression(new ReferencePath('b'), '+', new ReferencePath('c')),
+                'b' => new ReferencePath('a'),
+                'c' => new ReferencePath('b'),
             ]),
         );
 
@@ -483,6 +483,25 @@ final class DiagnosisTest extends TestCase
             'The definition graph is not well-founded; evaluation would recurse without terminating.',
         ], self::messages($diagnosis));
         $this->assertEquals([new ReferencePath('a')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_legacy_definition_that_depends_on_a_legacy_cycle_is_poisoned_at_its_reference(): void
+    {
+        $diagnosis = self::diagnose(
+            new SymbolSource('dependant', 'variables'),
+            definitions: new Definitions(['variables' => [
+                'dependant' => new InfixExpression(new SymbolSource('a', 'variables'), '+', new StaticSource(1)),
+                'a' => new SymbolSource('b', 'variables'),
+                'b' => new SymbolSource('a', 'variables'),
+            ]]),
+        );
+
+        $this->assertSame([
+            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('variables', 'a')], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Superscript\Axiom\SourceCompilers;
 
 use Superscript\Axiom\CompiledSource;
-use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\SymbolSource;
 
@@ -14,6 +13,6 @@ final readonly class SymbolSourceCompiler
 {
     public static function compile(SymbolSource $source, SourceCompilation $compilation): CompiledSource
     {
-        return $compilation->reference(new ReferencePath($source->name));
+        return $compilation->symbol($source);
     }
 }

@@ -175,6 +175,21 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
+    public function normalizes_deprecated_namespaced_and_dotted_symbols(): void
+    {
+        $source = new InfixExpression(
+            new SymbolSource('business.turnover', 'answers'),
+            '+',
+            new SymbolSource('answers.business.turnover'),
+        );
+
+        $this->assertEquals(
+            [new ReferencePath('answers', 'business', 'turnover')],
+            UnboundSymbols::in($source),
+        );
+    }
+
+    #[Test]
     public function arbitrary_member_access_is_not_a_rooted_reference(): void
     {
         $source = new MemberAccessSource(new StaticSource(['claims' => 3]), 'claims');

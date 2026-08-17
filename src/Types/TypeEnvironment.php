@@ -61,44 +61,61 @@ final class TypeEnvironment
             ));
         }
 
-        if (isset($this->memo[$name])) {
-            return $this->memo[$name];
+        $definition = $this->nodeOfDefinition($name, $compiler, $path, $reads);
+
+        if ($definition !== null) {
+            return $definition;
         }
 
-        if (in_array($name, $this->inProgress, strict: true)) {
+        $reads?->recordReferences([new ReferencePath($name)]);
+
+        return Err(new TypeMismatch(sprintf(
+            'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            $name,
+        )));
+    }
+
+    public function hasDefinition(string $key): bool
+    {
+        return $this->definitions->has($key);
+    }
+
+    /** @return ?Result<CompiledNode, TypeMismatch> */
+    public function nodeOfDefinition(string $key, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): ?Result
+    {
+        if (!$this->definitions->has($key)) {
+            return null;
+        }
+
+        if (isset($this->memo[$key])) {
+            return $this->memo[$key];
+        }
+
+        if (in_array($key, $this->inProgress, strict: true)) {
             return Err(new TypeMismatch(sprintf(
                 'Cyclic symbol definition: %s.',
-                implode(' → ', [...$this->inProgress, $name]),
+                implode(' → ', [...$this->inProgress, $key]),
             )));
         }
 
-        $source = $this->definitions->get($name);
+        $source = $this->definitions->get($key);
 
-        if ($source->isNone()) {
-            $reads?->recordReferences([new ReferencePath($name)]);
-
-            return Err(new TypeMismatch(sprintf(
-                'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
-                $name,
-            )));
-        }
-
-        $this->inProgress[] = $name;
+        $this->inProgress[] = $key;
         $compiled = $compiler->compile($source->unwrap(), $this, $path, $reads);
         array_pop($this->inProgress);
 
-        $this->memo[$name] = $compiled->map(fn(CompiledNode $node): CompiledNode => $node->evaluatedBy(
-            static function (Runtime $runtime) use ($node, $name) {
-                $result = $runtime->slot($name, fn() => $node->evaluate($runtime));
+        $this->memo[$key] = $compiled->map(fn(CompiledNode $node): CompiledNode => $node->evaluatedBy(
+            static function (Runtime $runtime) use ($node, $key) {
+                $result = $runtime->slot($key, fn() => $node->evaluate($runtime));
 
-                $runtime->annotate('label', $name);
+                $runtime->annotate('label', $key);
                 $result->inspect(fn(Option $option) => $option->inspect(fn(mixed $value) => $runtime->annotate('result', $value)));
 
                 return $result;
             },
         ));
 
-        return $this->memo[$name];
+        return $this->memo[$key];
     }
 
     /**

@@ -37,7 +37,7 @@ final class UnboundSymbols
     {
         $reference = match (true) {
             $node instanceof ReferencePath => $node,
-            $node instanceof SymbolSource => new ReferencePath($node->name),
+            $node instanceof SymbolSource => $node->reference(),
             $node instanceof MemberAccessSource => self::legacyReferencePath($node),
             default => null,
         };
@@ -93,8 +93,16 @@ final class UnboundSymbols
             $current = $current->object;
         }
 
-        return $current instanceof SymbolSource
-            ? new ReferencePath($current->name, ...$properties)
-            : null;
+        if (!$current instanceof SymbolSource) {
+            return null;
+        }
+
+        $reference = $current->reference();
+
+        foreach ($properties as $property) {
+            $reference = $reference->append($property);
+        }
+
+        return $reference;
     }
 }

@@ -51,6 +51,7 @@ final readonly class SourceCompilation
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(ReferencePath, string): Result<CompiledNode, TypeMismatch> $compileReference
      * @param Closure(ReferencePath): ?Result<CompiledNode, TypeMismatch> $compileInputPath
+     * @param Closure(SymbolSource, string): ?Result<CompiledNode, TypeMismatch> $compileLegacyDefinition
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
@@ -60,6 +61,7 @@ final readonly class SourceCompilation
         private Closure $compilePrefix,
         private Closure $compileReference,
         private Closure $compileInputPath,
+        private Closure $compileLegacyDefinition,
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
@@ -152,7 +154,21 @@ final readonly class SourceCompilation
      */
     public function symbol(SymbolSource $symbol): CompiledSource
     {
-        return $this->reference(new ReferencePath($symbol->name));
+        $definition = ($this->compileLegacyDefinition)($symbol, $this->childPath());
+
+        if ($definition === null) {
+            return $this->reference($symbol->reference());
+        }
+
+        $node = $this->compiled($definition, $symbol, 'definition');
+        $this->recorder?->recordReferences($node->references);
+        $compilation = $node->compilation();
+
+        if ($this->recorder !== null && $compilation !== null) {
+            $this->recorder->child($compilation, 'definition');
+        }
+
+        return new CompiledSource($node);
     }
 
     /** Project one certified structural or declared opaque member. */

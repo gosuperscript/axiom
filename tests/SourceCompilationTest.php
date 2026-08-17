@@ -14,6 +14,7 @@ use Superscript\Axiom\BoundOperation;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\CompiledSources;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Exceptions\CompilationAborted;
 use Superscript\Axiom\Exceptions\CompilationAbsorbed;
@@ -192,6 +193,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compilePrefix = null,
         ?Closure $compileReference = null,
         ?Closure $compileInputPath = null,
+        ?Closure $compileLegacyDefinition = null,
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
         ?Closure $resolveOpaqueField = null,
@@ -202,6 +204,7 @@ final class SourceCompilationTest extends TestCase
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileReference ?? fn(ReferencePath $reference): Result => Err(new TypeMismatch('No reference expected.')),
             $compileInputPath ?? fn(ReferencePath $reference): ?Result => null,
+            $compileLegacyDefinition ?? fn(SymbolSource $symbol): ?Result => null,
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
             $recorder,
@@ -496,6 +499,52 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($node, $compilation->symbol($symbol)->node());
         $this->assertEquals([new ReferencePath('billing_amount')], $seen);
+    }
+
+    #[Test]
+    public function the_deprecated_symbol_capability_records_a_legacy_definition(): void
+    {
+        $source = new StaticSource(7);
+        $analysis = \Superscript\Axiom\Analysis\CompilationNode::certified(
+            StaticSource::class,
+            new NumberType(),
+            'axiom.core',
+        );
+        $reference = new ReferencePath('variables', 'score');
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(7)))
+            ->forSource($source, $analysis, [$reference]);
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok($node),
+            recorder: $recorder,
+        );
+
+        $compiled = $compilation->symbol(new SymbolSource('score', 'variables'));
+
+        $this->assertSame($node, $compiled->node());
+        $this->assertEquals([$reference], $recorder->references());
+        $this->assertSame(['definition'], array_map(
+            fn(\Superscript\Axiom\Analysis\CompilationChild $child): ?string => $child->role,
+            $recorder->children(),
+        ));
+
+        $withoutRecorder = self::compilation(
+            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok($node),
+        )->symbol(new SymbolSource('score', 'variables'));
+        $this->assertSame($node, $withoutRecorder->node());
+    }
+
+    #[Test]
+    public function a_failed_legacy_definition_has_no_analysis_child_to_record(): void
+    {
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compiled = self::compilation(
+            compileLegacyDefinition: fn(SymbolSource $symbol): Result => Ok(CompiledNode::failed()),
+            recorder: $recorder,
+        )->symbol(new SymbolSource('score', 'variables'));
+
+        $this->assertTrue($compiled->node()->failed);
+        $this->assertSame([], $recorder->children());
     }
 
     #[Test]
@@ -888,6 +937,20 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function a_deprecated_namespaced_symbol_resolves_a_legacy_definition(): void
+    {
+        $expression = new Expression(
+            new SymbolSource('amount', 'variables'),
+            definitions: new Definitions(['variables' => ['amount' => new StaticSource(42)]]),
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertSame([], $expression->parameters());
+        $this->assertSame(42, $program()->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function a_host_compiler_cannot_hide_a_symbol_dependency_from_source_analysis(): void
     {
         $extension = new class extends Extension {
@@ -911,6 +974,34 @@ final class SourceCompilationTest extends TestCase
         $this->assertStringContainsString(
             'dependencies belong in the persisted source tree',
             $result->unwrapErr()->message,
+        );
+    }
+
+    #[Test]
+    public function a_host_compiler_cannot_hide_a_legacy_definition_dependency_from_source_analysis(): void
+    {
+        $extension = new class extends Extension {
+            public function sourceCompilers(): array
+            {
+                return [
+                    HiddenSymbolSource::class => fn(HiddenSymbolSource $source, SourceCompilation $compilation): CompiledSource => $compilation
+                        ->symbol(new SymbolSource($source->name, 'variables')),
+                ];
+            }
+        };
+
+        $expression = new Expression(
+            new HiddenSymbolSource('amount', new SymbolSource('billing_amount')),
+            definitions: new Definitions(['variables' => ['amount' => new StaticSource(42)]]),
+            dialect: Dialect::core()->with($extension),
+        );
+
+        $this->assertSame(
+            sprintf(
+                'Symbol [variables.amount] is not represented by a SymbolSource in [%s]; dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
+                HiddenSymbolSource::class,
+            ),
+            $expression->compile()->unwrapErr()->message,
         );
     }
 
