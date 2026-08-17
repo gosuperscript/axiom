@@ -209,7 +209,7 @@ new ScopedExpression(
 );
 ```
 
-It is not itself a `Source`: without parameter types it has no type or evaluation. The owning source compiler supplies those types to `SourceCompilation::scope()`. The compiler descends the body in that nested scope, excludes locally resolved parameters from its recorded references, and retains every genuinely free symbol. In the example, `candidate` is local and `threshold` is captured from the enclosing expression.
+It is not itself a `Source`: without parameter types it has no type or evaluation. The owning source compiler supplies those types to `SourceCompilation::scope()`. The compiler descends the body in that nested scope, excludes locally resolved parameters from its recorded references, and retains every genuinely free symbol. In the example, `candidate` is local and `threshold` is captured from the enclosing expression. A parameter also shadows an equally named enclosing definition inside the scoped body; that definition's own dependencies remain global and cannot be captured by the local scope.
 
 ### `CompiledSource`
 
@@ -266,7 +266,7 @@ Use numeric keys for ordinary positional arguments.
 
 The certified result of `SourceCompilation::scope()`. `$returns` is the body's inferred type, and `expectPresent(Type $expected)` checks its present member like the equivalent method on `CompiledSource`.
 
-Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the ScopedExpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation.
+Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the ScopedExpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation. Axiom trusts the host compiler to preserve that provenance and does not re-check a local value at invocation, consistently with the trusted return values of `produces()` and `custom()`.
 
 Each invocation adds its exact local bindings to the current runtime. Free symbols retain their lexical meaning, definitions stay memoized across repeated invocation, expected failures propagate into the enclosing program, and its observer receives the nested source events. Opaque scope identities—not names—select local bindings, so a local parameter cannot accidentally rebind an outer definition compiled against an equal name.
 

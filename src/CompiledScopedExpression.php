@@ -23,16 +23,22 @@ final readonly class CompiledScopedExpression
 {
     public Type $returns;
 
+    /** @var list<string> */
+    private array $parameters;
+
     /**
      * @internal Constructed by SourceCompilation.
      * @param list<string> $parameters
      */
     public function __construct(
         private CompiledNode $node,
-        private array $parameters,
+        array $parameters,
         private string $path,
         private LocalScope $scope,
     ) {
+        sort($parameters);
+
+        $this->parameters = $parameters;
         $this->returns = $node->returns;
     }
 
@@ -56,11 +62,9 @@ final readonly class CompiledScopedExpression
     public function invoke(array $bindings, Runtime $runtime): Result
     {
         $actual = array_keys($bindings);
-        $expected = $this->parameters;
         sort($actual);
-        sort($expected);
 
-        if ($actual !== $expected) {
+        if ($actual !== $this->parameters) {
             throw new LogicException('A compiled scoped expression requires exactly its declared bindings.');
         }
 

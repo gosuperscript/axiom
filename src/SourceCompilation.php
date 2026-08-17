@@ -133,7 +133,11 @@ final readonly class SourceCompilation
     ): CompiledScopedExpression {
         $path = $this->childPath();
         $scope = new LocalScope();
-        $node = $this->require(($this->compileScope)($expression, $parameterTypes, $scope, $path));
+        $node = $this->compiled(
+            ($this->compileScope)($expression, $parameterTypes, $scope, $path),
+            $expression->body,
+            $role,
+        );
 
         $this->recorder?->recordReferences($node->references);
 

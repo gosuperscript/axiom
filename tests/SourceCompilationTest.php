@@ -362,6 +362,33 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function a_scoped_body_that_refuses_records_its_abandoned_position(): void
+    {
+        $expression = new ScopedExpression([], new StaticSource(1));
+        $refusal = new TypeMismatch('The scoped body is invalid.');
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileScope: fn(ScopedExpression $candidate, array $parameters, LocalScope $scope, string $path): Result => Err($refusal),
+            recorder: $recorder,
+        );
+
+        try {
+            $compilation->scope($expression, [], 'predicate');
+            $this->fail('The scoped body should abort compilation.');
+        } catch (CompilationAborted $aborted) {
+            $this->assertSame($refusal, $aborted->mismatch);
+        }
+
+        $this->assertCount(1, $recorder->children());
+        $this->assertSame('predicate', $recorder->children()[0]->role);
+        $this->assertSame(StaticSource::class, $recorder->children()[0]->node->source);
+        $this->assertSame(
+            \Superscript\Axiom\Analysis\CompilationState::Abandoned,
+            $recorder->children()[0]->node->state,
+        );
+    }
+
+    #[Test]
     public function compile_all_preserves_order_and_accepts_an_empty_list(): void
     {
         $compilation = self::compilation(fn(StaticSource $source): Result => Ok(
