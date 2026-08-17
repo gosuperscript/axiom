@@ -163,18 +163,21 @@ final class CompilationFailureLocationTest extends TestCase
     }
 
     #[Test]
-    public function a_refusal_about_the_whole_program_is_not_located(): void
+    public function a_definition_cycle_is_located_at_the_reference_that_closes_it(): void
     {
-        // A definition cycle is a property of the definition graph, refused
-        // before any node is walked: there is no position to blame.
+        // A cycle is met during the compiler's own descent through the
+        // definitions, so even this whole-graph fact names a position: the
+        // reference whose resolution closed the cycle.
         $failure = (new Expression(
             new SymbolSource('a'),
             definitions: new Definitions(['a' => new SymbolSource('b'), 'b' => new SymbolSource('a')]),
         ))->compile()->unwrapErr();
 
-        $this->assertSame('The definition graph is not well-founded; evaluation would recurse without terminating.', $failure->message);
-        $this->assertNull($failure->path);
-        $this->assertNull($failure->causes[0]->path);
+        $this->assertSame('Cyclic symbol definition: a → b → a.', $failure->message);
+
+        // Two definition hops below the root symbol: a's body under the
+        // root, b's body under that — the node whose read closed the cycle.
+        $this->assertSame('$.children[0].node.children[0].node', $failure->path);
     }
 
     #[Test]

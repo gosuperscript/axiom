@@ -6,12 +6,11 @@ namespace Superscript\Axiom\Analysis;
 
 /**
  * @internal The state one {@see Diagnosis} carries across its compilation
- * attempts: which nodes are known broken, which definitions are unusable,
- * and every symbol the attempts touched.
+ * attempts: which nodes are known broken, and every symbol the attempts
+ * touched.
  *
  * A compiler handed one of these treats a quarantined path as already
- * failed — it compiles to a failed node without being visited — and a
- * poisoned definition name the same way. Both are how
+ * failed — it compiles to a failed node without being visited — which is how
  * the next attempt gets past a failure the previous one stopped at.
  */
 final class ErrorRecovery
@@ -19,19 +18,11 @@ final class ErrorRecovery
     /** @var array<string, true> */
     private array $quarantined = [];
 
-    /** @var array<string, true> */
-    private array $poisoned = [];
-
     private readonly References $references;
 
-    /** @param list<string> $poisoned Definition names that lie on a cycle. */
-    public function __construct(array $poisoned = [])
+    public function __construct()
     {
         $this->references = new References();
-
-        foreach ($poisoned as $key) {
-            $this->poisoned[$key] = true;
-        }
     }
 
     public function isQuarantined(string $path): bool
@@ -42,12 +33,6 @@ final class ErrorRecovery
     public function quarantine(string $path): void
     {
         $this->quarantined[$path] = true;
-    }
-
-    /** A definition on a cycle: unusable, and already reported as a property of the graph. */
-    public function isPoisoned(string $key): bool
-    {
-        return $this->poisoned[$key] ?? false;
     }
 
     /**

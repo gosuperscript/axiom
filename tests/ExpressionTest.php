@@ -16,7 +16,6 @@ use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
@@ -26,7 +25,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
-#[UsesClass(UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
@@ -35,7 +33,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Runtime::class)]
-#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
 #[UsesClass(StaticSource::class)]
@@ -200,8 +197,7 @@ final class ExpressionTest extends TestCase
         $result = $expression->compile();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
-        $this->assertStringContainsString('a → b → a', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
     }
 
     #[Test]
@@ -231,6 +227,41 @@ final class ExpressionTest extends TestCase
         );
 
         $this->assertSame(['height', 'width'], $expression->parameters());
+    }
+
+    #[Test]
+    public function parameters_never_include_a_definition_name(): void
+    {
+        // A cyclic definition's name is reported as a read by diagnose() —
+        // nothing can ever answer for it — but it is a definition, not a
+        // parameter, and the list stays a list when it is dropped.
+        $expression = new Expression(
+            source: new InfixExpression(new SymbolSource('a'), '+', new SymbolSource('turnover')),
+            definitions: new Definitions([
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $this->assertSame(['turnover'], $expression->parameters());
+    }
+
+    #[Test]
+    public function parameters_are_relative_to_the_dialect(): void
+    {
+        // A region the dialect cannot compile is never descended, so a
+        // symbol under it does not appear — the refusal that explains the
+        // smaller answer is in diagnose()'s diagnostics.
+        $unregistered = new readonly class(new SymbolSource('hidden')) implements \Superscript\Axiom\Source {
+            public function __construct(public SymbolSource $child) {}
+        };
+
+        $expression = new Expression(
+            source: new InfixExpression($unregistered, '+', new SymbolSource('visible')),
+        );
+
+        $this->assertSame(['visible'], $expression->parameters());
+        $this->assertStringContainsString('Cannot compile', $expression->diagnose()->diagnostics[0]->message);
     }
 
     #[Test]

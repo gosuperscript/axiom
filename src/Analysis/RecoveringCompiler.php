@@ -5,15 +5,12 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Analysis;
 
 use Superscript\Axiom\CompiledNode;
-use Superscript\Axiom\DefinitionGraph;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Monads\Result\Result;
-
-use function Superscript\Monads\Result\Err;
 
 /**
  * Both faces of compiling an {@see Expression}: certify it, or find out
@@ -62,14 +59,15 @@ use function Superscript\Monads\Result\Err;
  *
  * ## Definition cycles
  *
- * A cycle is a property of the graph, not of a node, so it is diagnosed
- * before any attempt and every name on a cycle is *poisoned*: it resolves to
- * a failed node, reported once, and never descended into.
+ * A cycle refuses like any other fault: the environment's descent carries
+ * the chain of definitions it is inside and refuses when a name reappears
+ * on it ({@see TypeEnvironment}), so the refusal is located at the
+ * reference that closed the cycle and quarantined like any other failed
+ * node. Two references that each close a cycle are two faults, exactly as
+ * two references to one unbound name are.
  */
 final readonly class RecoveringCompiler
 {
-    private const string NotWellFounded = 'The definition graph is not well-founded; evaluation would recurse without terminating.';
-
     public function __construct(private Expression $expression) {}
 
     /**
@@ -87,29 +85,14 @@ final readonly class RecoveringCompiler
      */
     public function compile(): Result
     {
-        $cycles = DefinitionGraph::cycles($this->expression->definitions);
-
-        if ($cycles !== []) {
-            return Err(new TypeMismatch(self::NotWellFounded, $cycles));
-        }
-
         return $this->attempt(null)->map(fn(CompiledNode $node) => $this->program($node));
     }
 
     /** Attempts until one succeeds, collecting what each refused. */
     public function diagnose(): Diagnosis
     {
-        $definitions = $this->expression->definitions;
-        $cycles = DefinitionGraph::cycles($definitions);
         $diagnostics = [];
-
-        // A graph whose walk closes no cycle has no name lying on one, so
-        // the component pass is only worth running once there is damage.
-        $recovery = new ErrorRecovery($cycles === [] ? [] : DefinitionGraph::cyclicKeys($definitions));
-
-        if ($cycles !== []) {
-            $diagnostics[] = new TypeMismatch(self::NotWellFounded, $cycles);
-        }
+        $recovery = new ErrorRecovery();
 
         while (true) {
             $attempt = $this->attempt($recovery);
@@ -135,9 +118,7 @@ final readonly class RecoveringCompiler
 
             // Every refusal an attempt returns is located: TypeInference
             // stamps the compiling node's path onto whatever refused, and an
-            // already-located refusal keeps its own. Only a whole-program
-            // refusal is unlocated, and those are diagnosed before any
-            // attempt runs.
+            // already-located refusal keeps its own.
             assert($failedPath !== null);
 
             if ($recovery->isQuarantined($failedPath)) {

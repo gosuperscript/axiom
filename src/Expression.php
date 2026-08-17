@@ -8,7 +8,6 @@ use InvalidArgumentException;
 use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
@@ -77,34 +76,37 @@ final readonly class Expression
     }
 
     /**
-     * Returns the names of the free variables in the expression that are not
-     * covered by the bound definitions — i.e. the parameters the caller is
-     * expected to provide as bindings.
+     * The names the caller is expected to provide as bindings: every symbol
+     * the compiler reads that no definition answers for, in first-read order.
+     *
+     * The set comes from the compiler's own walk — the one description of
+     * the tree's structure — via {@see diagnose()}, which records reads even
+     * through parts that refuse. Reads reached through definitions count
+     * (a definition that reads a declared input makes that input this
+     * expression's parameter), and a definition's own name never does.
+     *
+     * The answer is therefore relative to the dialect: a region the dialect
+     * cannot compile at all — a source class with no registered compiler —
+     * is never descended, so symbols under it do not appear. The refusal
+     * that explains the smaller answer is in diagnose()'s diagnostics.
      *
      * @return list<string>
      */
     public function parameters(): array
     {
-        $parameters = [];
-
-        foreach (UnboundSymbols::in($this->source) as $symbol) {
-            if ($this->definitions->has($symbol->name, $symbol->namespace)) {
-                continue;
-            }
-
-            $parameters[] = SymbolSource::key($symbol->name, $symbol->namespace);
-        }
-
-        return $parameters;
+        return array_values(array_filter(
+            $this->diagnose()->references,
+            fn(string $key) => !$this->definitions->has($key),
+        ));
     }
 
     /**
      * Compile the description into a certified, callable {@see Program}:
-     * the definition graph is proven well-founded (a cyclic definition
-     * would recurse without terminating, and that is a graph property
-     * declarations can never repair — see DefinitionGraph), then every
-     * node compiles to its type and its evaluation through the dialect's
-     * own stacks over the same Definitions the program embeds.
+     * every node compiles to its type and its evaluation through the
+     * dialect's own stacks over the same Definitions the program embeds. A
+     * cyclic definition — one whose evaluation would recurse without
+     * terminating — is refused where the descent closes the cycle, like any
+     * other fault (see TypeEnvironment).
      *
      * Hosts with stored corpora compile once — at authoring or deploy
      * time — and invoke per request: no per-call inference walk, no

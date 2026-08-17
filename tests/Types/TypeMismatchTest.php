@@ -58,7 +58,7 @@ final class TypeMismatchTest extends TestCase
     #[Test]
     public function a_refusal_about_the_whole_program_names_no_node(): void
     {
-        $this->assertNull(new TypeMismatch('The definition graph is not well-founded.')->deepestPath());
+        $this->assertNull(new TypeMismatch('A refusal about no node in particular.')->deepestPath());
     }
 
     #[Test]

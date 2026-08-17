@@ -25,12 +25,13 @@ use Superscript\Axiom\Types\TypeInference;
 
 #[CoversClass(TypeEnvironment::class)]
 #[UsesClass(CompilationRecorder::class)]
+#[UsesClass(\Superscript\Axiom\Analysis\ErrorRecovery::class)]
+#[UsesClass(\Superscript\Axiom\Analysis\References::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
-#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]
@@ -87,7 +88,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
 final class TypeEnvironmentTest extends TestCase
 {
-    private static function compiler(?Dialect $dialect = null): TypeInference
+    private static function compiler(?Dialect $dialect = null, ?\Superscript\Axiom\Analysis\ErrorRecovery $recovery = null): TypeInference
     {
         $dialect ??= Dialect::core();
 
@@ -96,6 +97,7 @@ final class TypeEnvironmentTest extends TestCase
             $dialect->unaryOperators(),
             $dialect->literals(),
             $dialect->sourceCompilers(),
+            recovery: $recovery,
         );
     }
 
@@ -246,6 +248,59 @@ final class TypeEnvironmentTest extends TestCase
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function a_cycle_records_the_name_nothing_can_answer_for(): void
+    {
+        // The cyclic name is a read like any other — recovery carries it up
+        // through the abort so a diagnosis can report the dependency.
+        $environment = new TypeEnvironment(
+            definitions: new Definitions(['a' => new SymbolSource('b'), 'b' => new SymbolSource('a')]),
+        );
+        $reads = new CompilationRecorder();
+
+        $result = $environment->nodeOfSymbol('a', null, self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()), '$', $reads);
+
+        $this->assertTrue($result->isErr());
+        $this->assertSame(['a'], $reads->references());
+    }
+
+    #[Test]
+    public function the_reported_chain_starts_where_the_cycle_does(): void
+    {
+        // entry merely leads the descent to the cycle; it lies on the path,
+        // not on the cycle, and the chain must not name it.
+        $environment = new TypeEnvironment(
+            definitions: new Definitions([
+                'entry' => new InfixExpression(new SymbolSource('a'), '+', new StaticSource(1)),
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $described = $environment->nodeOfSymbol('entry', null, self::compiler())->unwrapErr()->describe();
+
+        $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $described);
+        $this->assertStringNotContainsString('entry → a', $described);
+    }
+
+    #[Test]
+    public function a_definition_compiled_on_the_way_leaves_no_trace_in_the_chain(): void
+    {
+        // b compiles and completes before c is read, so the cycle c closes
+        // is a → c → a — a chain still carrying b would name a bystander.
+        $environment = new TypeEnvironment(
+            definitions: new Definitions([
+                'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
+                'b' => new StaticSource(1),
+                'c' => new SymbolSource('a'),
+            ]),
+        );
+
+        $result = $environment->nodeOfSymbol('a', null, self::compiler());
+
+        $this->assertStringContainsString('Cyclic symbol definition: a → c → a.', $result->unwrapErr()->describe());
     }
 
     #[Test]

@@ -74,9 +74,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Runtime::class)]
-#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
-#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
@@ -535,10 +533,10 @@ final class TypedExpressionTest extends TestCase
     #[Test]
     public function cyclic_definitions_are_a_compile_diagnostic(): void
     {
-        // Termination is a graph property of the Definitions alone — no
-        // declaration can repair it. And because invocation lives only on
-        // the compiled Program, a cyclic program is not merely diagnosed:
-        // it is unrunnable.
+        // A cyclic definition can never evaluate, and no declaration can
+        // repair it: the compiler refuses where its descent closes the
+        // cycle. And because invocation lives only on the compiled Program,
+        // a cyclic program is not merely diagnosed: it is unrunnable.
         $expression = new Expression(
             source: new SymbolSource('a'),
             definitions: new Definitions([
@@ -550,7 +548,6 @@ final class TypedExpressionTest extends TestCase
         $result = $expression->compile();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
     }
 

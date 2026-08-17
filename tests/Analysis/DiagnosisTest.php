@@ -431,10 +431,9 @@ final class DiagnosisTest extends TestCase
         );
 
         $this->assertSame([
-            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+            'Cyclic symbol definition: a → b → a.',
         ], self::messages($diagnosis));
-        $this->assertNull($diagnosis->diagnostics[0]->path);
-        $this->assertSame('Cyclic symbol definition: a → b → a.', $diagnosis->diagnostics[0]->causes[0]->message);
+        $this->assertNotNull($diagnosis->diagnostics[0]->path);
 
         // The cyclic name is still a dependency of this expression, and the
         // sound operand beside it was still checked and collected.
@@ -443,11 +442,12 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
-    public function a_name_on_an_overlapping_cycle_is_never_descended_into(): void
+    public function overlapping_cycles_are_each_reported_where_a_reference_closes_them(): void
     {
-        // a → b, b → a, a → c, c → b. Two cycles overlap and c lies on
-        // a → c → b → a, so reading c must stop at c — descending into its
-        // body would follow the cycle and report a name further along it.
+        // a → b + c, b → a, c → b. Reading c descends c → b → a and meets
+        // both of a's operands: b closes b → a → b, and c closes
+        // c → b → a → c. Each reference that closes a cycle is its own
+        // fault, and the walk terminates once both are set aside.
         $diagnosis = self::diagnose(
             new SymbolSource('c'),
             definitions: new Definitions([
@@ -457,15 +457,20 @@ final class DiagnosisTest extends TestCase
             ]),
         );
 
-        $this->assertSame(['c'], $diagnosis->references);
+        $this->assertSame([
+            'Cyclic symbol definition: b → a → b.',
+            'Cyclic symbol definition: c → b → a → c.',
+        ], self::messages($diagnosis));
+        $this->assertSame(['b', 'c'], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
-    public function a_definition_that_merely_depends_on_a_cycle_is_poisoned_where_it_reads_one(): void
+    public function a_definition_that_merely_depends_on_a_cycle_fails_where_it_reads_one(): void
     {
-        // dependant is not on the cycle, so it is compiled like any other
-        // definition; it fails because the name it reads is poisoned.
+        // dependant is not on the cycle, so the chain the refusal names
+        // starts at the cycle — a → b → a — not at the definition that
+        // merely led the descent to it.
         $diagnosis = self::diagnose(
             new SymbolSource('dependant'),
             definitions: new Definitions([
@@ -476,10 +481,23 @@ final class DiagnosisTest extends TestCase
         );
 
         $this->assertSame([
-            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+            'Cyclic symbol definition: a → b → a.',
         ], self::messages($diagnosis));
         $this->assertSame(['a'], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_pure_cycle_reports_the_name_that_closed_it_as_a_read(): void
+    {
+        // Nothing can ever answer for a cyclic name, but the expression
+        // still depends on it — reported like an unbound name is.
+        $diagnosis = self::diagnose(
+            new SymbolSource('a'),
+            definitions: new Definitions(['a' => new SymbolSource('b'), 'b' => new SymbolSource('a')]),
+        );
+
+        $this->assertSame(['a'], $diagnosis->references);
     }
 
     #[Test]
@@ -716,8 +734,8 @@ final class DiagnosisTest extends TestCase
 
     /**
      * compile() runs the walk with no recovery state; diagnose()'s first
-     * attempt runs it with recovery that has nothing quarantined and nothing
-     * poisoned. This pins the two to one verdict per failure kind, absorbing
+     * attempt runs it with recovery that has nothing quarantined.
+     * This pins the two to one verdict per failure kind, absorbing
      * judgment sites included.
      */
     #[Test]
@@ -858,15 +876,15 @@ final class DiagnosisTest extends TestCase
             $located->describe(),
         );
 
-        // A refusal about the whole program names no position: a definition
-        // cycle is a property of the graph, not of a node.
-        $unlocated = self::diagnose(
+        // Even a definition cycle — a fact about the graph — is located: at
+        // the reference that closed it.
+        $cycle = self::diagnose(
             new SymbolSource('a'),
             definitions: new Definitions(['a' => new SymbolSource('a')]),
         )->diagnostics[0];
 
-        $this->assertNull($unlocated->path);
-        $this->assertStringStartsWith('The definition graph is not well-founded', $unlocated->describe());
+        $this->assertSame('$.children[0].node', $cycle->path);
+        $this->assertSame('Cyclic symbol definition: a → a.', $cycle->message);
     }
 
     #[Test]
