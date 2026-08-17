@@ -209,7 +209,7 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
-    public function a_subexpression_hides_its_parameters_but_not_its_free_symbols(): void
+    public function a_scoped_expression_hides_its_parameters_but_not_its_free_symbols(): void
     {
         $threshold = new SymbolSource('threshold');
         $source = new ScopedExpression(['item'], new InfixExpression(
@@ -218,14 +218,14 @@ final class UnboundSymbolsTest extends TestCase
             $threshold,
         ));
 
-        $this->assertSame(
-            [$threshold],
+        $this->assertEquals(
+            [new ReferencePath('threshold')],
             UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
         );
     }
 
     #[Test]
-    public function nested_subexpressions_keep_outer_parameters_bound_and_shadow_equal_names(): void
+    public function nested_scoped_expressions_keep_outer_parameters_bound_and_shadow_equal_names(): void
     {
         $outside = new SymbolSource('outside');
         $source = new ScopedExpression(['item', 'outer'], new NestedScopedExpressionSource(
@@ -237,8 +237,8 @@ final class UnboundSymbolsTest extends TestCase
             )),
         ));
 
-        $this->assertSame(
-            [$outside],
+        $this->assertEquals(
+            [new ReferencePath('outside')],
             UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
         );
     }
