@@ -85,7 +85,7 @@ final readonly class Diagnosis
 
     /**
      * An expression the compiler certified: the program, with the type it
-     * returns and the symbols it reads taken from the program itself rather
+     * returns and the references it reads taken from the program itself rather
      * than carried alongside it, where a second copy could disagree with it.
      * Nothing refused, so there is nothing to report — and nothing failed to
      * resolve, which is the only thing the two reference sets could differ

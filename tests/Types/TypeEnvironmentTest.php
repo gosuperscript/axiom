@@ -273,6 +273,7 @@ final class TypeEnvironmentTest extends TestCase
         $declared = new TypeEnvironment(declarations: ['amount' => new NumberType()]);
 
         $this->assertNull($defined->nodeOfInputPath(new ReferencePath('customer', 'turnover')));
+        $this->assertNull($declared->nodeOfInputPath(new ReferencePath('amount')));
         $this->assertNull($declared->nodeOfInputPath(new ReferencePath('missing', 'turnover')));
         $this->assertNull($declared->nodeOfInputPath(new ReferencePath('amount', 'imaginary')));
     }

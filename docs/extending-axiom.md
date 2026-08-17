@@ -859,27 +859,27 @@ Catch only domain exceptions your callback owns. A broad `catch (RuntimeExceptio
 
 `custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
 
-### Symbols Must Stay Visible
+### References Must Stay Visible
 
-When a host source owns a symbol reference, store the actual `SymbolSource` as a public persisted child and compile it through `symbol()`:
+When a host source owns a rooted reference, store the actual `ReferencePath` as a public persisted child and compile it through `reference()`:
 
 ```php
-use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\ReferencePath;
 
 final readonly class NamedValueSource implements Source
 {
-    public function __construct(public SymbolSource $symbol) {}
+    public function __construct(public ReferencePath $reference) {}
 }
 
 private function compileNamedValue(
     NamedValueSource $source,
     SourceCompilation $compilation,
 ): CompiledSource {
-    return $compilation->symbol($source->symbol);
+    return $compilation->reference($source->reference);
 }
 ```
 
-This preserves ordinary declared-input, definition, and per-invocation memoization semantics. More importantly, parameter discovery and definition-cycle analysis can see the dependency. Constructing a new `SymbolSource` from a hidden string inside the compiler is refused because the stored source tree would no longer describe the program's real dependencies.
+This preserves ordinary declared-input, definition, structural projection, and per-invocation memoization semantics. More importantly, parameter discovery and definition-cycle analysis can see the dependency. Constructing a new `ReferencePath` from a hidden string inside the compiler is refused because the stored source tree would no longer describe the program's real dependencies. `SymbolSource` and `SourceCompilation::symbol()` remain deprecated compatibility adapters for persisted-source migrations.
 
 The extension map simply grows as the package gains source kinds:
 

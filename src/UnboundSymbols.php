@@ -8,17 +8,18 @@ use ReflectionObject;
 use ReflectionProperty;
 use Superscript\Axiom\Sources\MatchArm;
 use Superscript\Axiom\Sources\MatchPattern;
+use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\SymbolSource;
 
 /**
- * Walks a {@see Source} tree and collects every {@see SymbolSource} it
- * references — i.e. the symbols that are not yet bound to a value and are
- * waiting for a {@see Bindings} or {@see Definitions} entry to resolve them.
+ * Walks a {@see Source} tree and collects every rooted {@see ReferencePath}
+ * waiting for a {@see Bindings} or {@see Definitions} entry to resolve it.
+ * Deprecated symbol/member chains are normalized while they remain readable.
  */
 final class UnboundSymbols
 {
     /**
-     * @return list<SymbolSource>
+     * @return list<ReferencePath>
      */
     public static function in(Source $source): array
     {
@@ -30,13 +31,20 @@ final class UnboundSymbols
     }
 
     /**
-     * @param list<SymbolSource> $symbols
+     * @param list<ReferencePath> $symbols
      */
     private static function walk(mixed $node, array &$symbols): void
     {
-        if ($node instanceof SymbolSource) {
-            if (! self::contains($symbols, $node)) {
-                $symbols[] = $node;
+        $reference = match (true) {
+            $node instanceof ReferencePath => $node,
+            $node instanceof SymbolSource => new ReferencePath($node->name),
+            $node instanceof MemberAccessSource => self::legacyReferencePath($node),
+            default => null,
+        };
+
+        if ($reference !== null) {
+            if (!self::contains($symbols, $reference)) {
+                $symbols[] = $reference;
             }
 
             return;
@@ -62,16 +70,31 @@ final class UnboundSymbols
     }
 
     /**
-     * @param list<SymbolSource> $symbols
+     * @param list<ReferencePath> $symbols
      */
-    private static function contains(array $symbols, SymbolSource $needle): bool
+    private static function contains(array $symbols, ReferencePath $needle): bool
     {
         foreach ($symbols as $existing) {
-            if ($existing->name === $needle->name) {
+            if ($existing->key() === $needle->key()) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static function legacyReferencePath(MemberAccessSource $source): ?ReferencePath
+    {
+        $properties = [];
+        $current = $source;
+
+        while ($current instanceof MemberAccessSource) {
+            array_unshift($properties, $current->property);
+            $current = $current->object;
+        }
+
+        return $current instanceof SymbolSource
+            ? new ReferencePath($current->name, ...$properties)
+            : null;
     }
 }

@@ -8,6 +8,9 @@ use InvalidArgumentException;
 use Superscript\Axiom\Describable;
 use Superscript\Axiom\Source;
 
+/**
+ * @deprecated Use {@see \Superscript\Axiom\ReferencePath}. Kept as a persisted-source migration adapter.
+ */
 final readonly class SymbolSource implements Source, Describable
 {
     public function __construct(

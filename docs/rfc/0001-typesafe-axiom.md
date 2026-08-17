@@ -286,14 +286,15 @@ In the engine, a symbol is satisfied by a per-call binding (`Bindings`, raw valu
 
 #### Syntax-directed rules, one per node
 
-- `SymbolSource` → environment lookup as above.
+- `ReferencePath` → environment lookup at its root, followed by structural projection for its remaining segments. A declared path compiles as one projected input read.
+- `SymbolSource` → deprecated compatibility adapter to a root `ReferencePath`.
 - `StaticSource` → **literal-first inference**: scalars infer as `LiteralType` always (values are immutable; there is no mutation-driven reason to widen). `Literal('shop')` is assignable to `String` wherever needed, and equality/membership get sharper: `x == "warehouse"` where `x: 'shop' | 'office'` is supported by value equality but rejected as dead under `overlaps`. Domain literals via `LiteralTypeRegistry`: value-class → type, plugin-extensible (core registers scalars and lists; `axiom-money` registers `Money`; a host registers its own).
 - List literals → **union element unification with exact bounds**: `[money<GBP>, money<USD>]` is `List<Money<GBP> | Money<USD>, 2, 2>`; `['shop', 'office']` is `List<'shop' | 'office', 2, 2>` (which is what makes `x in ['shop', 'office']` typecheck precisely against an enum-typed `x`); `[]` is `List<Never, 0, 0>`. Same join as `match`, same position, same precision — never equivalence-else-`Unknown`.
 - `Coerce(type, source)` → the declared type, **verbatim, unchecked**. The boundary node: runtime converts via `coerce()`; the boundary is statically opaque *by design* (coercion is admission policy, not membership — see the coercion-is-the-boundary law). The old `TypeDefinition` name is retired: it always behaved as coercion, and "definition" read as annotation — exactly the confusion that produced a review finding.
 - `Ascription(type, source)` → the declared type, **checked**: the inner type must be `Unknown` or `overlaps` the declaration; disjoint is an error (a false claim, assert-world, where overlap *is* the correct relation — TypeScript's `as` draws the same line). Runtime verifies via `assert()` and fails loudly, so a lying ascription is a tripwire, not a rot vector. The author's annotation: refine an `Unknown` host source, narrow a union.
 - `UnaryExpression` / `InfixExpression` → compile the operands, `resolve` the operator against their types through the composed stacks, bind the `ResolvedOperation` into the node (with the absence short-circuit wrapped around it); unary applies the structural `Option`-propagation rule first.
 - `MatchExpression` → see below.
-- `MemberAccessSource` → see below.
+- `MemberAccessSource` → shape-driven member projection from an arbitrary computed source; deprecated symbol-rooted chains normalize to `ReferencePath` while stored corpora migrate.
 - **Host sources** → exact-class compile-time adapters contributed by extensions. The old shape — a type claim in `TypedSource::returnType()` and behavior in a runtime `Resolver` registered separately in a class map — was the two-faces disease in its worst form: nothing, not even a harness, watched that the resolver produced what the type claimed. The first compilation-pivot draft put `compile()` on the source itself, but that put dependency-injected services into persisted source trees. The final seam keeps sources as data descriptions and moves compilation ownership to the extension:
 
 ```php
@@ -366,9 +367,9 @@ Certification is conditional — "*if* inputs inhabit their declared types, this
 
 The guarantee, stated honestly: *declared inputs cannot deliver garbage past the boundary; undeclared inputs cannot touch anything at all — they are stripped, an explicit `Unknown`, or a named error. The declaration record is the expression's complete public signature; the only trust remaining is the trust written down.*
 
-#### Symbols are roots; member access is structure
+#### References are rooted paths; computed values use member access
 
-`Bindings` stores one input record. `SymbolSource('customer')` resolves only its root property; `MemberAccessSource` is the explicit structural traversal to `turnover`, one property segment per node. There are no flat dotted or namespaced symbols. `Program::$references` and diagnostics retain `ReferencePath('customer', 'turnover')`; `customer.turnover` is merely its textual description, while JSON represents it as `{"root":"customer","properties":["turnover"]}` and callers bind `['customer' => ['turnover' => 600000]]`. The same structure exists statically, dynamically, and at compiler interfaces, so there is no flattening or descent convention to keep synchronized.
+`Bindings` stores one input record. `ReferencePath('customer', 'turnover')` is both the persisted Source and the compiler-reported structural read. There are no flat dotted or namespaced symbols. `customer.turnover` is merely the path's textual description, while JSON represents it as `{"root":"customer","properties":["turnover"]}` and callers bind `['customer' => ['turnover' => 600000]]`. `MemberAccessSource` remains distinct for accessing a member of an arbitrary computed Source. The same rooted-path structure exists statically, dynamically, and at compiler interfaces, so there is no flattening or descent convention to keep synchronized. `SymbolSource` remains readable only as a deprecated migration adapter.
 
 Typed value objects at the call site (`TypedValue::of($type, $value)` bindings) were rejected: they put types on the wrong side of time — certification needs types *before* values exist — reopen the two-sources-of-truth drift the declarations map closed, and presuppose hosts convert values before the boundary whose job is converting. The co-location instinct is honored where it's sound: declaration-with-enforcement on the `Expression`, not type-with-value at the call site.
 
@@ -504,7 +505,7 @@ A consolidated record of the decisions this design makes, with the alternatives 
 
 ### Bindings, boundary, and hosts
 
-- **Symbols are roots; member access is the only structural path.** `Bindings` and `TypeEnvironment` share one nested record model. Dotted strings describe access paths but are never bindable keys. Any un-enumerated width — an open record or a dict's keys — remains unable to certify member access.
+- **References are rooted structural paths.** `Bindings` and `TypeEnvironment` share one nested record model, represented by `ReferencePath` in stored sources and compiler output. `MemberAccessSource` projects from arbitrary computed sources. Dotted strings describe paths but are never bindable keys. Any un-enumerated width — an open record or a dict's keys — remains unable to certify member access.
 - **Declarations and definitions have disjoint root symbols.** Enforced at construction; the boundary projects away unread properties. Shadowing becomes unrepresentable — no license rule and no declared∧defined agreement check to maintain. Overrides are modeled in-language as `Option`-typed parameters the definition consults.
 - **Typed bindings are the boundary.** One declaration `RecordType` seeds the `TypeEnvironment` statically and coerces/asserts the projected input record pre-evaluation (aggregated and named by root binding, with nested property causes). Required is the default; `Optional` opts a property out of presence while `OptionType` governs value absence. This is the one runtime type check that survives compilation, by design — `compile()` proves the program but cannot prove future inputs. Rejected typed value objects at the call site — they put types on the wrong side of time.
 

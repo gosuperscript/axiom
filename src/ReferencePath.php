@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use JsonSerializable;
 
 /** A root symbol followed by zero or more structural record properties. */
-final readonly class ReferencePath implements JsonSerializable
+final readonly class ReferencePath implements Source, Describable, JsonSerializable
 {
     /** @var non-empty-list<string> */
     public array $segments;

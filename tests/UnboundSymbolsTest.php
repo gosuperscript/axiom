@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -23,6 +24,7 @@ use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(UnboundSymbols::class)]
+#[UsesClass(ReferencePath::class)]
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(InfixExpression::class)]
@@ -38,11 +40,11 @@ use Superscript\Axiom\UnboundSymbols;
 final class UnboundSymbolsTest extends TestCase
 {
     #[Test]
-    public function finds_a_single_symbol(): void
+    public function finds_a_single_reference(): void
     {
-        $symbol = new SymbolSource('radius');
+        $reference = new ReferencePath('radius');
 
-        $this->assertSame([$symbol], UnboundSymbols::in($symbol));
+        $this->assertSame([$reference], UnboundSymbols::in($reference));
     }
 
     #[Test]
@@ -54,8 +56,8 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function finds_symbols_in_nested_infix_expressions(): void
     {
-        $pi = new SymbolSource('PI');
-        $radius = new SymbolSource('radius');
+        $pi = new ReferencePath('PI');
+        $radius = new ReferencePath('radius');
 
         $source = new InfixExpression(
             left: $pi,
@@ -63,7 +65,7 @@ final class UnboundSymbolsTest extends TestCase
             right: new InfixExpression(
                 left: $radius,
                 operator: '*',
-                right: new SymbolSource('radius'),
+                right: new ReferencePath('radius'),
             ),
         );
 
@@ -73,12 +75,12 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function deduplicates_repeated_symbols(): void
     {
-        $first = new SymbolSource('x');
+        $first = new ReferencePath('x');
 
         $source = new InfixExpression(
             left: $first,
             operator: '+',
-            right: new SymbolSource('x'),
+            right: new ReferencePath('x'),
         );
 
         $this->assertSame([$first], UnboundSymbols::in($source));
@@ -87,8 +89,8 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function different_root_names_have_distinct_identity(): void
     {
-        $bare = new SymbolSource('value');
-        $namespaced = new SymbolSource('other_value');
+        $bare = new ReferencePath('value');
+        $namespaced = new ReferencePath('other_value');
 
         $source = new InfixExpression(
             left: $bare,
@@ -102,8 +104,8 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function different_names_are_distinct(): void
     {
-        $pi = new SymbolSource('pi');
-        $e = new SymbolSource('e');
+        $pi = new ReferencePath('pi');
+        $e = new ReferencePath('e');
 
         $source = new InfixExpression(
             left: $pi,
@@ -117,7 +119,7 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function walks_into_unary_expressions(): void
     {
-        $n = new SymbolSource('n');
+        $n = new ReferencePath('n');
         $source = new UnaryExpression('-', $n);
 
         $this->assertSame([$n], UnboundSymbols::in($source));
@@ -126,9 +128,9 @@ final class UnboundSymbolsTest extends TestCase
     #[Test]
     public function walks_into_match_expressions_including_arms_and_patterns(): void
     {
-        $tier = new SymbolSource('tier');
-        $fallbackPattern = new SymbolSource('fallback_pattern');
-        $fallbackValue = new SymbolSource('fallback_value');
+        $tier = new ReferencePath('tier');
+        $fallbackPattern = new ReferencePath('fallback_pattern');
+        $fallbackValue = new ReferencePath('fallback_value');
 
         $source = new MatchExpression(
             subject: $tier,
@@ -146,18 +148,37 @@ final class UnboundSymbolsTest extends TestCase
     }
 
     #[Test]
-    public function walks_into_member_access_and_type_definition(): void
+    public function finds_a_structural_reference_in_a_type_definition(): void
     {
-        $quote = new SymbolSource('quote');
+        $quoteClaims = new ReferencePath('quote', 'claims');
 
         $source = new Coerce(
             type: new NumberType(),
-            source: new MemberAccessSource(
-                object: $quote,
-                property: 'claims',
-            ),
+            source: $quoteClaims,
         );
 
-        $this->assertSame([$quote], UnboundSymbols::in($source));
+        $this->assertSame([$quoteClaims], UnboundSymbols::in($source));
+    }
+
+    #[Test]
+    public function normalizes_a_deprecated_symbol_member_chain(): void
+    {
+        $legacy = new MemberAccessSource(new SymbolSource('quote'), 'claims');
+
+        $this->assertEquals([new ReferencePath('quote', 'claims')], UnboundSymbols::in($legacy));
+    }
+
+    #[Test]
+    public function normalizes_a_deprecated_symbol(): void
+    {
+        $this->assertEquals([new ReferencePath('quote')], UnboundSymbols::in(new SymbolSource('quote')));
+    }
+
+    #[Test]
+    public function arbitrary_member_access_is_not_a_rooted_reference(): void
+    {
+        $source = new MemberAccessSource(new StaticSource(['claims' => 3]), 'claims');
+
+        $this->assertSame([], UnboundSymbols::in($source));
     }
 }

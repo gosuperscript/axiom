@@ -19,6 +19,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[CoversClass(DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(UnboundSymbols::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\InfixExpression::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Sources\StaticSource::class)]

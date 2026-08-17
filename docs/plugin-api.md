@@ -137,7 +137,7 @@ final readonly class ProductSource implements Source
 A source should contain only the data needed to describe the operation. In particular:
 
 - store nested sources in public properties, directly or in arrays, so parameter discovery and definition-cycle analysis can walk them;
-- store a `SymbolSource` as a public child when the compiler will resolve that symbol;
+- store a `ReferencePath` as a public child when the compiler will resolve a rooted reference;
 - do not store repositories, HTTP clients, filesystems, containers, or other live services;
 - persist the source tree, reconstruct the extension with its services, and then compile;
 - optionally implement `Describable::describe(): string` to provide a human-readable representation of the source.
@@ -177,7 +177,9 @@ The compiler capability passed to every source compiler.
 | `combine(array $sources): CompiledSources` | Combine `CompiledSource` values already compiled or certified individually. |
 | `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Operand types come from `typeOf()`, which absorbs a failed child, so both operands are certified by construction. |
 | `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Its operand type comes from `typeOf()`, as `infix()`'s does. |
-| `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
+| `reference(ReferencePath $reference): CompiledSource` | Compile a persisted rooted reference with normal declaration, definition, structural projection, and memoization semantics. |
+| `member(CompiledSource $object, string $property): CompiledSource` | Project one certified record or declared opaque member from an already-compiled source. |
+| `symbol(SymbolSource $symbol): CompiledSource` | Deprecated compatibility adapter; persist a `ReferencePath` child and call `reference()` in new source kinds. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
 | `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |
 | `produces(Type $returns, callable $evaluate): CompiledSource` | Build a source without compiled children, commonly around an injected service. |
@@ -189,7 +191,7 @@ The compiler capability passed to every source compiler.
 | `shapeOf(CompiledSource $child): Shape` | The structural projection of a compiled child, for certifying a field or member against it. Absorbs when the child failed to compile. |
 | `absorb(): never` | Give up on this source making no refusal; it compiles to a failed source. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
 
-`child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
+`child()`, `reference()`, `member()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
 
 ### `CompiledSource`
 

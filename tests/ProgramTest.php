@@ -85,7 +85,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
-#[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilation::class)]
 #[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]

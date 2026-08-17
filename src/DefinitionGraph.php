@@ -100,7 +100,7 @@ final class DefinitionGraph
 
             // Keys come from the definitions themselves, so the source exists.
             foreach (UnboundSymbols::in($definitions->get($key)->unwrap()) as $reference) {
-                $referenced = $reference->name;
+                $referenced = $reference->root();
 
                 if ($definitions->has($referenced) && !in_array($referenced, $edges[$key], strict: true)) {
                     $edges[$key][] = $referenced;

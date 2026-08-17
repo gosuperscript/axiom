@@ -16,9 +16,9 @@ use Superscript\Axiom\Fields\OpaqueField;
 use Superscript\Axiom\Fields\OpaqueFieldRegistry;
 use Superscript\Axiom\Operators\BinaryOperatorResolver;
 use Superscript\Axiom\Operators\UnaryOperatorResolver;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
@@ -163,8 +163,8 @@ final readonly class TypeInference
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
-            fn(\Superscript\Axiom\ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
+            fn(ReferencePath $reference, string $path): Result => $this->compileOwnedReference($reference, $owner, $environment, $path, $recorder),
+            fn(ReferencePath $reference): ?Result => $environment->nodeOfInputPath($reference),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
@@ -172,7 +172,7 @@ final readonly class TypeInference
     }
 
     /**
-     * A symbol dependency must be part of the persisted source tree. That
+     * A rooted dependency must be part of the persisted source tree. That
      * keeps parameter discovery and definition-cycle analysis complete;
      * constructing a reference inside a compiler would hide an edge from
      * both structural passes.
@@ -184,30 +184,30 @@ final readonly class TypeInference
      *                     success path already does.
      * @return Result<CompiledNode, TypeMismatch>
      */
-    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path, CompilationRecorder $reads): Result
+    private function compileOwnedReference(ReferencePath $reference, Source $owner, TypeEnvironment $environment, string $path, CompilationRecorder $reads): Result
     {
         if (!array_any(
             UnboundSymbols::in($owner),
-            fn(SymbolSource $candidate) => $candidate->name === $symbol->name,
+            fn(ReferencePath $candidate) => $candidate->key() === $reference->key(),
         )) {
             return Err(new TypeMismatch(sprintf(
-                'Symbol [%s] is not represented by a SymbolSource in [%s]; symbol dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
-                $symbol->name,
+                'Reference [%s] is not represented by a ReferencePath in [%s]; dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
+                $reference->describe(),
                 $owner::class,
             )));
         }
 
-        $key = $symbol->name;
+        $key = $reference->root();
 
         // A definition on a cycle has already been reported as a property of
         // the graph, and descending into one would not terminate.
         if ($this->recovery?->isPoisoned($key) === true) {
-            $reads->recordReferences([new \Superscript\Axiom\ReferencePath($key)]);
+            $reads->recordReferences([new ReferencePath($key)]);
 
-            return Ok($this->failedNode($symbol));
+            return Ok($this->failedNode($reference));
         }
 
-        return $environment->nodeOfSymbol($symbol->name, $this, $path, $reads);
+        return $environment->nodeOfSymbol($key, $this, $path, $reads);
     }
 
     /**
