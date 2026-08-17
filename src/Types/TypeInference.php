@@ -19,7 +19,6 @@ use Superscript\Axiom\Operators\UnaryOperatorResolver;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\Sources\SymbolSource;
-use Superscript\Axiom\UnboundSymbols;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
@@ -40,10 +39,10 @@ use function Superscript\Monads\Result\Ok;
  * dispatches on a value again.
  *
  * Given an {@see ErrorRecovery}, compilation additionally treats the nodes
- * and definitions it names as already failed — they compile to a failed node
- * without being visited, and everything above one absorbs rather than judging
- * it — and reports every symbol it read, whether or not the compilation as a
- * whole succeeds. That is what lets
+ * it names as already failed — they compile to a failed node without being
+ * visited, and everything above one absorbs rather than judging it — and
+ * reports every symbol it read, whether or not the compilation as a whole
+ * succeeds. That is what lets
  * {@see RecoveringCompiler} compile the same expression again and reach past
  * a refusal it already reported; without one, nothing here behaves
  * differently.
@@ -108,7 +107,7 @@ final readonly class TypeInference
         $recorder = new CompilationRecorder($path);
 
         try {
-            $compiled = $compiler($source, $this->compilation($environment, $source, $recorder));
+            $compiled = $compiler($source, $this->compilation($environment, $recorder));
         } catch (CompilationAborted $aborted) {
             // The one place a node's refusal becomes a returned error, whoever
             // made it: a source compiler, an operator no rule resolves, an
@@ -157,56 +156,17 @@ final readonly class TypeInference
      * The full compiler capability for one environment — what every source
      * compiler receives, first-party and host alike.
      */
-    private function compilation(TypeEnvironment $environment, Source $owner, CompilationRecorder $recorder): SourceCompilation
+    private function compilation(TypeEnvironment $environment, CompilationRecorder $recorder): SourceCompilation
     {
         return new SourceCompilation(
             fn(Source $child, string $path): Result => $this->compile($child, $environment, $path, $recorder),
             fn(Type $left, string $operator, Type $right): Result => (new InfixExpressionTyping($this->operators))->resolve($operator, $left, $right),
             fn(string $operator, Type $operand): Result => $this->unaryOperators->resolve($operator, $operand),
-            fn(SymbolSource $symbol, string $path): Result => $this->compileOwnedSymbol($symbol, $owner, $environment, $path, $recorder),
+            fn(SymbolSource $symbol, string $path): Result => $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $recorder),
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
         );
-    }
-
-    /**
-     * A symbol dependency must be part of the persisted source tree. That
-     * keeps parameter discovery and definition-cycle analysis complete;
-     * constructing a reference inside a compiler would hide an edge from
-     * both structural passes.
-     *
-     * @param string $path Where a defined symbol's own source compiles: the
-     *                     referencing edge, the same edge the analysis records
-     *                     with role `definition`. Two references to one
-     *                     definition therefore address it by two paths, as the
-     *                     success path already does.
-     * @return Result<CompiledNode, TypeMismatch>
-     */
-    private function compileOwnedSymbol(SymbolSource $symbol, Source $owner, TypeEnvironment $environment, string $path, CompilationRecorder $reads): Result
-    {
-        if (!array_any(
-            UnboundSymbols::in($owner),
-            fn(SymbolSource $candidate) => $candidate->name === $symbol->name && $candidate->namespace === $symbol->namespace,
-        )) {
-            return Err(new TypeMismatch(sprintf(
-                'Symbol [%s] is not represented by a SymbolSource in [%s]; symbol dependencies belong in the persisted source tree so parameter and cycle analysis can see them.',
-                SymbolSource::key($symbol->name, $symbol->namespace),
-                $owner::class,
-            )));
-        }
-
-        $key = SymbolSource::key($symbol->name, $symbol->namespace);
-
-        // A definition on a cycle has already been reported as a property of
-        // the graph, and descending into one would not terminate.
-        if ($this->recovery?->isPoisoned($key) === true) {
-            $reads->recordReferences([$key]);
-
-            return Ok($this->failedNode($symbol));
-        }
-
-        return $environment->nodeOfSymbol($symbol->name, $symbol->namespace, $this, $path, $reads);
     }
 
     /**

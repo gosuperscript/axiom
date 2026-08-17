@@ -28,10 +28,14 @@ use function Superscript\Monads\Result\Ok;
  * definition evaluates lazily and memoizes per invocation ({@see
  * Runtime::slot()}).
  *
- * Termination is not this class's question: well-foundedness of the
- * definition graph is a separate graph pass (see DefinitionGraph) run
- * before compilation; the in-progress guard here only keeps a direct,
- * unguarded use of the compiler from recursing unboundedly.
+ * Termination is this class's question. A definition that reads itself —
+ * directly or through other definitions — would evaluate forever, so the
+ * descent carries the chain of definitions it is currently inside and
+ * refuses the moment a name reappears on it, naming the cycle it closed:
+ * `Cyclic symbol definition: a → b → a.` Only definitions the compilation
+ * actually reads are ever descended into, so a cyclic definition nothing
+ * references refuses nothing — an expression answers for the symbols it
+ * reads, not for the health of every entry in the bag.
  *
  * Unbound is an error; a scope that tolerates unknown symbols declares
  * them as UnknownType explicitly.
@@ -88,10 +92,18 @@ final class TypeEnvironment
             return $this->memo[$key];
         }
 
-        if (in_array($key, $this->inProgress, strict: true)) {
+        $position = array_search($key, $this->inProgress, strict: true);
+
+        if ($position !== false) {
+            // The name is still a dependency of whatever read it, even though
+            // nothing can ever answer for it — reported like an unbound name.
+            $reads?->recordReferences([$key]);
+
+            // The chain starts where the cycle does: definitions merely
+            // passed through on the way to it lie on the path, not the cycle.
             return Err(new TypeMismatch(sprintf(
                 'Cyclic symbol definition: %s.',
-                implode(' → ', [...$this->inProgress, $key]),
+                implode(' → ', [...array_slice($this->inProgress, $position), $key]),
             )));
         }
 

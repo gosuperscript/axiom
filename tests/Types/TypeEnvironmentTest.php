@@ -30,7 +30,6 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
-#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]

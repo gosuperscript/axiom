@@ -16,7 +16,6 @@ use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
-use Superscript\Axiom\UnboundSymbols;
 
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
@@ -26,7 +25,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
-#[UsesClass(UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
@@ -35,7 +33,6 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\EvaluationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Runtime::class)]
-#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
 #[UsesClass(StaticSource::class)]
@@ -200,8 +197,7 @@ final class ExpressionTest extends TestCase
         $result = $expression->compile();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('not well-founded', $result->unwrapErr()->describe());
-        $this->assertStringContainsString('a → b → a', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
     }
 
     #[Test]

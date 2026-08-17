@@ -63,7 +63,6 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
-#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(TypeEnvironment::class)]
 #[UsesClass(CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]

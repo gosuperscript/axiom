@@ -132,9 +132,7 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
-#[UsesClass(\Superscript\Axiom\DefinitionGraph::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
-#[UsesClass(\Superscript\Axiom\UnboundSymbols::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
@@ -849,6 +847,10 @@ final class SourceCompilationTest extends TestCase
     #[Test]
     public function a_host_compiler_cannot_hide_a_symbol_dependency_from_source_analysis(): void
     {
+        // References are recorded by symbol resolution itself, so a symbol a
+        // compiler constructs is reported like any persisted one — and a
+        // persisted child the compiler never resolves is not a dependency:
+        // there is no second, structural walk for the two to disagree over.
         $extension = new class extends Extension {
             public function sourceCompilers(): array
             {
@@ -864,13 +866,11 @@ final class SourceCompilationTest extends TestCase
             dialect: Dialect::core()->with($extension),
             declarations: ['amount' => new NumberType()],
         );
-        $result = $expression->compile();
+        $program = $expression->compile()->unwrap();
 
-        $this->assertSame(['billing.amount'], $expression->parameters());
-        $this->assertStringContainsString(
-            'symbol dependencies belong in the persisted source tree',
-            $result->unwrapErr()->message,
-        );
+        $this->assertSame(['amount'], $expression->parameters());
+        $this->assertSame(['amount'], $program->references);
+        $this->assertSame(7, $program(['amount' => 7])->unwrap()->unwrap());
     }
 
     #[Test]
