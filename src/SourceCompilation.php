@@ -38,6 +38,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
+     * @param Closure(Subexpression, array<string, Type>, string): Result<CompiledNode, TypeMismatch> $compileSubprogram
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
@@ -46,6 +47,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileSymbol,
+        private Closure $compileSubprogram,
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
@@ -117,6 +119,28 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * Compile one separately-bound body through this compilation's dialect.
+     *
+     * @param array<string, Type> $parameterTypes
+     */
+    public function subprogram(
+        Subexpression $expression,
+        array $parameterTypes,
+        ?string $role = null,
+    ): CompiledSubprogram {
+        $path = $this->childPath();
+        $node = $this->require(($this->compileSubprogram)($expression, $parameterTypes, $path));
+
+        $this->recorder?->recordReferences($node->references);
+
+        if ($this->recorder !== null && ($compiled = $node->compilation()) !== null) {
+            $this->recorder->child($compiled, $role);
+        }
+
+        return new CompiledSubprogram($node, $expression->parameters, $path);
     }
 
     /**

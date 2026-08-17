@@ -8,8 +8,10 @@ This reference covers the supported API for packages and applications that exten
     - [`Source`](#source)
     - [Compiler registration](#compiler-registration)
     - [`SourceCompilation`](#sourcecompilation)
+    - [`Subexpression`](#subexpression)
     - [`CompiledSource`](#compiledsource)
     - [`CompiledSources`](#compiledsources)
+    - [`CompiledSubprogram`](#compiledsubprogram)
     - [`BoundOperation`](#boundoperation)
     - [`SourceEvaluation`](#sourceevaluation)
     - [Callback results and failures](#callback-results-and-failures)
@@ -178,6 +180,7 @@ The compiler capability passed to every source compiler.
 | `infix(Type $left, string $operator, Type $right): BoundOperation` | Resolve one binary operation from the composed dialect at compile time. Operand types come from `typeOf()`, which absorbs a failed child, so both operands are certified by construction. |
 | `prefix(string $operator, Type $operand): BoundOperation` | Resolve one unary operation from the composed dialect at compile time. Its operand type comes from `typeOf()`, as `infix()`'s does. |
 | `symbol(SymbolSource $symbol): CompiledSource` | Compile a persisted symbol child with normal declaration, definition, and memoization semantics. |
+| `subprogram(Subexpression $expression, array $parameterTypes, ?string $role = null): CompiledSubprogram` | Compile a separately-bound body once through the current dialect. Parameter names must exactly match the names persisted on the Subexpression; enclosing inputs and definitions are not captured. |
 | `typeOfValue(mixed $value): Type` | Infer an embedded value literal-first. Object values use the dialect's literal registry. |
 | `constant(Type $returns, mixed $value): CompiledSource` | Build a total constant evaluation. `null` represents absence. |
 | `produces(Type $returns, callable $evaluate): CompiledSource` | Build a source without compiled children, commonly around an injected service. |
@@ -190,6 +193,23 @@ The compiler capability passed to every source compiler.
 | `absorb(): never` | Give up on this source making no refusal; it compiles to a failed source. The judgments above call it for you; call it directly only for a judgment of your own about a child that `failed()`. |
 
 `child()`, `symbol()`, `typeOfValue()`, `infix()`, and `prefix()` automatically abort the current source compiler when their underlying judgment fails. Do not catch the internal exception.
+
+### `Subexpression`
+
+A persistable source body together with the root symbol names its owner binds:
+
+```php
+new Subexpression(
+    parameters: ['item'],
+    body: new InfixExpression(
+        new SymbolSource('item'),
+        '>',
+        new StaticSource(10),
+    ),
+);
+```
+
+It is not itself a `Source`: without parameter types it has no type or evaluation. The owning source compiler supplies those types to `SourceCompilation::subprogram()`. Keeping the names structurally beside the body lets `Expression::parameters()` and definition-cycle analysis exclude bound symbols while retaining every genuinely free symbol.
 
 ### `CompiledSource`
 
@@ -242,6 +262,14 @@ return $compilation->combine([
 
 Use numeric keys for ordinary positional arguments.
 
+### `CompiledSubprogram`
+
+The certified result of `SourceCompilation::subprogram()`. `$returns` is the body's inferred type, and `expectPresent(Type $expected)` checks its present member like the equivalent method on `CompiledSource`.
+
+Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the Subexpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation.
+
+Each invocation uses a fresh runtime. Subprogram definitions and input capture are deliberately absent; every value crossing the isolated scope is an explicit parameter. Expected evaluation failures propagate into the enclosing program, and the enclosing invocation's observer receives the nested source events.
+
 ### `BoundOperation`
 
 The result of `SourceCompilation::infix()` or `prefix()`:
@@ -264,6 +292,7 @@ Available only inside `SourceCompilation::custom()`:
 | Method | Meaning |
 | --- | --- |
 | `value(CompiledSource $source): mixed` | Evaluate an already-compiled child in the current invocation. Returns its value or `null` for absence; propagates its expected failure. |
+| `invoke(CompiledSubprogram $program, array $bindings): mixed` | Evaluate a separately-bound compiled body with exact, already-certified parameter bindings. Returns its value or `null` for absence; propagates its expected failure. |
 | `annotate(string $key, mixed $value): void` | Attach domain-specific metadata to the current source's observation node. No-op when the invocation has no observer. |
 
 Use `custom()` only when ordinary mapping cannot express the source, such as lazy fallback, conditional child evaluation, or source-specific annotations. It is not a way to recover `Runtime` or perform dynamic compilation.
@@ -640,7 +669,7 @@ Plugin code is expected to depend on the APIs documented here. The following cla
 - `CompiledNode` and `Runtime`;
 - `CompilationAborted` and `EvaluationAborted`;
 - `CoreSourceCompilers` and classes under `SourceCompilers`;
-- direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `BoundOperation`, or `SourceEvaluation`;
+- direct construction of `SourceCompilation`, `CompiledSource`, `CompiledSources`, `CompiledSubprogram`, `BoundOperation`, or `SourceEvaluation`;
 - `BinaryOperatorResolver` and `UnaryOperatorResolver` as runtime services;
 - `TypeInference` and `TypeEnvironment` for implementing source compilers;
 - `Analysis\CompilationState`, the compiler's record of what became of each source. Failure is one of its cases, not a type: there is no type standing for a node that failed, so there is nothing to be handed, nothing to wrap in a type of your own, and nothing for certification to search a type for. A `Program` refuses to be built from a tree in which anything failed, and your own types — including composites Axiom cannot see inside — are never inspected. See "Report Failures at the Right Boundary" in the extension guide.

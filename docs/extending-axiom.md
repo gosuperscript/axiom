@@ -854,6 +854,61 @@ Catch only domain exceptions your callback owns. A broad `catch (RuntimeExceptio
 
 `custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
 
+### Step 9: Compile a Separately-Bound Body
+
+A host source may own a body that runs repeatedly with a value supplied by another child. Persist that body as a `Subexpression`, so the parameter is visibly bound rather than misreported as a public input:
+
+```php
+final readonly class AnySource implements Source
+{
+    public function __construct(
+        public Source $items,
+        public Subexpression $predicate,
+    ) {}
+}
+```
+
+Compile the collection first, because its element type supplies the predicate parameter's type. The predicate compiles once; invocation only supplies a new binding:
+
+```php
+private function compileAny(
+    AnySource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $items = $compilation->child($source->items, 'items');
+    $itemsType = PresentType::of($compilation->typeOf($items));
+
+    if (!$itemsType instanceof ListType) {
+        $compilation->reject('Any needs a list.');
+    }
+
+    $predicate = $compilation
+        ->subprogram(
+            $source->predicate,
+            ['item' => $itemsType->type],
+            'predicate',
+        )
+        ->expectPresent(new BooleanType());
+
+    return $compilation->custom(
+        new BooleanType(),
+        static function (SourceEvaluation $evaluation) use ($items, $predicate): bool {
+            foreach ($evaluation->value($items) ?? [] as $item) {
+                if ($evaluation->invoke($predicate, ['item' => $item]) === true) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+    );
+}
+```
+
+The body compiles through the same dialect in a fresh type environment containing only the declared parameters. It cannot implicitly capture the enclosing expression's inputs or definitions. Each invocation receives a fresh runtime and shares the enclosing observer, while the supplied values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents.
+
+`subprogram()` certifies Axiom semantics only. A host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
+
 ### Symbols Must Stay Visible
 
 When a host source owns a symbol reference, store the actual `SymbolSource` as a public persisted child and compile it through `symbol()`:
