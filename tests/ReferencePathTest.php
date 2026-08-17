@@ -59,4 +59,13 @@ final class ReferencePathTest extends TestCase
 
         new ReferencePath('customer', 'address.postcode');
     }
+
+    #[Test]
+    public function a_root_cannot_contain_a_dot(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Dots describe structural access between segments.');
+
+        new ReferencePath('customer.address');
+    }
 }

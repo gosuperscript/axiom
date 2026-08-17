@@ -7,7 +7,7 @@ namespace Superscript\Axiom\Types;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordPropertyShape;
 
-/** @internal The normalized form of one {@see RecordType} property. */
+/** The normalized form exposed for one {@see RecordType} property. */
 final readonly class RecordProperty
 {
     public function __construct(

@@ -524,6 +524,24 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
+    public function a_structural_reference_to_a_dotted_definition_cycle_records_only_the_consumed_prefix(): void
+    {
+        $diagnosis = self::diagnose(
+            new ReferencePath('answers', 'risk', 'flood'),
+            definitions: new Definitions([
+                'answers.risk' => new ReferencePath('answers', 'risk'),
+            ]),
+        );
+
+        $this->assertSame([
+            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+        ], self::messages($diagnosis));
+        $this->assertSame('Cyclic symbol definition: answers.risk → answers.risk.', $diagnosis->diagnostics[0]->causes[0]->message);
+        $this->assertEquals([new ReferencePath('answers', 'risk')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
     public function a_broken_match_arm_leaves_its_siblings_checked_and_the_type_recoverable(): void
     {
         $diagnosis = self::diagnose(

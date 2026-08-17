@@ -11,6 +11,7 @@ use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
+use Superscript\Axiom\Types\Shapes\RecordPropertyShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
@@ -380,20 +381,19 @@ final class TypeRelations
     /**
      * The same one-value-two-types theorem as listOverlapsDict: the empty
      * record's canonical member is exactly [], so it shares that value with
-     * every list that admits emptiness. A record with fields never overlaps
-     * a list — its members carry string keys (coercion canonicalizes even
-     * optional fields to present keys), and no list value has any.
+     * every list that admits emptiness. An all-optional record also admits
+     * [], while a record with any required field cannot share a list value.
      *
      * @return Result<bool, TypeMismatch>
      */
     private static function listOverlapsRecord(ListShape $list, RecordShape $record): Result
     {
-        if ($record->properties === [] && $list->min === 0) {
+        if (array_all($record->properties, static fn(RecordPropertyShape $property): bool => $property->optional) && $list->min === 0) {
             return Ok(true);
         }
 
         return Err(self::noOverlap($list, $record, [
-            new TypeMismatch('Only the empty array inhabits both a list and a record, so they overlap exactly when the record is empty and the list can be empty.'),
+            new TypeMismatch('Only the empty array inhabits both a list and a record, so they overlap exactly when every record property is optional and the list can be empty.'),
         ]));
     }
 

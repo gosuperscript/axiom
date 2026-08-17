@@ -120,6 +120,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\DictType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(RecordType::class)]
 #[UsesClass(StringType::class)]
@@ -490,6 +491,34 @@ final class TypedExpressionTest extends TestCase
         $this->assertSame(600000, $strict(['turnover' => 600000, 'staff' => '3'])->unwrap()->unwrap());
         $this->assertInstanceOf(InadmissibleBinding::class, $strict(['turnover' => '600000'])->unwrapErr());
         $this->assertInstanceOf(MissingRequiredInput::class, $strict(['staff' => 3])->unwrapErr());
+    }
+
+    #[Test]
+    public function assert_mode_ignores_unread_properties_at_every_record_depth(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('answers', 'a'),
+            declarations: new RecordType([
+                'answers' => new OptionType(new RecordType([
+                    'a' => new NumberType(),
+                    'b' => new NumberType(),
+                ])),
+            ]),
+            boundary: Boundary::Assert,
+        ))->compile()->unwrap();
+
+        $this->assertSame(1, $program([
+            'answers' => ['a' => 1, 'b' => 'unread and therefore ignored'],
+        ])->unwrap()->unwrap());
+        $this->assertInstanceOf(InadmissibleBinding::class, $program(['answers' => 7])->unwrapErr());
+
+        $dict = (new Expression(
+            source: new ReferencePath('payload'),
+            declarations: ['payload' => new \Superscript\Axiom\Types\DictType(new NumberType())],
+            boundary: Boundary::Assert,
+        ))->compile()->unwrap();
+
+        $this->assertSame(['kept' => 1], $dict(['payload' => ['kept' => 1]])->unwrap()->unwrap());
     }
 
     #[Test]

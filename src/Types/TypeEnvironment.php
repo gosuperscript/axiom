@@ -94,7 +94,10 @@ final class TypeEnvironment
             return $this->parent->nodeOfReference($reference, $compiler, $path, $reads);
         }
 
-        $definition = $this->nodeOfDefinition($name, $compiler, $path, $reads);
+        $definitionKey = $this->definitionKeyOf($reference);
+        $definition = $definitionKey === null
+            ? null
+            : $this->nodeOfDefinition($definitionKey, $compiler, $path, $reads);
 
         if ($definition !== null) {
             return $definition;
@@ -106,6 +109,21 @@ final class TypeEnvironment
             'Unbound symbol [%s]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
             $reference->describe(),
         )));
+    }
+
+    /**
+     * The longest definition prefix consumed by a structural reference.
+     * A declared root wins when callers construct an environment directly
+     * with the otherwise-forbidden declaration/definition collision.
+     */
+    public function definitionKeyOf(ReferencePath $reference): ?string
+    {
+        if ($this->declarations->has($reference->root())) {
+            return null;
+        }
+
+        return $this->parent?->definitionKeyOf($reference)
+            ?? $this->definitions->keyOf($reference);
     }
 
     /** @return ?Result<CompiledNode, TypeMismatch> */
@@ -159,8 +177,12 @@ final class TypeEnvironment
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
-        if ($reference->isRoot() || $this->definitions->keyOf($reference) !== null) {
+        if ($reference->isRoot() || $this->definitionKeyOf($reference) !== null) {
             return null;
+        }
+
+        if (!$this->declarations->has($reference->root())) {
+            return $this->parent?->nodeOfInputPath($reference);
         }
 
         $type = $this->structuralTypeAt($reference);

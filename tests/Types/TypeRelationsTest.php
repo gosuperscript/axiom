@@ -127,7 +127,7 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['a' => new NumberShape()]),
         ];
-        yield 'missing optional field on a closed source reads as null' => [
+        yield 'a closed source may omit an optional target field' => [
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['a' => new NumberShape(), 'b' => new RecordPropertyShape(new StringShape(), true)]),
         ];
@@ -360,7 +360,7 @@ final class TypeRelationsTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'Only the empty array inhabits both a list and a record, so they overlap exactly when the record is empty and the list can be empty.',
+            'Only the empty array inhabits both a list and a record, so they overlap exactly when every record property is optional and the list can be empty.',
             $result->unwrapErr()->describe(),
         );
     }
@@ -503,12 +503,22 @@ final class TypeRelationsTest extends TestCase
             new RecordShape([]),
             true,
         ];
+        yield 'an all-optional record overlaps an emptiable list at []' => [
+            new ListShape(new NumberShape()),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            true,
+        ];
+        yield 'an all-optional record does not overlap a non-empty list' => [
+            new ListShape(new NumberShape(), min: 1),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            false,
+        ];
         yield 'a non-empty list never overlaps the empty record' => [
             new ListShape(new NumberShape(), min: 1),
             new RecordShape([]),
             false,
         ];
-        yield 'a record with fields never overlaps a list' => [
+        yield 'a record with a required field never overlaps a list' => [
             new ListShape(new NumberShape()),
             new RecordShape(['a' => new OptionShape(new NumberShape())]),
             false,
@@ -718,6 +728,11 @@ final class TypeRelationsTest extends TestCase
         yield 'records with foreign required fields' => [new RecordShape(['a' => new NumberShape()]), new RecordShape(['b' => new NumberShape()]), false];
         yield 'record against a dict its required fields inhabit' => [new RecordShape(['a' => new NumberShape()]), new DictShape(new NumberShape()), true];
         yield 'record against a dict of a foreign value type' => [new RecordShape(['a' => new StringShape()]), new DictShape(new NumberShape()), false];
+        yield 'an all-optional record and a dict admit the empty-record operand' => [
+            new RecordShape(['a' => new RecordPropertyShape(new StringShape(), true)]),
+            new DictShape(new NumberShape()),
+            true,
+        ];
         yield 'opaques of one identity, parameters jointly admissible' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new StringShape()]), true];
         yield 'opaques of different identities' => [new OpaqueShape('money'), new OpaqueShape('date'), false];
         yield 'opaques of one identity, disjoint parameters' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new LiteralShape('USD')]), false];
@@ -725,6 +740,11 @@ final class TypeRelationsTest extends TestCase
         // Where they diverge: a shared value is not a shared type.
         yield 'list and dict: [] is one value with two types' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), false];
         yield 'list and the empty record: same corner' => [new ListShape(new NumberShape()), new RecordShape([]), false];
+        yield 'list and an all-optional record: same corner' => [
+            new ListShape(new NumberShape()),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            false,
+        ];
         yield 'unknown admits nothing' => [new UnknownShape(), new NumberShape(), false];
         yield 'unknown against unknown admits nothing either' => [new UnknownShape(), new UnknownShape(), false];
         yield 'the divergence recurses: list elements are dispatch-compared' => [new ListShape(new ListShape(new NumberShape()), min: 1), new ListShape(new DictShape(new NumberShape()), min: 1), false];
