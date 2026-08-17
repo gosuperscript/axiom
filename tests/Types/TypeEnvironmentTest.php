@@ -174,6 +174,26 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
+    public function nested_scopes_resolve_legacy_definitions_from_the_root_environment(): void
+    {
+        $environment = new TypeEnvironment(new Definitions([
+            'variables' => ['score' => new StaticSource(7)],
+        ]));
+        $nested = $environment->nested(new LocalScope(), []);
+        $score = new ReferencePath('variables', 'score');
+        $missing = new ReferencePath('variables', 'missing');
+
+        $this->assertSame('variables.score', $environment->definitionKeyOf($score));
+        $this->assertNull($environment->definitionKeyOf($missing));
+        $this->assertSame('variables.score', $nested->definitionKeyOf($score));
+        $this->assertNull($nested->definitionKeyOf($missing));
+
+        $defined = $nested->nodeOfDefinition('variables.score', self::compiler());
+        $this->assertNotNull($defined);
+        $this->assertSame(7, $defined->unwrap()->evaluate(new Runtime())->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function symbol_nodes_annotate_their_resolved_values(): void
     {
         $compiler = self::compiler();

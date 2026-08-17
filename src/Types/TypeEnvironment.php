@@ -117,17 +117,19 @@ final class TypeEnvironment
             return null;
         }
 
-        return $this->definitions->keyOf($reference)
-            ?? $this->parent?->definitionKeyOf($reference);
+        if ($this->parent !== null) {
+            return $this->parent->definitionKeyOf($reference);
+        }
+
+        return $this->definitions->keyOf($reference);
     }
 
     /** @return ?Result<CompiledNode, TypeMismatch> */
     public function nodeOfDefinition(string $key, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): ?Result
     {
         if (!$this->definitions->has($key)) {
-            return null;
+            return $this->parent?->nodeOfDefinition($key, $compiler, $path, $reads);
         }
-
         if (isset($this->memo[$key])) {
             return $this->memo[$key];
         }
