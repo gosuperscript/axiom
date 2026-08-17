@@ -85,6 +85,11 @@ final readonly class Expression
      * (a definition that reads a declared input makes that input this
      * expression's parameter), and a definition's own name never does.
      *
+     * The answer is therefore relative to the dialect: a region the dialect
+     * cannot compile at all — a source class with no registered compiler —
+     * is never descended, so symbols under it do not appear. The refusal
+     * that explains the smaller answer is in diagnose()'s diagnostics.
+     *
      * @return list<string>
      */
     public function parameters(): array

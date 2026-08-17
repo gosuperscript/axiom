@@ -488,6 +488,19 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
+    public function a_pure_cycle_reports_the_name_that_closed_it_as_a_read(): void
+    {
+        // Nothing can ever answer for a cyclic name, but the expression
+        // still depends on it — reported like an unbound name is.
+        $diagnosis = self::diagnose(
+            new SymbolSource('a'),
+            definitions: new Definitions(['a' => new SymbolSource('b'), 'b' => new SymbolSource('a')]),
+        );
+
+        $this->assertSame(['a'], $diagnosis->references);
+    }
+
+    #[Test]
     public function a_broken_match_arm_leaves_its_siblings_checked_and_the_type_recoverable(): void
     {
         $diagnosis = self::diagnose(

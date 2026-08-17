@@ -17,6 +17,16 @@
         ".*match\\s*\\(true\\).*",
       ],
     },
+    "NullSafeMethodCall": {
+      // TypeEnvironment records a read into $reads at the unbound and cycle
+      // branches. The cycle branch is reachable only through a definition's
+      // own compilation, and TypeInference always hands that compilation a
+      // recorder — so $reads is provably non-null there and the strictness
+      // mutant ($reads->) is equivalent, unkillable by any test.
+      "ignoreSourceCodeByRegex": [
+        ".*reads\\?->recordReferences.*",
+      ],
+    },
   },
   "logs": {
     "text": "build/infection.log",

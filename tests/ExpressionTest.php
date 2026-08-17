@@ -230,6 +230,41 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
+    public function parameters_never_include_a_definition_name(): void
+    {
+        // A cyclic definition's name is reported as a read by diagnose() —
+        // nothing can ever answer for it — but it is a definition, not a
+        // parameter, and the list stays a list when it is dropped.
+        $expression = new Expression(
+            source: new InfixExpression(new SymbolSource('a'), '+', new SymbolSource('turnover')),
+            definitions: new Definitions([
+                'a' => new SymbolSource('b'),
+                'b' => new SymbolSource('a'),
+            ]),
+        );
+
+        $this->assertSame(['turnover'], $expression->parameters());
+    }
+
+    #[Test]
+    public function parameters_are_relative_to_the_dialect(): void
+    {
+        // A region the dialect cannot compile is never descended, so a
+        // symbol under it does not appear — the refusal that explains the
+        // smaller answer is in diagnose()'s diagnostics.
+        $unregistered = new readonly class(new SymbolSource('hidden')) implements \Superscript\Axiom\Source {
+            public function __construct(public SymbolSource $child) {}
+        };
+
+        $expression = new Expression(
+            source: new InfixExpression($unregistered, '+', new SymbolSource('visible')),
+        );
+
+        $this->assertSame(['visible'], $expression->parameters());
+        $this->assertStringContainsString('Cannot compile', $expression->diagnose()->diagnostics[0]->message);
+    }
+
+    #[Test]
     public function parameters_renders_namespaced_symbols_with_dot(): void
     {
         $expression = new Expression(
