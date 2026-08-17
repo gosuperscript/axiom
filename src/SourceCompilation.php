@@ -50,6 +50,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(ReferencePath, string): Result<CompiledNode, TypeMismatch> $compileReference
+     * @param Closure(ScopedExpression, array<string, Type>, LocalScope, string): Result<CompiledNode, TypeMismatch> $compileScope
      * @param Closure(ReferencePath): ?Result<CompiledNode, TypeMismatch> $compileInputPath
      * @param Closure(ReferencePath): ?string $definitionKeyOf
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
@@ -60,6 +61,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileReference,
+        private Closure $compileScope,
         private Closure $compileInputPath,
         private Closure $definitionKeyOf,
         private Closure $typeOfValue,
@@ -150,6 +152,40 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * Compile one lexically scoped body through this compilation's dialect.
+     *
+     * The parameter names are persisted on the ScopedExpression; the owning
+     * source compiler supplies their types, commonly from another child's
+     * certified type. They shadow equal outer names; every other symbol
+     * resolves through this compilation's enclosing inputs and definitions.
+     *
+     * @param array<string, Type> $parameterTypes
+     */
+    public function scope(
+        ScopedExpression $expression,
+        array $parameterTypes,
+        ?string $role = null,
+    ): CompiledScopedExpression {
+        $path = $this->childPath();
+        $scope = new LocalScope();
+        $node = $this->compiled(
+            ($this->compileScope)($expression, $parameterTypes, $scope, $path),
+            $expression->body,
+            $role,
+        );
+
+        if ($this->recorder !== null && ($compiled = $node->compilation()) !== null) {
+            $this->recorder->child($compiled, $role);
+        }
+
+        if ($node->failed) {
+            $this->absorb();
+        }
+
+        return new CompiledScopedExpression($node, $expression->parameters, $path, $scope);
     }
 
     /**

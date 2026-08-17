@@ -860,6 +860,82 @@ Catch only domain exceptions your callback owns. A broad `catch (RuntimeExceptio
 
 `custom()` is an advanced escape hatch for lazy control flow and annotations. It cannot compile new sources at runtime and does not expose `Runtime`, `Result`, or `Option`.
 
+### Step 9: Compile a Lexically Scoped Body
+
+A host source may own a body that runs repeatedly with a value supplied by another child. Persist that body as a `ScopedExpression`, so its explicit parameter names are visibly bound rather than misreported as public inputs:
+
+```php
+final readonly class AnySource implements Source
+{
+    public function __construct(
+        public Source $items,
+        public ScopedExpression $predicate,
+    ) {}
+}
+```
+
+The binder is not a reserved `item` convention. The author chooses it, and free symbols remain ordinary lexical references:
+
+```php
+new AnySource(
+    new SymbolSource('quotes'),
+    new ScopedExpression(
+        ['candidate'],
+        new InfixExpression(
+            new MemberAccessSource(new SymbolSource('candidate'), 'premium'),
+            '<',
+            new SymbolSource('budget'),
+        ),
+    ),
+);
+```
+
+Here `candidate` is local to the predicate and `budget` comes from the enclosing expression. Compile the collection first, because its element type supplies the local parameter's type. The predicate compiles once; invocation only supplies a new binding:
+
+```php
+private function compileAny(
+    AnySource $source,
+    SourceCompilation $compilation,
+): CompiledSource {
+    $items = $compilation->child($source->items, 'items');
+    $itemsType = PresentType::of($compilation->typeOf($items));
+
+    if (!$itemsType instanceof ListType) {
+        $compilation->reject('Any needs a list.');
+    }
+
+    if (count($source->predicate->parameters) !== 1) {
+        $compilation->reject('Any needs exactly one predicate parameter.');
+    }
+
+    $parameter = $source->predicate->parameters[0];
+    $predicate = $compilation
+        ->scope(
+            $source->predicate,
+            [$parameter => $itemsType->type],
+            'predicate',
+        )
+        ->expectPresent(new BooleanType());
+
+    return $compilation->custom(
+        new BooleanType(),
+        static function (SourceEvaluation $evaluation) use ($items, $parameter, $predicate): bool {
+            foreach ($evaluation->value($items) ?? [] as $item) {
+                if ($evaluation->invoke($predicate, [$parameter => $item]) === true) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+    );
+}
+```
+
+The body compiles through the same dialect in a nested lexical environment. Its parameters shadow equal outer names; every other symbol resolves through the enclosing inputs and definitions. Repeated invocations share definition memoization and observation with the enclosing runtime, while opaque scope identities ensure a local name cannot change what an already-compiled outer definition reads.
+
+The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
+
 ### References Must Stay Visible
 
 When a host source owns a rooted reference, store the actual `ReferencePath` as a public persisted child and compile it through `reference()`:

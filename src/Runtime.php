@@ -18,9 +18,9 @@ use Throwable;
 
 /**
  * The per-invocation state of a compiled {@see Program}: the admitted
- * bindings, the lazily-evaluated definition slots, and an optional execution
- * observer. It carries no dialect and no resolver — a compiled program has
- * nothing left to dispatch.
+ * bindings, lexically scoped local bindings, lazily-evaluated definition
+ * slots, and an optional execution observer. It carries no dialect and no
+ * resolver — a compiled program has nothing left to dispatch.
  */
 final class Runtime
 {
@@ -29,6 +29,9 @@ final class Runtime
 
     /** @var list<Node> */
     private array $nodes = [];
+
+    /** @var list<array{LocalScope, Bindings}> */
+    private array $localBindings = [];
 
     public function __construct(
         public readonly Bindings $bindings = new Bindings(),
@@ -84,6 +87,42 @@ final class Runtime
         }
 
         $this->observer->observe(new Annotated($this->nodes[$index], $key, $value));
+    }
+
+    /**
+     * Evaluate inside one lexical scope without replacing the enclosing
+     * program's bindings, definition slots, or observation stack.
+     *
+     * @internal Compiled scoped expressions own local evaluation.
+     * @param Closure(): Result<Option<mixed>, Throwable> $evaluate
+     * @return Result<Option<mixed>, Throwable>
+     */
+    public function within(LocalScope $scope, Bindings $bindings, Closure $evaluate): Result
+    {
+        $this->localBindings[] = [$scope, $bindings];
+
+        try {
+            return $evaluate();
+        } finally {
+            array_pop($this->localBindings);
+        }
+    }
+
+    /**
+     * @internal Resolve a symbol compiled against one exact lexical scope.
+     * @return Option<mixed>
+     */
+    public function local(LocalScope $scope, string $name): Option
+    {
+        for ($index = count($this->localBindings) - 1; $index >= 0; $index--) {
+            [$candidate, $bindings] = $this->localBindings[$index];
+
+            if ($candidate === $scope) {
+                return $bindings->get($name);
+            }
+        }
+
+        throw new LogicException('A scoped expression can only be evaluated while its local bindings are active.');
     }
 
     /**

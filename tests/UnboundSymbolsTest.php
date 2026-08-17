@@ -21,7 +21,17 @@ use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\UnboundSymbols;
+
+/** @internal Source fixture containing one nested binder. */
+final readonly class NestedScopedExpressionSource implements \Superscript\Axiom\Source
+{
+    public function __construct(
+        public \Superscript\Axiom\Source $outer,
+        public ScopedExpression $inner,
+    ) {}
+}
 
 #[CoversClass(UnboundSymbols::class)]
 #[UsesClass(ReferencePath::class)]
@@ -37,6 +47,7 @@ use Superscript\Axiom\UnboundSymbols;
 #[UsesClass(MemberAccessSource::class)]
 #[UsesClass(Coerce::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(ScopedExpression::class)]
 final class UnboundSymbolsTest extends TestCase
 {
     #[Test]
@@ -195,5 +206,40 @@ final class UnboundSymbolsTest extends TestCase
         $source = new MemberAccessSource(new StaticSource(['claims' => 3]), 'claims');
 
         $this->assertSame([], UnboundSymbols::in($source));
+    }
+
+    #[Test]
+    public function a_scoped_expression_hides_its_parameters_but_not_its_free_symbols(): void
+    {
+        $threshold = new SymbolSource('threshold');
+        $source = new ScopedExpression(['item'], new InfixExpression(
+            new SymbolSource('item'),
+            '>',
+            $threshold,
+        ));
+
+        $this->assertEquals(
+            [new ReferencePath('threshold')],
+            UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
+        );
+    }
+
+    #[Test]
+    public function nested_scoped_expressions_keep_outer_parameters_bound_and_shadow_equal_names(): void
+    {
+        $outside = new SymbolSource('outside');
+        $source = new ScopedExpression(['item', 'outer'], new NestedScopedExpressionSource(
+            new SymbolSource('outer'),
+            new ScopedExpression(['item'], new InfixExpression(
+                new InfixExpression(new SymbolSource('item'), '+', new SymbolSource('outer')),
+                '+',
+                $outside,
+            )),
+        ));
+
+        $this->assertEquals(
+            [new ReferencePath('outside')],
+            UnboundSymbols::in(new NestedScopedExpressionSource(new StaticSource(null), $source)),
+        );
     }
 }

@@ -25,15 +25,16 @@ final class UnboundSymbols
     {
         $symbols = [];
 
-        self::walk($source, $symbols);
+        self::walk($source, $symbols, []);
 
         return $symbols;
     }
 
     /**
      * @param list<ReferencePath> $symbols
+     * @param list<string> $bound
      */
-    private static function walk(mixed $node, array &$symbols): void
+    private static function walk(mixed $node, array &$symbols, array $bound): void
     {
         $reference = match (true) {
             $node instanceof ReferencePath => $node,
@@ -43,16 +44,22 @@ final class UnboundSymbols
         };
 
         if ($reference !== null) {
-            if (!self::contains($symbols, $reference)) {
+            if (!in_array($reference->root(), $bound, true) && !self::contains($symbols, $reference)) {
                 $symbols[] = $reference;
             }
 
             return;
         }
 
+        if ($node instanceof ScopedExpression) {
+            self::walk($node->body, $symbols, [...$bound, ...$node->parameters]);
+
+            return;
+        }
+
         if (is_array($node)) {
             foreach ($node as $child) {
-                self::walk($child, $symbols);
+                self::walk($child, $symbols, $bound);
             }
 
             return;
@@ -65,7 +72,7 @@ final class UnboundSymbols
         $reflection = new ReflectionObject($node);
 
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            self::walk($property->getValue($node), $symbols);
+            self::walk($property->getValue($node), $symbols, $bound);
         }
     }
 
