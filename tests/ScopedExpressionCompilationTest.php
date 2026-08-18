@@ -17,6 +17,7 @@ use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceEvaluation;
@@ -247,7 +248,7 @@ final class ScopedExpressionCompilationTest extends TestCase
         $this->assertSame(1, $extension->predicateCompilations);
         $this->assertSame(4, $extension->predicateEvaluations);
         $this->assertSame(['items'], $expression->parameters());
-        $this->assertSame(['items'], $program->references);
+        $this->assertEquals([new ReferencePath('items')], $program->references);
         $this->assertContains(CountedPredicateSource::class, array_map(
             static fn($event): string => $event->node->sourceType,
             $observer->events,
@@ -323,7 +324,7 @@ final class ScopedExpressionCompilationTest extends TestCase
         $program = $expression->compile()->unwrap();
 
         $this->assertSame(['items', 'threshold'], $expression->parameters());
-        $this->assertSame(['items', 'threshold'], $program->references);
+        $this->assertEquals([new ReferencePath('items'), new ReferencePath('threshold')], $program->references);
         $this->assertTrue($program(['items' => [1, 3], 'threshold' => 2])->unwrap()->unwrap());
     }
 

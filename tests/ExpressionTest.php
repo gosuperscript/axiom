@@ -80,6 +80,7 @@ use Superscript\Axiom\Types\NumberType;
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 #[UsesClass(\Superscript\Axiom\Sources\MemberAccessSource::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
 final class ExpressionTest extends TestCase
 {
     #[Test]

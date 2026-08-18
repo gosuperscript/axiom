@@ -149,16 +149,18 @@ final class TypeEnvironmentTest extends TestCase
         $scope = new LocalScope();
         $environment = new TypeEnvironment(declarations: [
             'candidate' => $number,
-            'outside.amount' => $number,
+            'outside' => new RecordType(['amount' => $number]),
             'threshold' => $number,
         ])->nested($scope, ['candidate' => $number]);
 
-        $local = $environment->nodeOfSymbol('candidate', null, self::compiler())->unwrap();
-        $outer = $environment->nodeOfSymbol('threshold', null, self::compiler())->unwrap();
-        $namespaced = $environment->nodeOfSymbol('amount', 'outside', self::compiler())->unwrap();
+        $local = $environment->nodeOfSymbol('candidate', self::compiler())->unwrap();
+        $outer = $environment->nodeOfSymbol('threshold', self::compiler())->unwrap();
+        $namespacedResult = $environment->nodeOfInputPath(new ReferencePath('outside', 'amount'));
+        $this->assertNotNull($namespacedResult);
+        $namespaced = $namespacedResult->unwrap();
         $runtime = new Runtime(new Bindings([
             'candidate' => 99,
-            'outside.amount' => 10,
+            'outside' => ['amount' => 10],
             'threshold' => 5,
         ]));
         $bindings = new Bindings(['candidate' => 2]);
@@ -166,6 +168,32 @@ final class TypeEnvironmentTest extends TestCase
         $this->assertSame(2, $runtime->within($scope, $bindings, fn() => $local->evaluate($runtime))->unwrap()->unwrap());
         $this->assertSame(5, $runtime->within($scope, $bindings, fn() => $outer->evaluate($runtime))->unwrap()->unwrap());
         $this->assertSame(10, $runtime->within($scope, $bindings, fn() => $namespaced->evaluate($runtime))->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function structural_paths_can_read_a_lexically_scoped_record(): void
+    {
+        $scope = new LocalScope();
+        $environment = new TypeEnvironment()->nested($scope, [
+            'candidate' => new RecordType(['amount' => new NumberType()]),
+        ]);
+        $compiled = $environment->nodeOfInputPath(new ReferencePath('candidate', 'amount'));
+        $this->assertNotNull($compiled);
+
+        $runtime = new Runtime();
+        $result = $runtime->within(
+            $scope,
+            new Bindings(['candidate' => ['amount' => 11]]),
+            fn() => $compiled->unwrap()->evaluate($runtime),
+        );
+
+        $this->assertSame(11, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_unknown_definition_has_no_compiled_node(): void
+    {
+        $this->assertNull((new TypeEnvironment())->nodeOfDefinition('missing', self::compiler()));
     }
 
     #[Test]
@@ -426,10 +454,10 @@ final class TypeEnvironmentTest extends TestCase
         );
         $reads = new CompilationRecorder();
 
-        $result = $environment->nodeOfSymbol('a', null, self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()), '$', $reads);
+        $result = $environment->nodeOfSymbol('a', self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()), '$', $reads);
 
         $this->assertTrue($result->isErr());
-        $this->assertSame(['a'], $reads->references());
+        $this->assertEquals([new ReferencePath('a')], $reads->references());
     }
 
     #[Test]
@@ -445,7 +473,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $described = $environment->nodeOfSymbol('entry', null, self::compiler())->unwrapErr()->describe();
+        $described = $environment->nodeOfSymbol('entry', self::compiler())->unwrapErr()->describe();
 
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $described);
         $this->assertStringNotContainsString('entry → a', $described);
@@ -464,7 +492,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->nodeOfSymbol('a', null, self::compiler());
+        $result = $environment->nodeOfSymbol('a', self::compiler());
 
         $this->assertStringContainsString('Cyclic symbol definition: a → c → a.', $result->unwrapErr()->describe());
     }

@@ -1023,6 +1023,28 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function member_projects_structural_values_and_propagates_absence(): void
+    {
+        $compilation = self::compilation();
+        $required = new RecordType(['amount' => new NumberType()]);
+
+        $array = $compilation->member(CompiledSource::constant($required, ['amount' => 7]), 'amount');
+        $object = $compilation->member(CompiledSource::constant($required, (object) ['amount' => 8]), 'amount');
+        $absentObject = $compilation->member(CompiledSource::constant(new OptionType($required), null), 'amount');
+        $optional = $compilation->member(
+            CompiledSource::constant(new RecordType(['amount' => new \Superscript\Axiom\Types\Optional(new NumberType())]), []),
+            'amount',
+        );
+        $missingRequired = $compilation->member(CompiledSource::constant($required, []), 'amount');
+
+        $this->assertSame(7, $array->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(8, $object->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertTrue($absentObject->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertTrue($optional->node()->evaluate(new Runtime())->unwrap()->isNone());
+        $this->assertInstanceOf(\RuntimeException::class, $missingRequired->node()->evaluate(new Runtime())->unwrapErr());
+    }
+
+    #[Test]
     public function a_namespaced_definition_can_be_projected_by_legacy_and_canonical_references(): void
     {
         $definitions = new Definitions([

@@ -546,9 +546,8 @@ final class DiagnosisTest extends TestCase
         );
 
         $this->assertSame([
-            'The definition graph is not well-founded; evaluation would recurse without terminating.',
+            'Cyclic symbol definition: answers.risk → answers.risk.',
         ], self::messages($diagnosis));
-        $this->assertSame('Cyclic symbol definition: answers.risk → answers.risk.', $diagnosis->diagnostics[0]->causes[0]->message);
         $this->assertEquals([new ReferencePath('answers', 'risk')], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
