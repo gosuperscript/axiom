@@ -31,6 +31,7 @@ use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(CompiledNode::class)]
+#[UsesClass(\Superscript\Axiom\Types\Optional::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(Node::class)]
 #[CoversClass(Entered::class)]
@@ -42,6 +43,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(LocalScope::class)]
 #[UsesClass(\Superscript\Axiom\Sources\SymbolSource::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 final class ExecutionTest extends TestCase
 {
     #[Test]

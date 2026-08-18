@@ -17,6 +17,7 @@ use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\TypeRelations;
@@ -42,7 +43,7 @@ final class OptionLiftingTest extends TestCase
     {
         $program = (new Expression(
             source: self::aboveQuarter(),
-            declarations: ['x' => new OptionType(new NumberType())],
+            declarations: ['x' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new BooleanType()))->isOk());
@@ -56,7 +57,7 @@ final class OptionLiftingTest extends TestCase
     {
         $program = (new Expression(
             source: new UnaryExpression(operator: '!', operand: self::aboveQuarter()),
-            declarations: ['x' => new OptionType(new NumberType())],
+            declarations: ['x' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertFalse($program(['x' => 0.3])->unwrap()->unwrap());
@@ -68,7 +69,7 @@ final class OptionLiftingTest extends TestCase
     {
         $program = (new Expression(
             source: new InfixExpression(self::aboveQuarter(), '||', new SymbolSource('y')),
-            declarations: ['x' => new OptionType(new NumberType()), 'y' => new BooleanType()],
+            declarations: ['x' => new Optional(new OptionType(new NumberType())), 'y' => new BooleanType()],
         ))->compile()->unwrap();
 
         $this->assertTrue($program(['y' => true])->unwrap()->unwrap(), 'true decides, however unanswered the other arm');
@@ -80,7 +81,7 @@ final class OptionLiftingTest extends TestCase
     {
         $program = (new Expression(
             source: new InfixExpression(self::aboveQuarter(), '&&', new SymbolSource('y')),
-            declarations: ['x' => new OptionType(new NumberType()), 'y' => new BooleanType()],
+            declarations: ['x' => new Optional(new OptionType(new NumberType())), 'y' => new BooleanType()],
         ))->compile()->unwrap();
 
         $this->assertFalse($program(['y' => false])->unwrap()->unwrap(), 'false decides, however unanswered the other arm');
@@ -94,7 +95,7 @@ final class OptionLiftingTest extends TestCase
         // presence probe it has always been, present in its answer.
         $program = (new Expression(
             source: new InfixExpression(new SymbolSource('x'), '==', new StaticSource(null)),
-            declarations: ['x' => new OptionType(new NumberType())],
+            declarations: ['x' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertTrue($program([])->unwrap()->unwrap());
@@ -126,7 +127,7 @@ final class OptionLiftingTest extends TestCase
                 '>',
                 new StaticSource(0.25),
             ),
-            declarations: ['x' => new OptionType(new NumberType())],
+            declarations: ['x' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new BooleanType())->isOk());
@@ -143,7 +144,10 @@ final class OptionLiftingTest extends TestCase
                 '??',
                 new StaticSource(0),
             ),
-            declarations: ['x' => new OptionType(new NumberType()), 'y' => new OptionType(new NumberType())],
+            declarations: [
+                'x' => new Optional(new OptionType(new NumberType())),
+                'y' => new Optional(new OptionType(new NumberType())),
+            ],
         ))->compile()->unwrap();
 
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new NumberType())->isOk());
@@ -163,7 +167,9 @@ final class OptionLiftingTest extends TestCase
     public function an_authored_default_discharges_absence_behind_an_optional_owner(): void
     {
         $premium = new MemberAccessSource(new SymbolSource('quote'), 'premium');
-        $declarations = ['quote' => new OptionType(new RecordType(['premium' => new OptionType(new NumberType())]))];
+        $declarations = ['quote' => new Optional(new RecordType([
+            'premium' => new Optional(new OptionType(new NumberType())),
+        ]))];
 
         $bare = (new Expression(source: $premium, declarations: $declarations))->compile()->unwrap();
         $this->assertTrue(TypeRelations::areEquivalent($bare->returns, new OptionType(new NumberType()))->isOk());
@@ -196,7 +202,9 @@ final class OptionLiftingTest extends TestCase
                 operator: '!',
                 operand: new MemberAccessSource(new SymbolSource('quote'), 'accepted'),
             ),
-            declarations: ['quote' => new OptionType(new RecordType(['accepted' => new OptionType(new BooleanType())]))],
+            declarations: ['quote' => new Optional(new RecordType([
+                'accepted' => new Optional(new OptionType(new BooleanType())),
+            ]))],
         ))->compile()->unwrap();
 
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new BooleanType()))->isOk());

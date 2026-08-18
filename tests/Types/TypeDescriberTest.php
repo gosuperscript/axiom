@@ -21,6 +21,7 @@ use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
+use Superscript\Axiom\Types\Shapes\RecordPropertyShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\StringShape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
@@ -99,6 +100,10 @@ final class TypeDescriberTest extends TestCase
         yield [
             new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
             '{a: Number, b: String?}',
+        ];
+        yield [
+            new RecordShape(['answer' => new RecordPropertyShape(new OptionShape(new NumberShape()), true)]),
+            '{answer: Optional<Number?>}',
         ];
         yield [new RecordShape([]), '{}'];
     }

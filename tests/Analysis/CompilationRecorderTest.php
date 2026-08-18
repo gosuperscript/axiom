@@ -6,9 +6,11 @@ namespace Superscript\Axiom\Tests\Analysis;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\References;
+use Superscript\Axiom\ReferencePath;
 
 /**
  * A node's reads arrive one child at a time — every child of a source hands
@@ -17,6 +19,7 @@ use Superscript\Axiom\Analysis\References;
  */
 #[CoversClass(CompilationRecorder::class)]
 #[CoversClass(References::class)]
+#[UsesClass(ReferencePath::class)]
 final class CompilationRecorderTest extends TestCase
 {
     #[Test]
@@ -24,10 +27,10 @@ final class CompilationRecorderTest extends TestCase
     {
         $recorder = new CompilationRecorder();
 
-        $recorder->recordReferences(['turnover']);
-        $recorder->recordReferences(['postcode', 'turnover']);
+        $recorder->recordReferences([new ReferencePath('turnover')]);
+        $recorder->recordReferences([new ReferencePath('postcode'), new ReferencePath('turnover')]);
 
-        $this->assertSame(['turnover', 'postcode'], $recorder->references());
+        $this->assertEquals([new ReferencePath('turnover'), new ReferencePath('postcode')], $recorder->references());
     }
 
     #[Test]

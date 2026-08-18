@@ -5,35 +5,41 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types\Shapes;
 
 /**
- * Named fields, exact: a record's value set is fully described by its
- * fields — there is no open variant and no width subtyping. Exactness is
- * what makes whole-record operations well-defined (equality over a record
- * is exactly equality over its fields; nothing undeclared can hide in the
- * value). Data with unenumerable keys is a Dict.
- *
- * There is no presence flag: an optional field is a field whose shape is
- * OptionShape. Missing-key and present-null are one absence concept —
- * record coercion canonicalizes, inserting null for missing optional keys.
- * (Revisit if a keys()-like operation over records ever enters the language.)
+ * Named properties, exact: a record's accepted values are fully described by
+ * its properties and their presence rules. Bare properties are required;
+ * optional properties may be missing while still validating supplied values
+ * against their own value shapes.
  */
 final class RecordShape extends Shape
 {
+    /** @var array<string, RecordPropertyShape> */
+    public readonly array $properties;
+
     /**
-     * @param array<string, Shape> $fields
+     * Bare shapes remain a concise spelling for required properties.
+     *
+     * @param array<string, Shape|RecordPropertyShape> $properties
      */
-    public function __construct(
-        public readonly array $fields,
-    ) {}
+    public function __construct(array $properties)
+    {
+        $this->properties = array_map(
+            static fn(Shape|RecordPropertyShape $property): RecordPropertyShape => $property instanceof RecordPropertyShape
+                ? $property
+                : new RecordPropertyShape($property, false),
+            $properties,
+        );
+    }
 
     public function equals(Shape $other): bool
     {
-        if (!$other instanceof self || count($this->fields) !== count($other->fields)) {
+        if (!$other instanceof self || count($this->properties) !== count($other->properties)) {
             return false;
         }
 
         return array_all(
-            $this->fields,
-            fn(Shape $field, string $name) => isset($other->fields[$name]) && $field->equals($other->fields[$name]),
+            $this->properties,
+            fn(RecordPropertyShape $property, string $name): bool => isset($other->properties[$name])
+                && $property->equals($other->properties[$name]),
         );
     }
 }

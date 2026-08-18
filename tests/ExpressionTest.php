@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
@@ -18,6 +19,7 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\Types\Optional::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
@@ -74,6 +76,11 @@ use Superscript\Axiom\Types\NumberType;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
+#[UsesClass(\Superscript\Axiom\Sources\MemberAccessSource::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
 final class ExpressionTest extends TestCase
 {
     #[Test]
@@ -123,7 +130,7 @@ final class ExpressionTest extends TestCase
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(['amount', 'rate'], $program->references);
+        $this->assertEquals([new ReferencePath('amount'), new ReferencePath('rate')], $program->references);
     }
 
     #[Test]
@@ -265,17 +272,47 @@ final class ExpressionTest extends TestCase
     }
 
     #[Test]
-    public function parameters_renders_namespaced_symbols_with_dot(): void
+    public function parameters_reports_the_root_of_member_access(): void
     {
         $expression = new Expression(
             source: new InfixExpression(
-                left: new SymbolSource('claims', 'quote'),
+                left: new \Superscript\Axiom\Sources\MemberAccessSource(new SymbolSource('quote'), 'claims'),
                 operator: '>',
                 right: new StaticSource(2),
             ),
         );
 
-        $this->assertSame(['quote.claims'], $expression->parameters());
+        $this->assertSame(['quote'], $expression->parameters());
+    }
+
+    #[Test]
+    public function deprecated_namespaced_symbols_read_structural_inputs(): void
+    {
+        $program = (new Expression(
+            source: new SymbolSource('business.turnover', 'answers'),
+            declarations: new \Superscript\Axiom\Types\RecordType([
+                'answers' => new \Superscript\Axiom\Types\RecordType([
+                    'business' => new \Superscript\Axiom\Types\RecordType([
+                        'turnover' => new NumberType(),
+                    ]),
+                ]),
+            ]),
+        ))->compile()->unwrap();
+
+        $this->assertSame(42, $program(['answers' => ['business' => ['turnover' => 42]]])->unwrap()->unwrap());
+        $this->assertEquals([new ReferencePath('answers', 'business', 'turnover')], $program->references);
+    }
+
+    #[Test]
+    public function deprecated_namespaced_symbols_read_legacy_definitions(): void
+    {
+        $expression = new Expression(
+            source: new SymbolSource('score', 'variables'),
+            definitions: new Definitions(['variables' => ['score' => new StaticSource(7)]]),
+        );
+
+        $this->assertSame([], $expression->parameters());
+        $this->assertSame(7, $expression->compile()->unwrap()->call()->unwrap()->unwrap());
     }
 
     #[Test]

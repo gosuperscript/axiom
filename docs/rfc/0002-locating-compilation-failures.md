@@ -27,12 +27,12 @@ Axiom already has the vocabulary. On success, `CompilationAnalysis` holds a `Com
 
 ```php
 $source = new InfixExpression(
-    new InfixExpression(new SymbolSource('name'), '+', new StaticSource(1)),
+    new InfixExpression(new ReferencePath('name'), '+', new StaticSource(1)),
     '*',
     new StaticSource(2),
 );
 
-$expression = new Expression($source, declarations: ['name' => new StringType()]);
+$expression = new Expression($source, declarations: new RecordType(['name' => new StringType()]));
 $expression->compile();
 ```
 
@@ -58,7 +58,7 @@ Correct and unattributable. There are two `+`-shaped things a reader could blame
 ```
 $                                     InfixExpression  -> Number
 $.children[0].node                    InfixExpression  -> Number
-$.children[0].node.children[0].node   SymbolSource     -> Number
+$.children[0].node.children[0].node   ReferencePath    -> Number
 $.children[0].node.children[1].node   StaticSource     -> Number
 $.children[1].node                    StaticSource     -> Number
 ```
@@ -84,7 +84,7 @@ On the success path nodes do not store their own paths — `CompilationNode::toA
 
 - `TypeInference::compile(Source $source, TypeEnvironment $environment, string $path = '$')` — the node's own path.
 - `CompilationRecorder`, already the mutable state scoped to compiling one node, also holds that node's path and answers `childPath()` as `"{$path}.children[" . count($this->children) . "].node"`. Numbering off the recorder's own child list is what keeps compile-time paths and `toArray()` paths identical by construction: both count the same recorded children, and both skip a child that records no compilation.
-- `SourceCompilation::child()` and `::symbol()` pass `childPath()` into the nested compile. The failing child's would-be index is the number of children recorded so far, which is correct precisely because compilation stops at the first failure — no sibling ever claims that index.
+- `SourceCompilation::child()` and `::reference()` pass `childPath()` into the nested compile. The failing child's would-be index is the number of children recorded so far, which is correct precisely because compilation stops at the first failure — no sibling ever claims that index.
 
 ### One stamping site
 
@@ -149,7 +149,7 @@ Source-compatible in full.
 
 - `TypeMismatch` is `final readonly` with a public constructor, constructed in 59 places across `src/` and freely by hosts. A trailing optional parameter leaves every existing call valid, and the new public property is additive.
 - `TypeInference::compile()` gains a trailing optional `string $path = '$'`; the class is `final`, so no implementor can be broken, and existing two-argument calls keep working.
-- `SourceCompilation`'s internal `$compileNode`/`$compileSymbol` closures gain a path argument. These are `@internal`, constructed only by `TypeInference`. Extension source compilers call `child()`/`symbol()`/`infix()`/`prefix()`, whose signatures do not change.
+- `SourceCompilation`'s internal `$compileNode`/`$compileReference` closures carry a path argument. These are `@internal`, constructed only by `TypeInference`. Extension source compilers call `child()`/`reference()`/`infix()`/`prefix()`.
 - Two behavioural changes a strict test could notice: a mismatch that used to have three properties now has four, and a mismatch reaching a host through `compile()` now carries a non-null `path`. Nothing in the suite compares whole `TypeMismatch` values, so this is a note for hosts, not a migration.
 
 No deprecation is needed and nothing is removed.
@@ -174,4 +174,4 @@ The two are not in conflict: locating the mismatch is what attribution needs, an
 - An unbound symbol is located where it is referenced.
 - `at()` as a unit: it carries message, causes and `dead` across, and re-locating is a no-op.
 
-Two notes on coverage of the mechanism. A declared symbol records no `definition` child, so the guard on recording is exercised by the worked example itself — its `SymbolSource` node has no children in the analysis, and the paths still agree. And nothing reachable through `child()` can record a null compilation (every node `compile()` returns carries a `CompilationNode`), so sibling numbering has no way to shift; the only null-compilation child is the declared symbol above.
+Two notes on coverage of the mechanism. A declared reference records no `definition` child, so the guard on recording is exercised by the worked example itself — its `ReferencePath` node has no children in the analysis, and the paths still agree. And nothing reachable through `child()` can record a null compilation (every node `compile()` returns carries a `CompilationNode`), so sibling numbering has no way to shift; the only null-compilation child is the declared reference above.

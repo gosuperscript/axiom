@@ -10,6 +10,7 @@ use Superscript\Axiom\SourceCompilers\DefaultValueSourceCompiler;
 use Superscript\Axiom\SourceCompilers\InfixExpressionCompiler;
 use Superscript\Axiom\SourceCompilers\MatchExpressionCompiler;
 use Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler;
+use Superscript\Axiom\SourceCompilers\ReferencePathCompiler;
 use Superscript\Axiom\SourceCompilers\StaticSourceCompiler;
 use Superscript\Axiom\SourceCompilers\SymbolSourceCompiler;
 use Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler;
@@ -38,6 +39,7 @@ final readonly class CoreSourceCompilers
         /** @var array<class-string<Source>, callable(Source, SourceCompilation): CompiledSource> */
         return [
             StaticSource::class => StaticSourceCompiler::compile(...),
+            ReferencePath::class => ReferencePathCompiler::compile(...),
             SymbolSource::class => SymbolSourceCompiler::compile(...),
             Coerce::class => CoerceSourceCompiler::compile(...),
             DefaultValue::class => DefaultValueSourceCompiler::compile(...),

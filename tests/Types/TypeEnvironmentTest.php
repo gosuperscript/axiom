@@ -20,7 +20,11 @@ use Superscript\Axiom\Tests\Fixtures\CountingSource;
 use Superscript\Axiom\Tests\Fixtures\EvaluationCounter;
 use Superscript\Axiom\Tests\Fixtures\SourceCompilerExtension;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 
@@ -33,6 +37,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]
@@ -55,6 +60,10 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(SymbolSource::class)]
 #[UsesClass(InfixExpression::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(OptionType::class)]
+#[UsesClass(Optional::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]
@@ -88,6 +97,8 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 final class TypeEnvironmentTest extends TestCase
 {
     private static function compiler(?Dialect $dialect = null, ?\Superscript\Axiom\Analysis\ErrorRecovery $recovery = null): TypeInference
@@ -108,17 +119,17 @@ final class TypeEnvironmentTest extends TestCase
     {
         $environment = new TypeEnvironment(declarations: ['turnover' => new NumberType()]);
 
-        $result = $environment->nodeOfSymbol('turnover', null, self::compiler());
+        $result = $environment->nodeOfSymbol('turnover', self::compiler());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
-        $this->assertSame(['turnover'], $result->unwrap()->references);
+        $this->assertEquals([new ReferencePath('turnover')], $result->unwrap()->references);
     }
 
     #[Test]
     public function a_declared_symbol_evaluates_by_reading_its_binding(): void
     {
         $environment = new TypeEnvironment(declarations: ['turnover' => new NumberType()]);
-        $node = $environment->nodeOfSymbol('turnover', null, self::compiler())->unwrap();
+        $node = $environment->nodeOfSymbol('turnover', self::compiler())->unwrap();
 
         $bound = $node->evaluate(new Runtime(new Bindings(['turnover' => 600000])));
         $this->assertSame(600000, $bound->unwrap()->unwrap());
@@ -139,16 +150,18 @@ final class TypeEnvironmentTest extends TestCase
         $scope = new LocalScope();
         $environment = new TypeEnvironment(declarations: [
             'candidate' => $number,
-            'outside.amount' => $number,
+            'outside' => new RecordType(['amount' => $number]),
             'threshold' => $number,
         ])->nested($scope, ['candidate' => $number]);
 
-        $local = $environment->nodeOfSymbol('candidate', null, self::compiler())->unwrap();
-        $outer = $environment->nodeOfSymbol('threshold', null, self::compiler())->unwrap();
-        $namespaced = $environment->nodeOfSymbol('amount', 'outside', self::compiler())->unwrap();
+        $local = $environment->nodeOfSymbol('candidate', self::compiler())->unwrap();
+        $outer = $environment->nodeOfSymbol('threshold', self::compiler())->unwrap();
+        $namespacedResult = $environment->nodeOfInputPath(new ReferencePath('outside', 'amount'));
+        $this->assertNotNull($namespacedResult);
+        $namespaced = $namespacedResult->unwrap();
         $runtime = new Runtime(new Bindings([
             'candidate' => 99,
-            'outside.amount' => 10,
+            'outside' => ['amount' => 10],
             'threshold' => 5,
         ]));
         $bindings = new Bindings(['candidate' => 2]);
@@ -159,6 +172,32 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
+    public function structural_paths_can_read_a_lexically_scoped_record(): void
+    {
+        $scope = new LocalScope();
+        $environment = new TypeEnvironment()->nested($scope, [
+            'candidate' => new RecordType(['amount' => new NumberType()]),
+        ]);
+        $compiled = $environment->nodeOfInputPath(new ReferencePath('candidate', 'amount'));
+        $this->assertNotNull($compiled);
+
+        $runtime = new Runtime();
+        $result = $runtime->within(
+            $scope,
+            new Bindings(['candidate' => ['amount' => 11]]),
+            fn() => $compiled->unwrap()->evaluate($runtime),
+        );
+
+        $this->assertSame(11, $result->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_unknown_definition_has_no_compiled_node(): void
+    {
+        $this->assertNull((new TypeEnvironment())->nodeOfDefinition('missing', self::compiler()));
+    }
+
+    #[Test]
     public function symbol_nodes_annotate_their_resolved_values(): void
     {
         $compiler = self::compiler();
@@ -166,7 +205,7 @@ final class TypeEnvironmentTest extends TestCase
         // A declared symbol annotates the bound value it read...
         $observer = new \Superscript\Axiom\Tests\Fixtures\SpyObserver();
         $declared = (new TypeEnvironment(declarations: ['turnover' => new NumberType()]))
-            ->nodeOfSymbol('turnover', null, $compiler)->unwrap();
+            ->nodeOfSymbol('turnover', $compiler)->unwrap();
 
         $declared->evaluate(new Runtime(new Bindings(['turnover' => 600000]), $observer));
 
@@ -176,7 +215,7 @@ final class TypeEnvironmentTest extends TestCase
         // ...and a defined symbol annotates the value its slot produced.
         $observer = new \Superscript\Axiom\Tests\Fixtures\SpyObserver();
         $defined = (new TypeEnvironment(new Definitions(['base' => new StaticSource(7)])))
-            ->nodeOfSymbol('base', null, $compiler)->unwrap();
+            ->nodeOfSymbol('base', $compiler)->unwrap();
 
         $defined->evaluate(new Runtime(observer: $observer));
 
@@ -185,13 +224,144 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
-    public function a_namespaced_declaration_uses_the_flattened_key(): void
+    public function a_nested_declaration_resolves_as_a_structural_path(): void
     {
-        $environment = new TypeEnvironment(declarations: ['customer.turnover' => new NumberType()]);
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new RecordType(['turnover' => new NumberType()]),
+        ]);
 
-        $result = $environment->nodeOfSymbol('turnover', 'customer', self::compiler());
+        $result = $environment->nodeOfInputPath(new ReferencePath('customer', 'turnover'));
 
+        $this->assertNotNull($result);
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
+        $this->assertSame(600000, $result->unwrap()->evaluate(new Runtime(new Bindings([
+            'customer' => ['turnover' => 600000],
+        ])))->unwrap()->unwrap());
+        $this->assertSame(700000, $result->unwrap()->evaluate(new Runtime(new Bindings([
+            'customer' => (object) ['turnover' => 700000],
+        ])))->unwrap()->unwrap());
+        $this->assertEquals([new ReferencePath('customer', 'turnover')], $result->unwrap()->references);
+    }
+
+    #[Test]
+    public function a_declaration_record_is_accepted_without_reconstruction(): void
+    {
+        $customer = new RecordType(['turnover' => new NumberType()]);
+        $declarations = new RecordType(['customer' => $customer]);
+        $environment = new TypeEnvironment(declarations: $declarations);
+
+        $this->assertSame($customer, $environment->nodeOfSymbol('customer', self::compiler())->unwrap()->returns);
+    }
+
+    #[Test]
+    public function deep_structural_paths_traverse_every_array_and_object_segment(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new RecordType([
+                'address' => new RecordType([
+                    'house' => new RecordType(['number' => new NumberType()]),
+                ]),
+            ]),
+        ]);
+        $node = $environment->nodeOfInputPath(new ReferencePath('customer', 'address', 'house', 'number'))->unwrap();
+
+        $array = new Bindings(['customer' => ['address' => ['house' => ['number' => 42]]]]);
+        $object = new Bindings(['customer' => (object) ['address' => (object) ['house' => (object) ['number' => 43]]]]);
+
+        $this->assertSame(42, $node->evaluate(new Runtime($array))->unwrap()->unwrap());
+        $this->assertSame(43, $node->evaluate(new Runtime($object))->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function structural_paths_annotate_the_full_path_and_result(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new RecordType(['turnover' => new NumberType()]),
+        ]);
+        $node = $environment->nodeOfInputPath(new ReferencePath('customer', 'turnover'))->unwrap();
+        $observer = new \Superscript\Axiom\Tests\Fixtures\SpyObserver();
+
+        $node->evaluate(new Runtime(new Bindings(['customer' => ['turnover' => 600000]]), $observer));
+
+        $this->assertContains(['label', 'customer.turnover'], $observer->timeline);
+        $this->assertContains(['result', 600000], $observer->timeline);
+    }
+
+    #[Test]
+    public function an_already_optional_nested_type_is_not_wrapped_twice(): void
+    {
+        $choice = new OptionType(new RecordType(['selected' => new NumberType()]));
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new Optional(new RecordType(['choice' => $choice])),
+        ]);
+
+        $node = $environment->nodeOfInputPath(new ReferencePath('customer', 'choice'))->unwrap();
+
+        $this->assertSame($choice, $node->returns);
+    }
+
+    #[Test]
+    public function an_omitted_nested_property_is_observed_as_none(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'customer' => new Optional(new RecordType([
+                'turnover' => new Optional(new NumberType()),
+            ])),
+        ]);
+        $reference = new ReferencePath('customer', 'turnover');
+        $result = $environment->nodeOfInputPath($reference);
+
+        $this->assertNotNull($result);
+        $this->assertInstanceOf(OptionType::class, $result->unwrap()->returns);
+        $this->assertTrue($result->unwrap()->evaluate(new Runtime(new Bindings()))->unwrap()->isNone());
+        $this->assertTrue($result->unwrap()->evaluate(new Runtime(new Bindings(['customer' => []])))->unwrap()->isNone());
+
+        $requiredChild = new TypeEnvironment(declarations: [
+            'customer' => new Optional(new RecordType(['turnover' => new NumberType()])),
+        ])->nodeOfInputPath($reference);
+        $this->assertNotNull($requiredChild);
+        $this->assertInstanceOf(OptionType::class, $requiredChild->unwrap()->returns);
+    }
+
+    #[Test]
+    public function only_concrete_declared_record_paths_use_structural_compilation(): void
+    {
+        $defined = new TypeEnvironment(
+            definitions: new Definitions(['customer' => new StaticSource(['turnover' => 1])]),
+        );
+        $declared = new TypeEnvironment(declarations: ['amount' => new NumberType()]);
+
+        $this->assertNull($defined->nodeOfInputPath(new ReferencePath('customer', 'turnover')));
+        $this->assertNull($declared->nodeOfInputPath(new ReferencePath('amount')));
+        $this->assertNull($declared->nodeOfInputPath(new ReferencePath('missing', 'turnover')));
+        $this->assertNull($declared->nodeOfInputPath(new ReferencePath('amount', 'imaginary')));
+    }
+
+    #[Test]
+    public function references_consume_the_longest_definition_prefix_unless_the_root_is_declared(): void
+    {
+        $definitions = new Definitions([
+            'answers' => new StaticSource(['risk' => ['flood' => 1]]),
+            'answers.risk' => new StaticSource(['flood' => 2]),
+        ]);
+        $reference = new ReferencePath('answers', 'risk', 'flood');
+
+        $defined = new TypeEnvironment(definitions: $definitions);
+        $this->assertSame('answers.risk', $defined->definitionKeyOf($reference));
+
+        $nested = $defined->nested(new LocalScope(), []);
+        $this->assertSame('answers.risk', $nested->definitionKeyOf($reference));
+
+        $declared = new TypeEnvironment(
+            definitions: $definitions,
+            declarations: ['answers' => new RecordType([
+                'risk' => new RecordType(['flood' => new NumberType()]),
+            ])],
+        );
+
+        $this->assertNull($declared->definitionKeyOf($reference));
+        $this->assertNotNull($declared->nodeOfInputPath($reference));
+        $this->assertInstanceOf(RecordType::class, $declared->nodeOfSymbol('answers', self::compiler())->unwrap()->returns);
     }
 
     #[Test]
@@ -208,7 +378,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->nodeOfSymbol('derived', null, self::compiler());
+        $result = $environment->nodeOfSymbol('derived', self::compiler());
 
         $this->assertInstanceOf(NumberType::class, $result->unwrap()->returns);
         $this->assertSame(6, $result->unwrap()->evaluate(new Runtime())->unwrap()->unwrap());
@@ -224,9 +394,9 @@ final class TypeEnvironmentTest extends TestCase
             declarations: ['amount' => new NumberType()],
         );
 
-        $result = $environment->nodeOfSymbol('derived', null, self::compiler());
+        $result = $environment->nodeOfSymbol('derived', self::compiler());
 
-        $this->assertSame(['amount'], $result->unwrap()->references);
+        $this->assertEquals([new ReferencePath('amount')], $result->unwrap()->references);
     }
 
     #[Test]
@@ -236,8 +406,8 @@ final class TypeEnvironmentTest extends TestCase
             definitions: new Definitions(['base' => new StaticSource(2)]),
         );
 
-        $first = $environment->nodeOfSymbol('base', null, self::compiler());
-        $second = $environment->nodeOfSymbol('base', null, self::compiler());
+        $first = $environment->nodeOfSymbol('base', self::compiler());
+        $second = $environment->nodeOfSymbol('base', self::compiler());
 
         $this->assertSame($first, $second);
     }
@@ -256,7 +426,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $node = $environment->nodeOfSymbol('derived', null, self::compiler($dialect))->unwrap();
+        $node = $environment->nodeOfSymbol('derived', self::compiler($dialect))->unwrap();
 
         $this->assertSame(4, $node->evaluate(new Runtime())->unwrap()->unwrap());
         $this->assertSame(1, $counter->evaluations, 'both references read one memoized slot');
@@ -272,7 +442,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->nodeOfSymbol('a', null, self::compiler());
+        $result = $environment->nodeOfSymbol('a', self::compiler());
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $result->unwrapErr()->describe());
@@ -288,10 +458,30 @@ final class TypeEnvironmentTest extends TestCase
         );
         $reads = new CompilationRecorder();
 
-        $result = $environment->nodeOfSymbol('a', null, self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()), '$', $reads);
+        $result = $environment->nodeOfSymbol('a', self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()), '$', $reads);
 
         $this->assertTrue($result->isErr());
-        $this->assertSame(['a'], $reads->references());
+        $this->assertEquals([new ReferencePath('a')], $reads->references());
+    }
+
+    #[Test]
+    public function a_dotted_definition_cycle_records_every_segment_of_its_name(): void
+    {
+        $reference = new ReferencePath('answers', 'risk', 'score');
+        $environment = new TypeEnvironment(
+            definitions: new Definitions(['answers.risk.score' => $reference]),
+        );
+        $reads = new CompilationRecorder();
+
+        $result = $environment->nodeOfReference(
+            $reference,
+            self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()),
+            '$',
+            $reads,
+        );
+
+        $this->assertTrue($result->isErr());
+        $this->assertEquals([$reference], $reads->references());
     }
 
     #[Test]
@@ -307,7 +497,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $described = $environment->nodeOfSymbol('entry', null, self::compiler())->unwrapErr()->describe();
+        $described = $environment->nodeOfSymbol('entry', self::compiler())->unwrapErr()->describe();
 
         $this->assertStringContainsString('Cyclic symbol definition: a → b → a.', $described);
         $this->assertStringNotContainsString('entry → a', $described);
@@ -326,7 +516,7 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $result = $environment->nodeOfSymbol('a', null, self::compiler());
+        $result = $environment->nodeOfSymbol('a', self::compiler());
 
         $this->assertStringContainsString('Cyclic symbol definition: a → c → a.', $result->unwrapErr()->describe());
     }
@@ -341,15 +531,15 @@ final class TypeEnvironmentTest extends TestCase
             ]),
         );
 
-        $this->assertTrue($environment->nodeOfSymbol('x', null, self::compiler())->isOk());
+        $this->assertTrue($environment->nodeOfSymbol('x', self::compiler())->isOk());
 
-        $cycle = $environment->nodeOfSymbol('a', null, self::compiler());
+        $cycle = $environment->nodeOfSymbol('a', self::compiler());
 
         $this->assertSame('Cyclic symbol definition: a → a.', $cycle->unwrapErr()->message);
     }
 
     #[Test]
-    public function a_record_declaration_never_answers_a_namespaced_symbol(): void
+    public function a_record_declaration_never_flattens_its_properties_into_symbols(): void
     {
         // Exact keys only, mirroring runtime lookup: a record-typed
         // declaration of customer types the symbol customer, not the
@@ -358,9 +548,9 @@ final class TypeEnvironmentTest extends TestCase
             'customer' => new \Superscript\Axiom\Types\RecordType(['turnover' => new NumberType()]),
         ]);
 
-        $result = $environment->nodeOfSymbol('turnover', 'customer', self::compiler());
+        $result = $environment->nodeOfSymbol('turnover', self::compiler());
 
-        $this->assertStringContainsString('Unbound symbol [customer.turnover]', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('Unbound symbol [turnover]', $result->unwrapErr()->describe());
     }
 
     #[Test]
@@ -368,10 +558,10 @@ final class TypeEnvironmentTest extends TestCase
     {
         $environment = new TypeEnvironment();
 
-        $result = $environment->nodeOfSymbol('ghost', 'customer', self::compiler());
+        $result = $environment->nodeOfSymbol('ghost', self::compiler());
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Unbound symbol [customer.ghost]', $result->unwrapErr()->message);
+        $this->assertStringContainsString('Unbound symbol [ghost]', $result->unwrapErr()->message);
     }
 
     #[Test]
@@ -382,9 +572,9 @@ final class TypeEnvironmentTest extends TestCase
         // asked about most.
         $reads = new CompilationRecorder();
 
-        $result = new TypeEnvironment()->nodeOfSymbol('ghost', 'customer', self::compiler(), '$', $reads);
+        $result = new TypeEnvironment()->nodeOfSymbol('ghost', self::compiler(), '$', $reads);
 
         $this->assertTrue($result->isErr());
-        $this->assertSame(['customer.ghost'], $reads->references());
+        $this->assertEquals([new ReferencePath('ghost')], $reads->references());
     }
 }

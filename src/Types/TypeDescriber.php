@@ -106,12 +106,17 @@ final class TypeDescriber
 
     private static function record(RecordShape $shape): string
     {
-        $fields = [];
+        $properties = [];
 
-        foreach ($shape->fields as $name => $field) {
-            $fields[] = sprintf('%s: %s', $name, self::describeShape($field));
+        foreach ($shape->properties as $name => $property) {
+            $properties[] = sprintf(
+                '%s: %s%s',
+                $name,
+                $property->optional ? 'Optional<' : '',
+                self::describeShape($property->value) . ($property->optional ? '>' : ''),
+            );
         }
 
-        return sprintf('{%s}', implode(', ', $fields));
+        return sprintf('{%s}', implode(', ', $properties));
     }
 }

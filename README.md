@@ -13,7 +13,7 @@ The design principle is **compile, then trust**: `Expression::compile()` type-ch
     - [Types](#types)
     - [Assert vs Coerce](#assert-vs-coerce)
     - [Sources](#sources)
-    - [Inputs, Definitions, and Namespaces](#inputs-definitions-and-namespaces)
+    - [Records, Symbols, and Definitions](#records-symbols-and-definitions)
     - [Match Expressions](#match-expressions)
     - [Operators](#operators)
     - [Execution Observation](#execution-observation)
@@ -56,33 +56,34 @@ A real program has parameters and definitions:
 ```php
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\RecordType;
 
 // area = PI * radius * radius
 $source = new InfixExpression(
-    left: new SymbolSource('PI'),
+    left: new ReferencePath('PI'),
     operator: '*',
     right: new InfixExpression(
-        left: new SymbolSource('radius'),
+        left: new ReferencePath('radius'),
         operator: '*',
-        right: new SymbolSource('radius'),
+        right: new ReferencePath('radius'),
     ),
 );
 
 $area = new Expression(
     source: $source,
     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
-    declarations: ['radius' => new NumberType()],
+    declarations: new RecordType(['radius' => new NumberType()]),
 );
 
 $area->parameters(); // ['radius']
 
 $program = $area->compile()->unwrap();  // every node resolved and certified
 $program->returns;                      // NumberType — a property, not a query
-$program->references;                   // ['radius'] — declared inputs it reads
+$program->references;                   // [new ReferencePath('radius')]
 
 $program(['radius' => 5])->unwrap()->unwrap();  // ~78.54
 $program(['radius' => 10])->unwrap()->unwrap(); // ~314.16
@@ -90,7 +91,7 @@ $program(['radius' => 10])->unwrap()->unwrap(); // ~314.16
 
 Compile once — at authoring or deploy time — and invoke per request. `compile()` refuses, with names, everything that would make evaluation dishonest: definition cycles, unbound symbols, operators no rule resolves (or two rules claim), type errors. Running an unchecked program is not discouraged — it is unrepresentable, because only `Program` is callable.
 
-The expression's inputs are its **parameters**, passed at the call site, and the declaration list is the program's complete public signature: undeclared binding keys never enter, and a parameter you cannot type yet is declared `Unknown` explicitly. Of that signature a call must satisfy the part the program reads — `$program->references`. [Compile, Then Trust](#compile-then-trust) covers how inputs are admitted.
+The expression's inputs are its **parameters**, passed at the call site, and the declaration record is the program's complete public signature: undeclared binding keys never enter, and a parameter you cannot type yet is declared `Unknown` explicitly. Of that signature a call must satisfy the part the program reads — `$program->references`. [Compile, Then Trust](#compile-then-trust) covers how inputs are admitted.
 
 ## Core Concepts
 
@@ -125,12 +126,12 @@ Inference is **literal-first**: `'shop'` types as the literal `'shop'` (assignab
 $diagnosis = $expression->diagnose();
 
 $diagnosis->diagnostics; // list<TypeMismatch> — every refusal, in the order compilation met them
-$diagnosis->references;  // symbols read, including ones that failed to resolve
+$diagnosis->references;  // list<ReferencePath>, including unresolved reads
 $diagnosis->returns;     // the root type, or null where the root itself failed
 $diagnosis->program();   // Ok(Program) iff there are no diagnostics
 ```
 
-For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports `['mystery', 'postcode']` as the expression's reads. A node that refuses compiles to a *failed* source, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
+For `mystery > 1000 && postcode == 'SW1'` with only `postcode` declared, `compile()` refuses with the unbound `mystery`. `diagnose()` reports that same one refusal, type-checks the right-hand comparison anyway, and still reports the `mystery` and `postcode` access paths as the expression's reads. A node that refuses compiles to a *failed* source, which absorbs — one fault is one diagnostic, and a `Program` carrying one can never be constructed. Because absorption is silent, diagnostics **converge**: fixing one fault can reveal a refusal that fault made unanswerable, the way a non-exhaustive match over an unbound subject reports only the subject.
 
 `compile()` is one attempt of the same walk, so its refusal is always the diagnosis' first diagnostic.
 
@@ -159,27 +160,44 @@ Declare your input types once on the `Expression`, and `compile()` certifies the
 
 ```php
 use Superscript\Axiom\Expression;
-use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\ReferencePath;
+use Superscript\Axiom\Sources\InfixExpression;
+use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
+use Superscript\Axiom\Types\StringType;
+
+$turnover = new ReferencePath('customer', 'turnover');
+$condition = new InfixExpression(
+    left: new InfixExpression($turnover, '*', new StaticSource(1.2)),
+    operator: '>',
+    right: new StaticSource(500000),
+);
 
 $gate = new Expression(
-    source: $condition,                                   // quote.turnover * 1.2 > 500000
+    source: $condition,
     definitions: $definitions,
-    declarations: ['quote.turnover' => new NumberType()], // one map, both faces
+    declarations: new RecordType([
+        'customer' => new RecordType([
+            'turnover' => new NumberType(),
+        ]),
+    ]),
 );
 
 $program = $gate->compile()->unwrap();
 
-$program(['quote.turnover' => '600000']);
+$program(['customer' => ['turnover' => '600000']]);
 // the BOUNDARY coerces '600000' → 600000 through the declared type
 // before evaluation — certified programs never see raw garbage
 
-$program(['quote.turnover' => 'lots']);
-// Err(InadmissibleBinding): "binding [quote.turnover]: …" — aggregated,
-// named by input, before any evaluation
+$program(['customer' => ['turnover' => 'lots']]);
+// Err(InadmissibleBinding): "binding [customer]: Property [turnover]: …"
+// — aggregated and named before any evaluation
 
 $program([]);
-// Err(MissingRequiredInput): the call is waiting on ['quote.turnover']
+// Err(MissingRequiredInput): the customer root required by customer.turnover is missing
 ```
 
 Certification is a conditional guarantee — "*if* inputs inhabit their declared types…" — and the boundary establishes the condition on every call. The bindings the program **reads** pass through their declared types (`coerce` by default, `Boundary::Assert` for strict hosts), required reads must be present, and every other key is stripped.
@@ -195,7 +213,27 @@ A refusal comes in two kinds, because hosts act on them differently:
 
 Both extend `BoundaryViolation`, whose `$rejections` is one `RejectedBinding` per input at fault — the input's name and the message about it in one object — with `$violations` the messages projected out, unchanged. A fault dominates absence: a call that both omits one required input and supplies another badly is an `InadmissibleBinding`, so `instanceof MissingRequiredInput` reads as "nothing is wrong here except that inputs are still missing".
 
-**Whether absence is acceptable is a property of the declared type's shape**, and of nothing else — not of how a value converted, and not of the order a union lists its members. `Union(String, Option<Number>)` and `Union(Option<Number>, String)` both project `(String | Number)?`, so both take `''` as `None`; bare `String` requires presence, so `''` is an `InadmissibleBinding` (a value was supplied and does not inhabit `String`) while binding nothing at all is a `MissingRequiredInput`. Optionality is not a licence for a fault: a value that cannot convert at all is inadmissible whether or not absence is allowed.
+**Presence and nullability are separate.** A bare property is required by default; wrap it in `Optional` only when its key may be omitted. `OptionType` says the supplied value itself may be absent. A select whose "no value" option is a real answer is therefore a required `OptionType`: the caller must answer, but `null` is a legal answer.
+
+```php
+declarations: new RecordType([
+    'excess' => new OptionType($monetary),
+    'comment' => new Optional(new StringType()),
+])
+
+$program([]);                  // Err(MissingRequiredInput): nobody has answered
+$program(['excess' => null]);  // Ok(None): answered, and the answer is "none"
+$program(['excess' => '250']); // Ok(Some(250))
+```
+
+| Declared | Omitted | Bound `''` / `null` | Bound `['a']` |
+| --- | --- | --- | --- |
+| `String` | `MissingRequiredInput` | `InadmissibleBinding` | `InadmissibleBinding` |
+| `OptionType(String)` | `MissingRequiredInput` | `Ok(None)` | `InadmissibleBinding` |
+| `Optional(String)` | `Ok(None)` | `InadmissibleBinding` | `InadmissibleBinding` |
+| `Optional(OptionType(String))` | `Ok(None)` | `Ok(None)` | `InadmissibleBinding` |
+
+`Optional` is a record-property qualifier, not a `Type`: it changes whether the key must exist, not the value's domain. Reading an omitted optional property produces absence, so its accessed type is option-lifted. Presence still intersects the reads — a required property the program never mentions is ignored like any other declaration.
 
 > [!NOTE]
 > The boundary is the one runtime type check that survives compilation, by design: `compile()` proves the program, not future inputs.
@@ -240,7 +278,7 @@ The built-in types, and what their coercions read:
 Three types carry laws worth knowing:
 
 - **`OptionType`** — a possibly-absent value. `null` is a legal, *present* value of the option: coercing `null` yields `Some(null)`, not a failed coercion. That is what lets an optional field live inside a record whose required fields treat absence as "missing".
-- **`RecordType`** — named, individually typed fields, exact: a record's value set is fully described by its fields (data with unenumerable keys is a `Dict`). An optional field is a field whose type is `OptionType`; coercion canonicalizes a missing optional key to a present `null`. The two admission faces diverge on undeclared keys by design: `assert` rejects them (strict membership), while `coerce` takes the declared slice of wide input — pass a whole context row and only the declared fields enter.
+- **`RecordType`** — named, individually typed properties, exact: a record's value set is fully described by its properties (data with unenumerable keys is a `Dict`). Properties are required by default; `new Optional($type)` permits omission while preserving an omitted key as omitted. `OptionType` independently permits an absent value. The two admission faces diverge on undeclared keys by design: `assert` rejects them (strict membership), while `coerce` takes the declared slice of wide input — pass a whole context row and only the declared properties enter.
 - **`UnknownType` and `NeverType`** — the statically-unnameable type and the bottom type (no value inhabits it). Both are produced by inference, never declared by authors — except that a host may declare an input `Unknown` explicitly when its scope genuinely cannot type it. `Unknown` is **inert**: no operator, comparison, or member access accepts it. The ways out are the two explicit bridges — `Coerce` (convert it into a type) and `Ascription` (claim its type, runtime-verified) — so every escape from untyped data is a visible node in the program.
 
 ### Assert vs Coerce
@@ -275,13 +313,14 @@ Both return `Result<Option<T>, Throwable>` — no exceptions for normal control 
 Sources are the nodes a program is described with:
 
 - **`StaticSource`** — direct values
-- **`SymbolSource`** — named references: a declared parameter (read from bindings) or a defined derived value (compiled once, memoized per invocation)
+- **`ReferencePath`** — rooted references: a declared input path (read from the binding record) or a defined derived value, optionally followed by structural properties
 - **`Coerce`** — the conversion bridge: converts a resolved value into the declared type via coercion (statically opaque by design)
 - **`Ascription`** — the author's checked type claim: verified by `assert()` at runtime, checked for overlap at compile time
 - **`DefaultValue`** — replaces absence with a fallback coerced at compile time to the source's present type
 - **`InfixExpression`** / **`UnaryExpression`** — operator applications
 - **`MatchExpression`** — conditional matching with ordered arms
-- **`MemberAccessSource`** — chained property/array-key access
+- **`MemberAccessSource`** — property/array-key access on an arbitrary computed source
+- **`SymbolSource`** — deprecated compatibility source for migrating stored root references; new programs use `ReferencePath`
 
 When do you reach for `Coerce` vs `Ascription` in practice?
 
@@ -307,7 +346,7 @@ new DefaultValue($optionalTags, [])
 The `??` operator spells the same policy where the fallback is itself an expression rather than data:
 
 ```php
-new InfixExpression($optionalPremium, '??', new SymbolSource('standard_premium'))
+new InfixExpression($optionalPremium, '??', new ReferencePath('standard_premium'))
 ```
 
 Both discharge absence and both keep the assumption in the stored program. They differ in two ways. `DefaultValue` **coerces** its fallback to the present type at compile time, so `0` becomes the correct domain zero and `[]` the correctly typed empty collection; `??` requires its right operand to be **assignable** to the present type, since an expression has a type of its own to honor. And where `DefaultValue` on a source that can never be absent is silently the identity, `??` refuses it as *dead* — a fallback that can never fire is an author's mistake, not a no-op.
@@ -315,50 +354,46 @@ Both discharge absence and both keep the assumption in the stored program. They 
 > [!TIP]
 > Converting? `Coerce`, preferably via declarations at the boundary. Claiming? `Ascription`. If you find yourself ascribing to paper over a conversion, the value wanted a boundary declaration instead. These two nodes plus the binding boundary are the **only** places a compiled program ever inspects a value's type — everything else was proven at compile time.
 
-### Inputs, Definitions, and Namespaces
+### Records, References, and Definitions
 
-Inputs are **bindings** — passed at the call site. Stable named expressions (constants, named sub-expressions) are **definitions** — bound once when the `Expression` is constructed and compiled exactly once into the program (at runtime a definition evaluates lazily and memoizes per invocation). Both support flat names and dotted namespaces.
+Inputs are **bindings** — passed at the call site — and their declaration is one `RecordType`. Its root properties are symbols; nested properties are ordinary record structure. Stable named expressions (constants and named sub-expressions) are **definitions**, compiled once and evaluated lazily at most once per invocation. Definitions are root symbols too; there is no second namespace mechanism.
 
 ```php
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\StaticSource;
-use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
+use Superscript\Axiom\Types\RecordType;
 
 $expression = new Expression(
-    source: /* ... */,
+    source: new ReferencePath('quote', 'turnover'),
     definitions: new Definitions([
-        // Global scope
         'version' => new StaticSource('1.0.0'),
-        // Namespaced scope
-        'math' => [
-            'pi' => new StaticSource(3.14159),
-            'e'  => new StaticSource(2.71828),
-        ],
+    ]),
+    declarations: new RecordType([
+        'quote' => new RecordType([
+            'turnover' => new NumberType(),
+            'claims' => new Optional(new NumberType()),
+        ]),
     ]),
 );
 
-// Flat and namespaced inputs — bound by their exact dotted keys
 $program = $expression->compile()->unwrap();
 $program([
-    'tier' => 'small',
-    'quote.claims' => 3,
-    'quote.turnover' => 600000,
+    'quote' => [
+        'turnover' => 600000,
+        // 'claims' may be omitted
+    ],
 ]);
 ```
 
-`SymbolSource` looks up by name + optional namespace:
+Three rules keep the model honest:
 
-```php
-new SymbolSource('pi', 'math');      // -> math.pi
-new SymbolSource('claims', 'quote'); // -> quote.claims
-new SymbolSource('version');         // -> version (global)
-```
-
-Two rules keep symbol lookup honest:
-
-- **Symbols are names; member access is structure.** A namespaced symbol is the flat dotted key and nothing else: `SymbolSource('claims', 'quote')` is answered by a binding or definition named exactly `quote.claims` — never by digging into the value of a `quote` binding. Bind keys exactly as declared (`['quote.claims' => 3]`), or declare `quote` as a record, bind it whole, and reach its fields with `MemberAccessSource` — one value, one reading, chosen at declaration time. This is what makes caller data structurally unable to answer for (and so shadow) a definition.
-- **Declarations and definitions are disjoint namespaces.** A symbol is a *parameter* (declared, supplied by bindings) or a *derived value* (defined), never both — a collision is a constructor error. The boundary strips undeclared binding keys before evaluation. Together with exact-key lookup, shadowing a definition is unrepresentable. To let callers override a derived value, model the override in-language: an `Option`-typed parameter the definition consults.
+- **References are rooted paths.** `new ReferencePath('quote', 'turnover')` is the persisted source and the compiler-reported read. `MemberAccessSource` is reserved for accessing a member of an arbitrary computed source. Dots are rejected in path segments; call `describe()` for the human-facing `quote.turnover`. JSON keeps the structure as `{"root":"quote","properties":["turnover"]}`.
+- **Declarations are records all the way down.** The same required-by-default/`Optional` property model governs both the outer input signature and nested records. The compiler projects this declaration record to the access paths the program actually reads, preserving presence qualifiers at every level.
+- **Declarations and definitions are disjoint root symbol sets.** A root is a *parameter* (declared and supplied by bindings) or a *derived value* (defined), never both. A collision is a constructor error. To let callers override a derived value, model the override in-language as an option-valued parameter the definition consults.
 
 ### Match Expressions
 
@@ -381,7 +416,11 @@ new MatchExpression(
     arms: [
         new MatchArm(
             new ExpressionPattern(
-                new InfixExpression(new SymbolSource('claims', 'quote'), '>', new StaticSource(2)),
+                new InfixExpression(
+                    new ReferencePath('quote', 'claims'),
+                    '>',
+                    new StaticSource(2),
+                ),
             ),
             new InfixExpression(new StaticSource(100), '*', new StaticSource(0.25)),
         ),
@@ -395,7 +434,7 @@ Dispatch table:
 ```php
 // match tier { "micro" => 1.3, "small" => 1.1, _ => 1.0 }
 new MatchExpression(
-    subject: new SymbolSource('tier'),
+    subject: new ReferencePath('tier'),
     arms: [
         new MatchArm(new LiteralPattern('micro'), new StaticSource(1.3)),
         new MatchArm(new LiteralPattern('small'), new StaticSource(1.1)),

@@ -20,6 +20,7 @@ use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
+use Superscript\Axiom\Types\Shapes\RecordPropertyShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\StringShape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
@@ -52,6 +53,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(UnionShape::class)]
 #[UsesClass(UnknownShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
+#[UsesClass(RecordPropertyShape::class)]
 final class TypeRelationsTest extends TestCase
 {
     #[Test]
@@ -125,9 +127,9 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new NumberShape()]),
             new RecordShape(['a' => new NumberShape()]),
         ];
-        yield 'missing optional field on a closed source reads as null' => [
+        yield 'a closed source may omit an optional target field' => [
             new RecordShape(['a' => new NumberShape()]),
-            new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
+            new RecordShape(['a' => new NumberShape(), 'b' => new RecordPropertyShape(new StringShape(), true)]),
         ];
         yield 'record field narrows' => [
             new RecordShape(['a' => new LiteralShape(1)]),
@@ -135,6 +137,10 @@ final class TypeRelationsTest extends TestCase
         ];
         yield 'closed record of non-optional fields into a dict' => [
             new RecordShape(['a' => new LiteralShape(1), 'b' => new NumberShape()]),
+            new DictShape(new NumberShape()),
+        ];
+        yield 'an omitted record property is compatible with a dict' => [
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
             new DictShape(new NumberShape()),
         ];
 
@@ -245,33 +251,38 @@ final class TypeRelationsTest extends TestCase
         yield 'record with an undeclared extra field' => [
             new RecordShape(['a' => new NumberShape(), 'x' => new StringShape()]),
             new RecordShape(['a' => new NumberShape()]),
-            "Field 'x' is not part of the record",
+            "Property 'x' is not part of the record",
         ];
         yield 'record field type mismatch' => [
             new RecordShape(['a' => new StringShape()]),
             new RecordShape(['a' => new NumberShape()]),
-            "Field 'a' is incompatible",
+            "Property 'a' is incompatible",
         ];
         yield 'record field mismatch carries the field cause' => [
             new RecordShape(['a' => new StringShape()]),
             new RecordShape(['a' => new NumberShape()]),
             'String is not assignable to Number',
         ];
+        yield 'an optional source property cannot satisfy a required target property' => [
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            new RecordShape(['a' => new NumberShape()]),
+            "Required property 'a' may be omitted by the source",
+        ];
         yield 'required field missing' => [
             new RecordShape([]),
             new RecordShape(['a' => new NumberShape()]),
-            "Required field 'a' is missing",
+            "Required property 'a' is missing",
         ];
 
-        yield 'record with optional field into dict' => [
-            new RecordShape(['a' => new OptionShape(new NumberShape())]),
+        yield 'record with optional nullable property into dict' => [
+            new RecordShape(['a' => new RecordPropertyShape(new OptionShape(new NumberShape()), true)]),
             new DictShape(new NumberShape()),
-            "Optional field 'a' may be null",
+            "Property 'a' may contain an absent value",
         ];
         yield 'record field incompatible with dict value' => [
             new RecordShape(['a' => new StringShape()]),
             new DictShape(new NumberShape()),
-            "Field 'a' is incompatible",
+            "Property 'a' is incompatible",
         ];
         yield 'record-to-dict field mismatch carries the field cause' => [
             new RecordShape(['a' => new StringShape()]),
@@ -279,9 +290,9 @@ final class TypeRelationsTest extends TestCase
             'String is not assignable to Number',
         ];
         yield 'a record-to-dict failure reports every field, not just the first' => [
-            new RecordShape(['a' => new OptionShape(new StringShape()), 'b' => new StringShape()]),
+            new RecordShape(['a' => new RecordPropertyShape(new StringShape(), true), 'b' => new StringShape()]),
             new DictShape(new NumberShape()),
-            "Field 'b' is incompatible",
+            "Property 'b' is incompatible",
         ];
         yield 'list is not a dict' => [new ListShape(new NumberShape()), new DictShape(new NumberShape())];
         yield 'number is not a dict' => [new NumberShape(), new DictShape(new NumberShape())];
@@ -349,7 +360,7 @@ final class TypeRelationsTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'Only the empty array inhabits both a list and a record, so they overlap exactly when the record is empty and the list can be empty.',
+            'Only the empty array inhabits both a list and a record, so they overlap exactly when every record property is optional and the list can be empty.',
             $result->unwrapErr()->describe(),
         );
     }
@@ -445,13 +456,18 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new LiteralShape('y')]),
             false,
         ];
+        yield 'one optional shared field cannot hide a required disjoint value' => [
+            new RecordShape(['a' => new RecordPropertyShape(new LiteralShape('x'), true)]),
+            new RecordShape(['a' => new LiteralShape('y')]),
+            false,
+        ];
         yield 'a required field forbidden by a closed record blocks overlap' => [
             new RecordShape(['a' => new NumberShape(), 'b' => new StringShape()]),
             new RecordShape(['a' => new NumberShape()]),
             false,
         ];
         yield 'an optional extra field does not block overlap with a closed record' => [
-            new RecordShape(['a' => new NumberShape(), 'b' => new OptionShape(new StringShape())]),
+            new RecordShape(['a' => new NumberShape(), 'b' => new RecordPropertyShape(new StringShape(), true)]),
             new RecordShape(['a' => new NumberShape()]),
             true,
         ];
@@ -467,12 +483,12 @@ final class TypeRelationsTest extends TestCase
             false,
         ];
         yield 'optional fields are ignored for record-dict overlap' => [
-            new RecordShape(['a' => new OptionShape(new StringShape())]),
+            new RecordShape(['a' => new RecordPropertyShape(new StringShape(), true)]),
             new DictShape(new NumberShape()),
             true,
         ];
         yield 'a required field after an optional one still blocks record-dict overlap' => [
-            new RecordShape(['a' => new OptionShape(new StringShape()), 'b' => new StringShape()]),
+            new RecordShape(['a' => new RecordPropertyShape(new StringShape(), true), 'b' => new StringShape()]),
             new DictShape(new NumberShape()),
             false,
         ];
@@ -487,12 +503,22 @@ final class TypeRelationsTest extends TestCase
             new RecordShape([]),
             true,
         ];
+        yield 'an all-optional record overlaps an emptiable list at []' => [
+            new ListShape(new NumberShape()),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            true,
+        ];
+        yield 'an all-optional record does not overlap a non-empty list' => [
+            new ListShape(new NumberShape(), min: 1),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            false,
+        ];
         yield 'a non-empty list never overlaps the empty record' => [
             new ListShape(new NumberShape(), min: 1),
             new RecordShape([]),
             false,
         ];
-        yield 'a record with fields never overlaps a list' => [
+        yield 'a record with a required field never overlaps a list' => [
             new ListShape(new NumberShape()),
             new RecordShape(['a' => new OptionShape(new NumberShape())]),
             false,
@@ -583,9 +609,9 @@ final class TypeRelationsTest extends TestCase
             new RecordShape(['a' => new LiteralShape('y')]),
         )->unwrapErr()->describe();
 
-        $this->assertStringContainsString("Required field 'x' is forbidden by the record.", $described);
-        $this->assertStringContainsString("Required field 'y' is forbidden by the record.", $described);
-        $this->assertStringContainsString("Field 'a' cannot satisfy both records.", $described);
+        $this->assertStringContainsString("Required property 'x' is forbidden by the record.", $described);
+        $this->assertStringContainsString("Required property 'y' is forbidden by the record.", $described);
+        $this->assertStringContainsString("Property 'a' cannot satisfy both records.", $described);
         $this->assertStringContainsString("'x' and 'y' share no values.", $described);
     }
 
@@ -609,8 +635,23 @@ final class TypeRelationsTest extends TestCase
             new DictShape(new NumberShape()),
         )->unwrapErr()->describe();
 
-        $this->assertStringContainsString("Required field 'a' cannot inhabit the dict.", $described);
+        $this->assertStringContainsString("Required property 'a' cannot inhabit the dict.", $described);
         $this->assertStringContainsString('String and Number share no values.', $described);
+    }
+
+    #[Test]
+    public function record_to_dict_assignment_reports_every_incompatible_property(): void
+    {
+        $described = TypeRelations::assignable(
+            new RecordShape([
+                'nullable' => new OptionShape(new NumberShape()),
+                'text' => new StringShape(),
+            ]),
+            new DictShape(new NumberShape()),
+        )->unwrapErr()->describe();
+
+        $this->assertStringContainsString("Property 'nullable' may contain an absent value", $described);
+        $this->assertStringContainsString("Property 'text' is incompatible", $described);
     }
 
     #[Test]
@@ -687,6 +728,11 @@ final class TypeRelationsTest extends TestCase
         yield 'records with foreign required fields' => [new RecordShape(['a' => new NumberShape()]), new RecordShape(['b' => new NumberShape()]), false];
         yield 'record against a dict its required fields inhabit' => [new RecordShape(['a' => new NumberShape()]), new DictShape(new NumberShape()), true];
         yield 'record against a dict of a foreign value type' => [new RecordShape(['a' => new StringShape()]), new DictShape(new NumberShape()), false];
+        yield 'an all-optional record and a dict admit the empty-record operand' => [
+            new RecordShape(['a' => new RecordPropertyShape(new StringShape(), true)]),
+            new DictShape(new NumberShape()),
+            true,
+        ];
         yield 'opaques of one identity, parameters jointly admissible' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new StringShape()]), true];
         yield 'opaques of different identities' => [new OpaqueShape('money'), new OpaqueShape('date'), false];
         yield 'opaques of one identity, disjoint parameters' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')]), new OpaqueShape('money', ['currency' => new LiteralShape('USD')]), false];
@@ -694,6 +740,11 @@ final class TypeRelationsTest extends TestCase
         // Where they diverge: a shared value is not a shared type.
         yield 'list and dict: [] is one value with two types' => [new ListShape(new NumberShape()), new DictShape(new NumberShape()), false];
         yield 'list and the empty record: same corner' => [new ListShape(new NumberShape()), new RecordShape([]), false];
+        yield 'list and an all-optional record: same corner' => [
+            new ListShape(new NumberShape()),
+            new RecordShape(['a' => new RecordPropertyShape(new NumberShape(), true)]),
+            false,
+        ];
         yield 'unknown admits nothing' => [new UnknownShape(), new NumberShape(), false];
         yield 'unknown against unknown admits nothing either' => [new UnknownShape(), new UnknownShape(), false];
         yield 'the divergence recurses: list elements are dispatch-compared' => [new ListShape(new ListShape(new NumberShape()), min: 1), new ListShape(new DictShape(new NumberShape()), min: 1), false];

@@ -14,6 +14,9 @@ use Superscript\Axiom\Exceptions\MissingRequiredInput;
 use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
+use Superscript\Axiom\Types\Optional;
+use Superscript\Axiom\Types\OptionType;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -47,13 +50,19 @@ use function Superscript\Monads\Result\Ok;
  * boundary; the rest cannot touch anything at all.
  *
  * What the boundary demands is what the program reads — `$references` — and
- * not the declaration list. Declarations type a vocabulary, and a vocabulary
+ * not the complete declaration record. Declarations type a vocabulary, and a vocabulary
  * is routinely wider than any one program that speaks it: a host compiling
  * every condition on a page against the page's questions gives each program
  * the same declarations, and each runs on the inputs it reads however much of
  * the rest is still unanswered. A declaration this program never reads is
  * ignored whether or not it is bound — reads are settled at compile time, so
  * no evaluation can observe a symbol the compiler did not record.
+ *
+ * The declaration record keeps key presence separate from value absence.
+ * Properties are required by default; {@see Optional} permits omission, while
+ * an Option-typed property permits an explicitly absent value. Projection
+ * still intersects those requirements with the reads: an input this program
+ * does not read is not required or admitted.
  */
 final readonly class Program
 {
@@ -61,37 +70,29 @@ final readonly class Program
 
     public CompilationAnalysis $analysis;
 
-    /** @var list<string> Declared inputs read by this compiled program. */
+    /** @var list<ReferencePath> Declared input paths read by this program. */
     public array $references;
 
     /**
-     * The declarations this program reads, in declaration order — the
-     * boundary's entire subject. Every other declaration types a name the
-     * program never mentions, and so has nothing to demand or admit.
-     *
-     * @var array<string, Type>
+     * The complete declaration record — what the analysis explains.
      */
-    private array $demanded;
+    private RecordType $declarations;
 
     /**
-     * Whether each demanded declaration admits absence, fixed at compile
-     * time. It is a property of the shape the type projects, not of the
-     * concrete class and not of member order: `Union(String, Option<Number>)`
-     * and `Union(Option<Number>, String)` both project `(String | Number)?`,
-     * because a union with any absence-admitting member admits absence
-     * ({@see \Superscript\Axiom\Types\Shapes\UnionShape}, where Option members
-     * hoist). Absence is then legal for that input however it arrives.
+     * The inputs this program reads, in first-read order — the boundary's
+     * entire subject. Every other declaration names something the program
+     * never mentions, and so has nothing to demand or admit.
      *
-     * @var array<string, bool>
+     * Projection preserves required/optional qualifiers at every level.
      */
-    private array $optional;
+    private RecordType $inputs;
 
     /**
-     * @param array<string, Type> $declarations
+     * @param RecordType|array<string, Type|Optional> $declarations
      */
     public function __construct(
         private CompiledNode $node,
-        private array $declarations = [],
+        RecordType|array $declarations = [],
         private Boundary $boundary = Boundary::Coerce,
     ) {
         // Certification comes first: past it every node has a type to read,
@@ -102,10 +103,12 @@ final readonly class Program
 
         self::certify($compilation);
 
+        $record = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
+
         $this->returns = $node->returns;
         $this->references = $node->references;
-        $this->demanded = array_intersect_key($this->declarations, array_flip($this->references));
-        $this->optional = array_map(fn(Type $type) => $type->shape() instanceof OptionShape, $this->demanded);
+        $this->declarations = $record;
+        $this->inputs = $record->project($node->references);
         $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
     }
 
@@ -206,13 +209,10 @@ final readonly class Program
      * a declaration nothing reads is neither demanded nor admitted. Callers
      * bind keys exactly as declared — symbol lookup has no other reading.
      *
-     * Whether absence is acceptable for a demanded input is decided once, by
-     * the declared type's shape ({@see $optional}), and asked the same way
-     * however the absence arrived: no binding at all, or a binding that
-     * admitted to None. Nothing about the conversion decides it — a union
-     * answers `''` with `Ok(None)` or `Ok(Some(null))` depending on which
-     * member matched first, and both readings mean the same thing about a
-     * declaration whose shape admits absence.
+     * Absence arrives two ways and the declaration answers them independently.
+     * {@see Optional} governs an omitted key. The property's type governs a
+     * supplied value that admission reads as absent. Thus `Option<T>` still
+     * requires its key, while `Optional(T)` permits omission but rejects null.
      *
      * Violations aggregate, named by binding, and are sorted into the kinds
      * {@see BoundaryViolation} describes: a fault dominates absence, so the
@@ -230,9 +230,11 @@ final readonly class Program
         $overlay = [];
         $fault = false;
 
-        foreach ($this->demanded as $key => $type) {
+        foreach ($this->inputs->properties as $key => $property) {
+            $type = $property->type;
+
             if (!array_key_exists($key, $raw)) {
-                if (!$this->optional[$key]) {
+                if (!$property->optional) {
                     $rejections[$key] = new RejectedBinding($key, sprintf('required input [%s] is missing', $key));
                 }
 
@@ -243,7 +245,7 @@ final readonly class Program
 
             $admitted = match ($this->boundary) {
                 Boundary::Coerce => $type->coerce($value),
-                Boundary::Assert => $type->assert($value),
+                Boundary::Assert => $type->assert(self::declaredSlice($type, $value)),
             };
 
             if ($admitted->isErr()) {
@@ -257,8 +259,10 @@ final readonly class Program
             // presence: a value was supplied, and it does not inhabit the
             // type it was declared at. Where the declaration admits absence,
             // None is simply the value, and falls through to the overlay as
-            // the null a symbol reads back as absent.
-            if ($admitted->unwrap()->isNone() && !$this->optional[$key]) {
+            // the null a symbol reads back as absent — including on a
+            // demanded input, which was demanded so that this answer could be
+            // told apart from no answer, not so that it could be refused.
+            if ($admitted->unwrap()->isNone() && !$type->shape() instanceof OptionShape) {
                 $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type)));
                 $fault = true;
 
@@ -275,5 +279,31 @@ final readonly class Program
         }
 
         return Ok(new Bindings($overlay));
+    }
+
+    /**
+     * Strip unread nested properties before strict membership is asserted,
+     * just as {@see admit()} strips unread root inputs. RecordType itself
+     * remains exact; this is projection of one program's runtime signature.
+     */
+    private static function declaredSlice(Type $type, mixed $value): mixed
+    {
+        while ($type instanceof OptionType) {
+            $type = $type->inner;
+        }
+
+        if (!$type instanceof RecordType || !is_array($value)) {
+            return $value;
+        }
+
+        $slice = [];
+
+        foreach ($type->properties as $name => $property) {
+            if (array_key_exists($name, $value)) {
+                $slice[$name] = self::declaredSlice($property->type, $value[$name]);
+            }
+        }
+
+        return $slice;
     }
 }

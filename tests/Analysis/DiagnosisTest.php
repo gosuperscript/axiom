@@ -31,6 +31,7 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
@@ -220,6 +221,9 @@ final class CapturingExtension extends Extension
 #[CoversClass(\Superscript\Axiom\SourceCompilers\DefaultValueSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\CompiledSources::class)]
 #[UsesNamespace('Superscript\\Axiom')]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
 final class DiagnosisTest extends TestCase
 {
     /**
@@ -281,7 +285,7 @@ final class DiagnosisTest extends TestCase
         ]);
 
         $this->assertSame([], $diagnosis->diagnostics);
-        $this->assertSame(['turnover', 'postcode'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('turnover'), new ReferencePath('postcode')], $diagnosis->references);
         $this->assertTrue($diagnosis->program()->isOk());
         $this->assertInstanceOf(Program::class, $diagnosis->program()->unwrap());
     }
@@ -305,7 +309,36 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertSame(['mystery'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('mystery')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
+    public function an_unbound_structural_reference_keeps_its_full_path(): void
+    {
+        $diagnosis = self::diagnose(new ReferencePath('variables', 'ghost'));
+
+        $this->assertSame([
+            'Unbound symbol [variables.ghost]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('variables', 'ghost')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
+    public function an_undeclared_nested_field_keeps_its_full_path(): void
+    {
+        $diagnosis = self::diagnose(
+            new ReferencePath('answers', 'address', 'town'),
+            declarations: ['answers' => new RecordType([
+                'address' => new RecordType(['postcode' => new StringType()]),
+            ])],
+        );
+
+        $this->assertSame([
+            "Field 'town' does not exist on {postcode: String}.",
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('answers', 'address', 'town')], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
 
@@ -318,7 +351,7 @@ final class DiagnosisTest extends TestCase
         // and the right-hand comparison is compiled on its own merits.
         $this->assertCount(1, $diagnosis->diagnostics);
         $this->assertStringStartsWith('Unbound symbol [mystery]', $diagnosis->diagnostics[0]->message);
-        $this->assertSame(['mystery', 'postcode'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('mystery'), new ReferencePath('postcode')], $diagnosis->references);
     }
 
     #[Test]
@@ -352,7 +385,7 @@ final class DiagnosisTest extends TestCase
 
         $this->assertCount(1, $diagnosis->diagnostics);
         $this->assertStringStartsWith('Unbound symbol [mystery]', $diagnosis->diagnostics[0]->message);
-        $this->assertSame(['mystery', 'accepted'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('mystery'), new ReferencePath('accepted')], $diagnosis->references);
     }
 
     #[Test]
@@ -368,7 +401,7 @@ final class DiagnosisTest extends TestCase
             'Unbound symbol [mystery]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
             'Unbound symbol [enigma]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
-        $this->assertSame(['mystery', 'enigma'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('mystery'), new ReferencePath('enigma')], $diagnosis->references);
     }
 
     #[Test]
@@ -381,7 +414,7 @@ final class DiagnosisTest extends TestCase
 
         $this->assertSame(['[+] expects Number and Number; got Number and String.'], self::messages($diagnosis));
         $this->assertSame('$', $diagnosis->diagnostics[0]->path);
-        $this->assertSame(['turnover', 'postcode'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('turnover'), new ReferencePath('postcode')], $diagnosis->references);
     }
 
     #[Test]
@@ -399,7 +432,7 @@ final class DiagnosisTest extends TestCase
             'Unbound symbol [missing_rate]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
         $this->assertSame('$.children[0].node.children[0].node.children[1].node', $diagnosis->diagnostics[0]->path);
-        $this->assertSame(['turnover', 'missing_rate'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('turnover'), new ReferencePath('missing_rate')], $diagnosis->references);
     }
 
     #[Test]
@@ -414,7 +447,7 @@ final class DiagnosisTest extends TestCase
         );
 
         $this->assertSame([], $diagnosis->diagnostics);
-        $this->assertSame(['turnover'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('turnover')], $diagnosis->references);
         $this->assertSame($diagnosis->references, $diagnosis->program()->unwrap()->references);
     }
 
@@ -437,7 +470,7 @@ final class DiagnosisTest extends TestCase
 
         // The cyclic name is still a dependency of this expression, and the
         // sound operand beside it was still checked and collected.
-        $this->assertSame(['a', 'turnover'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('a'), new ReferencePath('turnover')], $diagnosis->references);
         $this->assertTrue($diagnosis->program()->isErr());
     }
 
@@ -449,11 +482,11 @@ final class DiagnosisTest extends TestCase
         // c → b → a → c. Each reference that closes a cycle is its own
         // fault, and the walk terminates once both are set aside.
         $diagnosis = self::diagnose(
-            new SymbolSource('c'),
+            new ReferencePath('c'),
             definitions: new Definitions([
-                'a' => new InfixExpression(new SymbolSource('b'), '+', new SymbolSource('c')),
-                'b' => new SymbolSource('a'),
-                'c' => new SymbolSource('b'),
+                'a' => new InfixExpression(new ReferencePath('b'), '+', new ReferencePath('c')),
+                'b' => new ReferencePath('a'),
+                'c' => new ReferencePath('b'),
             ]),
         );
 
@@ -461,7 +494,7 @@ final class DiagnosisTest extends TestCase
             'Cyclic symbol definition: b → a → b.',
             'Cyclic symbol definition: c → b → a → c.',
         ], self::messages($diagnosis));
-        $this->assertSame(['b', 'c'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('b'), new ReferencePath('c')], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
 
@@ -483,7 +516,7 @@ final class DiagnosisTest extends TestCase
         $this->assertSame([
             'Cyclic symbol definition: a → b → a.',
         ], self::messages($diagnosis));
-        $this->assertSame(['a'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('a')], $diagnosis->references);
         $this->assertNull($diagnosis->returns);
     }
 
@@ -497,7 +530,43 @@ final class DiagnosisTest extends TestCase
             definitions: new Definitions(['a' => new SymbolSource('b'), 'b' => new SymbolSource('a')]),
         );
 
-        $this->assertSame(['a'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('a')], $diagnosis->references);
+    }
+
+    #[Test]
+    public function a_legacy_definition_that_depends_on_a_legacy_cycle_is_poisoned_at_its_reference(): void
+    {
+        $diagnosis = self::diagnose(
+            new SymbolSource('dependant', 'variables'),
+            definitions: new Definitions(['variables' => [
+                'dependant' => new InfixExpression(new SymbolSource('a', 'variables'), '+', new StaticSource(1)),
+                'a' => new SymbolSource('b', 'variables'),
+                'b' => new SymbolSource('a', 'variables'),
+            ]]),
+        );
+
+        $this->assertSame([
+            'Cyclic symbol definition: variables.a → variables.b → variables.a.',
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('variables', 'a')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
+    public function a_structural_reference_to_a_dotted_definition_cycle_records_only_the_consumed_prefix(): void
+    {
+        $diagnosis = self::diagnose(
+            new ReferencePath('answers', 'risk', 'flood'),
+            definitions: new Definitions([
+                'answers.risk' => new ReferencePath('answers', 'risk'),
+            ]),
+        );
+
+        $this->assertSame([
+            'Cyclic symbol definition: answers.risk → answers.risk.',
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('answers', 'risk')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
     }
 
     #[Test]
@@ -513,7 +582,7 @@ final class DiagnosisTest extends TestCase
 
         $this->assertCount(1, $diagnosis->diagnostics);
         $this->assertSame('Match arm 0 cannot be typed.', $diagnosis->diagnostics[0]->message);
-        $this->assertSame(['band', 'unknown_rate', 'turnover'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('band'), new ReferencePath('unknown_rate'), new ReferencePath('turnover')], $diagnosis->references);
 
         // The surviving arm still types the match: the compiler's mark for
         // the arm it gave up on drops out of the union of arm types. A
@@ -536,7 +605,7 @@ final class DiagnosisTest extends TestCase
             'The match subject cannot be typed.',
             'Match arm 0 cannot be typed.',
         ], self::messages($diagnosis));
-        $this->assertSame(['no_such_subject', 'also_missing'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('no_such_subject'), new ReferencePath('also_missing')], $diagnosis->references);
     }
 
     #[Test]
@@ -568,7 +637,7 @@ final class DiagnosisTest extends TestCase
         $diagnosis = self::diagnose(new MemberAccessSource(new SymbolSource('quote'), 'premium'));
 
         $this->assertSame([
-            'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            'Unbound symbol [quote.premium]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
         $this->assertNull($diagnosis->returns);
     }
@@ -715,7 +784,7 @@ final class DiagnosisTest extends TestCase
 
         $this->assertSame(['[+] expects Number and Number; got Number and String.'], self::messages($diagnosis));
         $this->assertSame('$.children[1].node', $diagnosis->diagnostics[0]->path);
-        $this->assertSame(['mystery', 'turnover', 'postcode'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('mystery'), new ReferencePath('turnover'), new ReferencePath('postcode')], $diagnosis->references);
     }
 
     #[Test]
@@ -728,7 +797,7 @@ final class DiagnosisTest extends TestCase
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame($expression->diagnose()->references, $program->references);
+        $this->assertEquals($expression->diagnose()->references, $program->references);
         $this->assertTrue($program(['turnover' => 2000, 'postcode' => 'SW1'])->unwrap()->unwrap());
     }
 
@@ -822,7 +891,7 @@ final class DiagnosisTest extends TestCase
         $diagnosis = Diagnosis::certified($reader);
 
         $this->assertSame([], $diagnosis->diagnostics);
-        $this->assertSame(['turnover'], $diagnosis->references);
+        $this->assertEquals([new ReferencePath('turnover')], $diagnosis->references);
         $this->assertSame($reader->returns, $diagnosis->returns);
         $this->assertSame($reader, $diagnosis->program()->unwrap());
 

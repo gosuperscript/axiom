@@ -88,10 +88,15 @@ The host composes a `Dialect` once and hands it to the `Expression`:
 ```php
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
+use Superscript\Axiom\Types\RecordType;
 
 $dialect = Dialect::core()->with(new TimeExtension(), new MoneyExtension());
 
-$expression = new Expression($source, dialect: $dialect, declarations: [...]);
+$expression = new Expression(
+    $source,
+    dialect: $dialect,
+    declarations: new RecordType(['effective' => new DateType()]),
+);
 
 $expression->check(new BooleanType());              // the compiler resolves through the dialect...
 $program = $expression->compile()->unwrap();
@@ -253,10 +258,11 @@ final class EmailType implements Type
 
 ### Optional Values
 
-Optionality is a type, not a flag: `OptionType<T>` denotes `{null} ∪ T`. Your extension inherits the consequences for free:
+Value absence is a type: `OptionType<T>` denotes `{null} ∪ T`. Property omission is the independent `Optional` qualifier. Your extension inherits the consequences for free:
 
 - A present `T` fills an `Option<T>` slot, and `Option<Option<T>>` collapses.
-- `OptionType::coerce(null)` yields a **present** `Some(null)` — absence is a legal value of the option, not a failed coercion. An optional record field is simply a field whose type is `OptionType`, and `RecordType` coercion canonicalizes a missing optional key to a present `null`.
+- `OptionType::coerce(null)` yields a **present** `Some(null)` — absence is a legal value of the option, not a failed coercion.
+- `new Optional($type)` permits a record property to be omitted. A missing optional property remains omitted; it is not canonicalized to `null`. Wrap the property type in `OptionType` separately when an explicitly supplied absent value is also legal.
 - Don't hand-roll "nullable" variants of your types — wrap them.
 
 ## Literal Registration
@@ -930,27 +936,27 @@ The body compiles through the same dialect in a nested lexical environment. Its 
 
 The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
 
-### Compile Owned Symbols Explicitly
+### Compile Owned References Explicitly
 
-When a host source owns a symbol reference, compile it through `symbol()`:
+When a host source owns a rooted reference, store the actual `ReferencePath` as a public persisted child and compile it through `reference()`:
 
 ```php
-use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\ReferencePath;
 
 final readonly class NamedValueSource implements Source
 {
-    public function __construct(public SymbolSource $symbol) {}
+    public function __construct(public ReferencePath $reference) {}
 }
 
 private function compileNamedValue(
     NamedValueSource $source,
     SourceCompilation $compilation,
 ): CompiledSource {
-    return $compilation->symbol($source->symbol);
+    return $compilation->reference($source->reference);
 }
 ```
 
-This preserves ordinary declared-input, definition, and per-invocation memoization semantics. Symbol resolution itself records the dependency for parameter and definition-cycle analysis, so property visibility does not participate. A compiler may derive a `SymbolSource` from its persisted data when that is the source's intended description; persisting the symbol directly is a domain-model choice, not an analysis requirement.
+This preserves ordinary declared-input, definition, structural projection, and per-invocation memoization semantics. Reference resolution itself records the dependency for parameter and definition-cycle analysis, so property visibility does not participate. A compiler may derive a `ReferencePath` from its persisted data when that is the source's intended description; persisting the reference directly is a domain-model choice, not an analysis requirement. `SymbolSource` and `SourceCompilation::symbol()` remain deprecated compatibility adapters for persisted-source migrations.
 
 The extension map simply grows as the package gains source kinds:
 

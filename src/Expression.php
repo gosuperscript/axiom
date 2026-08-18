@@ -9,6 +9,7 @@ use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Result\Result;
@@ -23,7 +24,7 @@ use Superscript\Monads\Result\Result;
  * ```php
  * $area = new Expression($source,
  *     definitions: new Definitions(['PI' => new StaticSource(3.14159)]),
- *     declarations: ['radius' => new NumberType()],
+ *     declarations: new RecordType(['radius' => new NumberType()]),
  * );
  * $program = $area->compile()->unwrap(); // every node resolved and certified
  * $program(['radius' => '5']);           // boundary coerces '5' → 5, then ~78.54
@@ -36,39 +37,43 @@ use Superscript\Monads\Result\Result;
  * admitted values presuppose the boundary — invocation lives only on
  * {@see Program}, so running an unchecked program is unrepresentable.
  *
- * The declaration list is the expression's complete public signature —
- * declarations and definitions are disjoint namespaces (a symbol is a
- * parameter or a derived value, never both; enforced at construction), so
- * shadowing a definition is unrepresentable.
+ * The declaration record is the expression's complete public input
+ * signature. Its root properties and definitions are disjoint symbol sets: a
+ * root is an input or a derived value, never both. Structure beneath it is
+ * retained in a ReferencePath.
  */
 final readonly class Expression
 {
     public Dialect $dialect;
 
+    public RecordType $declarations;
+
     /**
-     * @param array<string, Type> $declarations
+     * @param RecordType|array<string, Type|\Superscript\Axiom\Types\Optional> $declarations
      */
     public function __construct(
         public Source $source,
         public Definitions $definitions = new Definitions(),
         ?Dialect $dialect = null,
-        public array $declarations = [],
+        RecordType|array $declarations = [],
         public Boundary $boundary = Boundary::Coerce,
     ) {
         $this->dialect = $dialect ?? Dialect::core();
+        $this->declarations = $declarations instanceof RecordType ? $declarations : new RecordType($declarations);
 
-        // Symbol lookup is exact-key only (no descent), so declared and
-        // defined names can only collide literally: Symbol('turnover',
-        // ns: 'customer') and member access on a declared customer record
-        // are distinct, unambiguous programs.
+        // Root declarations and definitions must remain unambiguous. Nested
+        // names belong to their record and are reached by ReferencePath.
         $collisions = array_filter(
-            array_keys($this->declarations),
-            fn(string $key) => $this->definitions->has($key),
+            $this->declarations->names(),
+            fn(string $key) => array_any(
+                $this->definitions->keys(),
+                static fn(string $definition): bool => explode('.', $definition)[0] === $key,
+            ),
         );
 
         if ($collisions !== []) {
             throw new InvalidArgumentException(sprintf(
-                'Declarations and definitions are disjoint namespaces, but [%s] %s both declared and defined. A symbol is a parameter or a derived value, never both; model an override as an Option-typed parameter the definition consults.',
+                'Declarations and definitions have disjoint root symbols, but [%s] %s both declared and defined. A symbol is a parameter or a derived value, never both; model an override as an Option-typed parameter the definition consults.',
                 implode('], [', $collisions),
                 count($collisions) === 1 ? 'is' : 'are',
             ));
@@ -94,10 +99,19 @@ final readonly class Expression
      */
     public function parameters(): array
     {
-        return array_values(array_filter(
-            $this->diagnose()->references,
-            fn(string $key) => !$this->definitions->has($key),
-        ));
+        $parameters = [];
+
+        foreach ($this->diagnose()->references as $reference) {
+            $root = $reference->root();
+
+            if ($this->definitions->keyOf($reference) !== null || in_array($root, $parameters, strict: true)) {
+                continue;
+            }
+
+            $parameters[] = $root;
+        }
+
+        return $parameters;
     }
 
     /**
@@ -121,7 +135,7 @@ final readonly class Expression
 
     /**
      * Compile for the sake of what compilation *learns*: every refusal in
-     * the expression rather than only the first, the symbols it reads even
+     * the expression rather than only the first, the references it reads even
      * through the parts that refuse, and the certified {@see Program} when
      * there is nothing to report. compile() is one attempt of this same
      * walk, so its refusal is this diagnosis' first diagnostic. What the

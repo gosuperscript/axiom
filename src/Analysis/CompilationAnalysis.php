@@ -7,7 +7,8 @@ namespace Superscript\Axiom\Analysis;
 use InvalidArgumentException;
 use JsonSerializable;
 use Superscript\Axiom\Boundary;
-use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\RecordProperty;
+use Superscript\Axiom\Types\RecordType;
 
 /**
  * The typed, serializable explanation of one successful compilation. Its
@@ -21,11 +22,10 @@ final readonly class CompilationAnalysis implements JsonSerializable
      * Construction goes through {@see certified()} and is private, so the
      * only analysis that exists is one over a tree the compiler certified.
      *
-     * @param array<string, Type> $declarations
      */
     private function __construct(
         public CompilationNode $root,
-        public array $declarations,
+        public RecordType $declarations,
         public Boundary $boundary,
     ) {}
 
@@ -51,9 +51,8 @@ final readonly class CompilationAnalysis implements JsonSerializable
      * abandoned root is a caller handing over a position where a compilation
      * belongs.
      *
-     * @param array<string, Type> $declarations
      */
-    public static function certified(CompilationNode $root, array $declarations, Boundary $boundary): self
+    public static function certified(CompilationNode $root, RecordType $declarations, Boundary $boundary): self
     {
         // Checked rather than asserted: production runs with assertions
         // compiled out, and these are the invariants every reader of an
@@ -83,20 +82,23 @@ final readonly class CompilationAnalysis implements JsonSerializable
      * the process as publication findings, logs, or build artifacts.
      *
      * @return array{
-     *     version: 1,
+     *     version: 2,
      *     boundary: string,
-     *     declarations: array<string, string>,
+     *     declarations: array<string, array{type: string, optional: bool}>,
      *     root: array<string, mixed>
      * }
      */
     public function toArray(bool $revealLiterals = false): array
     {
         return [
-            'version' => 1,
+            'version' => 2,
             'boundary' => $this->boundary->name,
             'declarations' => array_map(
-                fn(Type $type): string => AnalysisTypeDescriber::describe($type, $revealLiterals),
-                $this->declarations,
+                fn(RecordProperty $property): array => [
+                    'type' => AnalysisTypeDescriber::describe($property->type, $revealLiterals),
+                    'optional' => $property->optional,
+                ],
+                $this->declarations->properties,
             ),
             'root' => $this->root->toArray('$', $revealLiterals),
         ];

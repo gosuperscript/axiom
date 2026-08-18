@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
@@ -44,8 +45,32 @@ use Superscript\Axiom\Types\StringType;
 #[UsesClass(StringType::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(ListType::class)]
+#[UsesClass(ReferencePath::class)]
 class DescribableTest extends TestCase
 {
+    #[Test]
+    public function deprecated_symbols_retain_their_flat_spelling(): void
+    {
+        $dotted = new SymbolSource('customer.turnover');
+        $namespaced = new SymbolSource('turnover', 'customer');
+
+        $this->assertSame('customer.turnover', $dotted->describe());
+        $this->assertSame('customer.turnover', $namespaced->describe());
+        $this->assertEquals(new ReferencePath('customer', 'turnover'), $dotted->reference());
+        $this->assertEquals(new ReferencePath('customer', 'turnover'), $namespaced->reference());
+        $this->assertSame('customer.turnover', SymbolSource::key('turnover', 'customer'));
+        $this->assertSame('customer.turnover', SymbolSource::key('customer.turnover'));
+    }
+
+    #[Test]
+    public function symbol_names_cannot_be_empty(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('A symbol name cannot be empty.');
+
+        new SymbolSource('');
+    }
+
     #[Test]
     public function static_source_describes_string_value(): void
     {
@@ -82,17 +107,10 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
-    public function symbol_source_describes_namespaced_name(): void
+    public function symbol_source_describes_its_exact_name(): void
     {
-        $source = new SymbolSource('pi', 'math');
-        $this->assertSame('math.pi', $source->describe());
-    }
-
-    #[Test]
-    public function the_symbol_key_is_the_flat_dotted_name(): void
-    {
-        $this->assertSame('pi', SymbolSource::key('pi', null));
-        $this->assertSame('math.pi', SymbolSource::key('pi', 'math'));
+        $source = new SymbolSource('pi');
+        $this->assertSame('pi', $source->describe());
     }
 
     #[Test]
@@ -275,6 +293,24 @@ class DescribableTest extends TestCase
     }
 
     #[Test]
+    public function member_access_requires_a_non_empty_property(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('A member access property must be non-empty.');
+
+        new MemberAccessSource(new SymbolSource('user'), '');
+    }
+
+    #[Test]
+    public function member_access_property_is_one_structural_segment(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Nest MemberAccessSource nodes for structural access.');
+
+        new MemberAccessSource(new SymbolSource('user'), 'address.city');
+    }
+
+    #[Test]
     public function member_access_with_non_describable_object_falls_back_to_class_name(): void
     {
         $source = new MemberAccessSource(new UndescribableSource(), 'name');
@@ -385,7 +421,7 @@ class DescribableTest extends TestCase
                 '-',
                 new Coerce(
                     new NumberType(),
-                    new SymbolSource('discount', 'rates'),
+                    new MemberAccessSource(new SymbolSource('rates'), 'discount'),
                 ),
             ),
         );

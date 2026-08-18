@@ -23,6 +23,8 @@ use Superscript\Axiom\Operators\BinaryOperatorRule;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnaryOperatorRule;
 use Superscript\Axiom\Program;
+use Superscript\Axiom\ReferencePath;
+use Superscript\Axiom\Sources\Coerce;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -34,6 +36,7 @@ use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -50,6 +53,8 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(Expression::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\CoerceSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
@@ -57,8 +62,10 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
+#[UsesClass(Coerce::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
+#[CoversClass(Optional::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
 #[CoversClass(Boundary::class)]
@@ -113,6 +120,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\DictType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(RecordType::class)]
 #[UsesClass(StringType::class)]
@@ -124,6 +132,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\StringShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
@@ -132,6 +141,9 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Operators\Connective::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\ReferencePath::class)]
+#[CoversClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
+#[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function gate(): Expression
@@ -139,11 +151,11 @@ final class TypedExpressionTest extends TestCase
         // quote.turnover > 500000
         return new Expression(
             source: new InfixExpression(
-                left: new SymbolSource('turnover', 'quote'),
+                left: new MemberAccessSource(new SymbolSource('quote'), 'turnover'),
                 operator: '>',
                 right: new StaticSource(500000),
             ),
-            declarations: ['quote.turnover' => new NumberType()],
+            declarations: ['quote' => new RecordType(['turnover' => new NumberType()])],
         );
     }
 
@@ -164,7 +176,7 @@ final class TypedExpressionTest extends TestCase
         // it; the boundary converts it before evaluation begins.
         $program = $this->gate()->compile()->unwrap();
 
-        $this->assertTrue($program(['quote.turnover' => '600000'])->unwrap()->unwrap());
+        $this->assertTrue($program(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -208,35 +220,31 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function an_option_declared_input_may_be_missing_or_null(): void
+    public function an_option_declared_input_requires_its_key_but_may_be_null(): void
     {
         $program = (new Expression(
             source: new SymbolSource('note'),
             declarations: ['note' => new OptionType(new StringType())],
         ))->compile()->unwrap();
 
-        $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertInstanceOf(MissingRequiredInput::class, $program([])->unwrapErr());
         $this->assertTrue($program(['note' => null])->unwrap()->isNone());
         $this->assertSame('hi', $program(['note' => 'hi'])->unwrap()->unwrap());
     }
 
     /**
-     * The whole classification of an absent input, enumerated. One rule
-     * decides every row: the declared type's *shape* says whether absence is
-     * acceptable, and nothing else does. A shape that admits absence takes
-     * None as the value however it arrived — no binding, a `null`, or a value
-     * that reads as absent. A shape that requires presence refuses, as a
-     * missing input when the call supplied nothing and as an inadmissible
-     * binding when it supplied something that does not inhabit the type.
-     * Optionality is not a licence for a fault: a value that cannot be
-     * converted at all is inadmissible whether or not absence is allowed.
+     * The whole classification of an absent input, enumerated. Two facts
+     * decide every row, and they are asked about different absences. A
+     * supplied value that reads as absent is judged by its value type. An
+     * omitted key is judged independently: properties are required unless
+     * wrapped in Optional. This gives the four combinations directly.
      *
      * @param class-string<BoundaryViolation>|null $refusal
      * @param array<string, mixed> $bindings
      */
     #[Test]
     #[DataProvider('absenceReadings')]
-    public function absence_is_judged_by_the_declared_shape(Type $declared, array $bindings, ?string $refusal, string $message): void
+    public function absence_is_judged_by_property_presence_and_value_type(Type|Optional $declared, array $bindings, ?string $refusal, string $message): void
     {
         $program = (new Expression(
             source: new SymbolSource('x'),
@@ -257,7 +265,7 @@ final class TypedExpressionTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Type, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
+     * @return iterable<string, array{Type|Optional, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
      */
     public static function absenceReadings(): iterable
     {
@@ -269,7 +277,7 @@ final class TypedExpressionTest extends TestCase
         // Absence admitted, by an Option declaration.
         yield 'String?, bound ""' => [new OptionType(new StringType()), ['x' => ''], null, ''];
         yield 'String?, bound null' => [new OptionType(new StringType()), ['x' => null], null, ''];
-        yield 'String?, unbound' => [new OptionType(new StringType()), [], null, ''];
+        yield 'String?, unbound' => [new OptionType(new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
         yield 'String?, bound a list' => [new OptionType(new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
 
         // Absence admitted, by a union with an absence-admitting member —
@@ -277,10 +285,55 @@ final class TypedExpressionTest extends TestCase
         // union projects is the same one.
         yield 'String | Number?, bound ""' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ''], null, ''];
         yield 'Number? | String, bound ""' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ''], null, ''];
-        yield 'String | Number?, unbound' => [new UnionType(new StringType(), new OptionType(new NumberType())), [], null, ''];
-        yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], null, ''];
+        yield 'String | Number?, unbound' => [new UnionType(new StringType(), new OptionType(new NumberType())), [], MissingRequiredInput::class, 'required input [x] is missing'];
+        yield 'Number? | String, unbound' => [new UnionType(new OptionType(new NumberType()), new StringType()), [], MissingRequiredInput::class, 'required input [x] is missing'];
         yield 'String | Number?, bound a list' => [new UnionType(new StringType(), new OptionType(new NumberType())), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
         yield 'Number? | String, bound a list' => [new UnionType(new OptionType(new NumberType()), new StringType()), ['x' => ['a']], InadmissibleBinding::class, 'binding [x]:'];
+
+        // Optional controls only key omission.
+        yield 'Optional(String), bound ""' => [new Optional(new StringType()), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
+        yield 'Optional(String), unbound' => [new Optional(new StringType()), [], null, ''];
+        yield 'Optional(String), bound null' => [new Optional(new StringType()), ['x' => null], InadmissibleBinding::class, 'binding [x]:'];
+        yield 'Optional(String?), bound null' => [new Optional(new OptionType(new StringType())), ['x' => null], null, ''];
+        yield 'Optional(String?), unbound' => [new Optional(new OptionType(new StringType())), [], null, ''];
+    }
+
+    #[Test]
+    public function a_required_option_tells_the_answer_none_from_no_answer_yet(): void
+    {
+        // A select whose "no value" option is a real answer. The type must
+        // admit absence for the chosen answer to be expressible at all, and
+        // the binding must be demanded for the unanswered question not to
+        // read as that answer.
+        $program = (new Expression(
+            source: new SymbolSource('excess'),
+            declarations: ['excess' => new OptionType(new NumberType())],
+        ))->compile()->unwrap();
+
+        $this->assertInstanceOf(MissingRequiredInput::class, $program([])->unwrapErr());
+        $this->assertTrue($program(['excess' => null])->unwrap()->isNone());
+        $this->assertSame(250, $program(['excess' => '250'])->unwrap()->unwrap());
+
+        $this->assertEquals(new RecordType(['excess' => new OptionType(new NumberType())]), $program->analysis->declarations);
+        $this->assertEquals(new OptionType(new NumberType()), $program->returns);
+    }
+
+    #[Test]
+    public function a_required_declaration_the_program_never_reads_is_still_ignored(): void
+    {
+        // Demand intersects the reads, like every other boundary fact: an
+        // input no symbol node reads has nothing to deliver a value to, so
+        // demanding it would manufacture a refusal nothing could act on.
+        $program = (new Expression(
+            source: new SymbolSource('name'),
+            declarations: [
+                'name' => new StringType(),
+                'excess' => new OptionType(new NumberType()),
+            ],
+        ))->compile()->unwrap();
+
+        $this->assertEquals([new ReferencePath('name')], $program->references);
+        $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -328,7 +381,7 @@ final class TypedExpressionTest extends TestCase
             declarations: $scope,
         ))->compile()->unwrap();
 
-        $this->assertSame(['name'], $program->references);
+        $this->assertEquals([new ReferencePath('name')], $program->references);
         $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
@@ -392,16 +445,16 @@ final class TypedExpressionTest extends TestCase
         // is the one that definition reads. `employees` is declared, read by
         // nothing, and demanded by nothing.
         $expression = new Expression(
-            source: new SymbolSource('headcount'),
+            source: new ReferencePath('headcount'),
             definitions: new Definitions([
-                'headcount' => new InfixExpression(new SymbolSource('staff'), '+', new StaticSource(1)),
+                'headcount' => new InfixExpression(new ReferencePath('staff'), '+', new StaticSource(1)),
             ]),
             declarations: ['staff' => new NumberType(), 'employees' => new NumberType()],
         );
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(['staff'], $program->references);
+        $this->assertEquals([new ReferencePath('staff')], $program->references);
         $this->assertSame(4, $program(['staff' => 3])->unwrap()->unwrap());
 
         $violation = $program([])->unwrapErr();
@@ -419,7 +472,7 @@ final class TypedExpressionTest extends TestCase
             declarations: ['name' => new StringType(), 'note' => new OptionType(new StringType())],
         ))->compile()->unwrap();
 
-        $this->assertSame(['name'], $program->references);
+        $this->assertEquals([new ReferencePath('name')], $program->references);
         $this->assertSame('Ada', $program(['name' => 'Ada'])->unwrap()->unwrap());
     }
 
@@ -441,6 +494,34 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
+    public function assert_mode_ignores_unread_properties_at_every_record_depth(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('answers', 'a'),
+            declarations: new RecordType([
+                'answers' => new OptionType(new RecordType([
+                    'a' => new NumberType(),
+                    'b' => new NumberType(),
+                ])),
+            ]),
+            boundary: Boundary::Assert,
+        ))->compile()->unwrap();
+
+        $this->assertSame(1, $program([
+            'answers' => ['a' => 1, 'b' => 'unread and therefore ignored'],
+        ])->unwrap()->unwrap());
+        $this->assertInstanceOf(InadmissibleBinding::class, $program(['answers' => 7])->unwrapErr());
+
+        $dict = (new Expression(
+            source: new ReferencePath('payload'),
+            declarations: ['payload' => new \Superscript\Axiom\Types\DictType(new NumberType())],
+            boundary: Boundary::Assert,
+        ))->compile()->unwrap();
+
+        $this->assertSame(['kept' => 1], $dict(['payload' => ['kept' => 1]])->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function a_program_certified_by_a_diagnosis_has_the_same_boundary(): void
     {
         $expression = new Expression(
@@ -450,29 +531,24 @@ final class TypedExpressionTest extends TestCase
 
         $diagnosed = $expression->diagnose()->program()->unwrap();
 
-        $this->assertSame($expression->compile()->unwrap()->references, $diagnosed->references);
+        $this->assertEquals($expression->compile()->unwrap()->references, $diagnosed->references);
         $this->assertSame('Ada', $diagnosed(['name' => 'Ada'])->unwrap()->unwrap());
         $this->assertInstanceOf(MissingRequiredInput::class, $diagnosed([])->unwrapErr());
     }
 
     #[Test]
-    public function a_record_declaration_and_a_namesake_definition_are_distinct_programs(): void
+    public function a_nested_property_and_a_namesake_root_definition_are_distinct(): void
     {
-        // No descent: Symbol('turnover', ns: 'customer') is the exact key
-        // customer.turnover — a definition — while the declared customer
-        // record is reachable only by member access. The caller's record
-        // content can never answer the symbol, so it can never shadow the
-        // definition (the second-opinion finding, closed structurally).
         $expression = new Expression(
-            source: new SymbolSource('turnover', 'customer'),
-            definitions: new Definitions(['customer.turnover' => new StaticSource(1)]),
-            declarations: ['customer' => new RecordType(['name' => new StringType()])],
+            source: new ReferencePath('customer', 'turnover'),
+            definitions: new Definitions(['turnover' => new StaticSource(1)]),
+            declarations: ['customer' => new RecordType(['turnover' => new NumberType()])],
         );
 
         $program = $expression->compile()->unwrap();
 
-        $this->assertSame(1, $program(['customer' => ['name' => 'Ada']])->unwrap()->unwrap());
-        $this->assertInstanceOf(\Superscript\Axiom\Types\LiteralType::class, $program->returns);
+        $this->assertSame(2, $program(['customer' => ['turnover' => 2]])->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]
@@ -485,16 +561,16 @@ final class TypedExpressionTest extends TestCase
 
         $program = (new Expression(
             source: new InfixExpression(
-                left: new MemberAccessSource(new SymbolSource('customer'), 'turnover'),
+                left: new ReferencePath('customer', 'turnover'),
                 operator: '*',
                 right: new StaticSource(2),
             ),
             declarations: ['customer' => $record],
         ))->compile()->unwrap();
 
-        // The whole record coerces at the boundary ('2' → 2, missing
-        // optional note canonicalizes) and member access — the one
-        // structural path — reads the coerced record's field.
+        // The projected record coerces at the boundary ('2' → 2, while the
+        // unread note is stripped) and member access — the one structural
+        // path — reads the coerced record's property.
         $this->assertSame(4, $program(['customer' => ['turnover' => '2']])->unwrap()->unwrap());
 
         // Statically, the member access types as the record's field.
@@ -503,6 +579,22 @@ final class TypedExpressionTest extends TestCase
         // Field errors are named under the input.
         $bad = $program(['customer' => ['turnover' => 'lots']]);
         $this->assertStringContainsString('binding [customer]:', $bad->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function a_reference_path_can_project_a_record_returned_by_a_definition(): void
+    {
+        $record = new RecordType(['turnover' => new NumberType()]);
+        $program = (new Expression(
+            source: new ReferencePath('customer', 'turnover'),
+            definitions: new Definitions([
+                'customer' => new Coerce($record, new StaticSource(['turnover' => 600000])),
+            ]),
+        ))->compile()->unwrap();
+
+        $this->assertSame([], $program->references);
+        $this->assertSame(600000, $program()->unwrap()->unwrap());
+        $this->assertInstanceOf(NumberType::class, $program->returns);
     }
 
     #[Test]
@@ -523,7 +615,7 @@ final class TypedExpressionTest extends TestCase
                     ],
                 ),
             ]),
-            declarations: ['rateOverride' => new OptionType(new NumberType())],
+            declarations: ['rateOverride' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         $this->assertSame(1.2, $program()->unwrap()->unwrap());
@@ -593,7 +685,7 @@ final class TypedExpressionTest extends TestCase
                 right: new StaticSource(2),
             ),
             dialect: Dialect::core()->with($extension),
-            declarations: ['maybe' => new OptionType(new NumberType())],
+            declarations: ['maybe' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
         // The compiled program embeds the extension's resolution: absence
@@ -722,15 +814,18 @@ final class TypedExpressionTest extends TestCase
     }
 
     #[Test]
-    public function multi_dot_declaration_keys_split_on_the_first_dot(): void
+    public function deeply_nested_inputs_are_structural_paths(): void
     {
-        // Definitions flatten one namespace level, so a declared key may
-        // carry dots in its name part: ns + 'deep.key'.
         $program = (new Expression(
-            source: new SymbolSource('deep.key', 'ns'),
-            declarations: ['ns.deep.key' => new NumberType()],
+            source: new MemberAccessSource(
+                new MemberAccessSource(new SymbolSource('root'), 'deep'),
+                'key',
+            ),
+            declarations: ['root' => new RecordType([
+                'deep' => new RecordType(['key' => new NumberType()]),
+            ])],
         ))->compile()->unwrap();
 
-        $this->assertSame(5, $program(['ns.deep.key' => '5'])->unwrap()->unwrap());
+        $this->assertSame(5, $program(['root' => ['deep' => ['key' => '5']]])->unwrap()->unwrap());
     }
 }
