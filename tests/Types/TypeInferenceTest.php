@@ -981,7 +981,7 @@ final class TypeInferenceTest extends TestCase
         $this->assertStringContainsString("Cannot access field 'x' on Number", $result->unwrapErr()->describe());
 
         $error = $inference->infer(new MemberAccessSource(new SymbolSource('ghost'), 'x'), self::env());
-        $this->assertStringContainsString('Unbound symbol [ghost]', $error->unwrapErr()->describe());
+        $this->assertStringContainsString('Unbound symbol [ghost.x]', $error->unwrapErr()->describe());
     }
 
     #[Test]

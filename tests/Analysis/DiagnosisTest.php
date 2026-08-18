@@ -314,6 +314,18 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
+    public function an_unbound_structural_reference_keeps_its_full_path(): void
+    {
+        $diagnosis = self::diagnose(new ReferencePath('variables', 'ghost'));
+
+        $this->assertSame([
+            'Unbound symbol [variables.ghost]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('variables', 'ghost')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
     public function a_broken_operand_does_not_cascade_and_its_sibling_is_still_checked(): void
     {
         $diagnosis = self::diagnose(self::gate('mystery'), ['postcode' => new StringType()]);
@@ -609,7 +621,7 @@ final class DiagnosisTest extends TestCase
         $diagnosis = self::diagnose(new MemberAccessSource(new SymbolSource('quote'), 'premium'));
 
         $this->assertSame([
-            'Unbound symbol [quote]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
+            'Unbound symbol [quote.premium]; declare its type, or declare it Unknown explicitly if this scope tolerates unknown symbols.',
         ], self::messages($diagnosis));
         $this->assertNull($diagnosis->returns);
     }
