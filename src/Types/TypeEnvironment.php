@@ -7,6 +7,7 @@ namespace Superscript\Axiom\Types;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Sources\SymbolSource;
 use Superscript\Monads\Option\Option;
@@ -48,11 +49,28 @@ final class TypeEnvironment
     /** @var list<string> */
     private array $inProgress = [];
 
+    private ?self $parent = null;
+
+    private ?LocalScope $localScope = null;
+
     /** @param array<string, Type> $declarations */
     public function __construct(
         private readonly Definitions $definitions = new Definitions(),
         private readonly array $declarations = [],
     ) {}
+
+    /**
+     * @internal Scoped expression compilation owns lexical environments.
+     * @param array<string, Type> $declarations
+     */
+    public function nested(LocalScope $scope, array $declarations): self
+    {
+        $nested = new self(declarations: $declarations);
+        $nested->parent = $this;
+        $nested->localScope = $scope;
+
+        return $nested;
+    }
 
     /**
      * @param string $path Where a defined symbol's source compiles — the edge
@@ -75,17 +93,23 @@ final class TypeEnvironment
         $key = SymbolSource::key($name, $namespace);
 
         if (isset($this->declarations[$key])) {
-            return Ok(CompiledNode::returning($this->declarations[$key], static function (Runtime $runtime) use ($name, $namespace, $key) {
-                // The resolution channel has one representation of null:
-                // None. A bound null is still a bound key — the boundary
-                // admitted it — but its value is honestly absent.
-                $value = $runtime->bindings->get($name, $namespace)->andThen(fn(mixed $v) => Option::from($v));
+            $scope = $this->localScope;
+
+            return Ok(CompiledNode::returning($this->declarations[$key], static function (Runtime $runtime) use ($name, $namespace, $key, $scope) {
+                $binding = $scope === null
+                    ? $runtime->bindings->get($name, $namespace)
+                    : $runtime->local($scope, $name);
+                $value = $binding->andThen(fn(mixed $item) => Option::from($item));
 
                 $runtime->annotate('label', $key);
-                $value->inspect(fn(mixed $v) => $runtime->annotate('result', $v));
+                $value->inspect(fn(mixed $item) => $runtime->annotate('result', $item));
 
                 return Ok($value);
-            }, references: [$key]));
+            }, references: $scope === null ? [$key] : []));
+        }
+
+        if ($this->parent !== null) {
+            return $this->parent->nodeOfSymbol($name, $namespace, $compiler, $path, $reads);
         }
 
         if (isset($this->memo[$key])) {

@@ -38,6 +38,7 @@ final readonly class SourceCompilation
      * @param Closure(Type, string, Type): Result<ResolvedOperation, TypeMismatch> $compileInfix
      * @param Closure(string, Type): Result<ResolvedOperation, TypeMismatch> $compilePrefix
      * @param Closure(SymbolSource, string): Result<CompiledNode, TypeMismatch> $compileSymbol
+     * @param Closure(ScopedExpression, array<string, Type>, LocalScope, string): Result<CompiledNode, TypeMismatch> $compileScope
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
      */
@@ -46,6 +47,7 @@ final readonly class SourceCompilation
         private Closure $compileInfix,
         private Closure $compilePrefix,
         private Closure $compileSymbol,
+        private Closure $compileScope,
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
@@ -117,6 +119,37 @@ final readonly class SourceCompilation
         }
 
         return new CompiledSource($node);
+    }
+
+    /**
+     * Compile one separately-bound body through this compilation's dialect.
+     *
+     * @param array<string, Type> $parameterTypes
+     */
+    public function scope(
+        ScopedExpression $expression,
+        array $parameterTypes,
+        ?string $role = null,
+    ): CompiledScopedExpression {
+        $path = $this->childPath();
+        $scope = new LocalScope();
+        $node = $this->compiled(
+            ($this->compileScope)($expression, $parameterTypes, $scope, $path),
+            $expression->body,
+            $role,
+        );
+
+        $this->recorder?->recordReferences($node->references);
+
+        if ($this->recorder !== null && ($compiled = $node->compilation()) !== null) {
+            $this->recorder->child($compiled, $role);
+        }
+
+        if ($node->failed) {
+            $this->absorb();
+        }
+
+        return new CompiledScopedExpression($node, $expression->parameters, $path, $scope);
     }
 
     /**

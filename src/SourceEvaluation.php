@@ -28,6 +28,23 @@ final readonly class SourceEvaluation
         return $result->unwrap()->unwrapOr(null);
     }
 
+    /**
+     * Invoke a lexically scoped compiled body with local values produced by
+     * its owning compiled source.
+     *
+     * @param array<string, mixed> $bindings
+     */
+    public function invoke(CompiledScopedExpression $expression, array $bindings): mixed
+    {
+        $result = $expression->invoke($bindings, $this->runtime);
+
+        if ($result->isErr()) {
+            throw new EvaluationAborted($result->unwrapErr());
+        }
+
+        return $result->unwrap()->unwrapOr(null);
+    }
+
     public function annotate(string $key, mixed $value): void
     {
         $this->runtime->annotate($key, $value);

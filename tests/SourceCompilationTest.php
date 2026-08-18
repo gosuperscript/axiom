@@ -22,11 +22,13 @@ use Superscript\Axiom\Expression;
 use Superscript\Axiom\Extension;
 use Superscript\Axiom\Fields\Field;
 use Superscript\Axiom\Fields\OpaqueField;
+use Superscript\Axiom\LocalScope;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Runtime;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
+use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\SourceCompilers\AdmissionNode;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\StaticSource;
@@ -130,6 +132,8 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(StaticSource::class)]
 #[UsesClass(SymbolSource::class)]
+#[UsesClass(\Superscript\Axiom\CompiledScopedExpression::class)]
+#[UsesClass(ScopedExpression::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
@@ -184,6 +188,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $compileInfix = null,
         ?Closure $compilePrefix = null,
         ?Closure $compileSymbol = null,
+        ?Closure $compileScope = null,
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
         ?Closure $resolveOpaqueField = null,
@@ -193,6 +198,7 @@ final class SourceCompilationTest extends TestCase
             $compileInfix ?? fn(Type $left, string $operator, Type $right): Result => Err(new TypeMismatch('No infix operation expected.')),
             $compilePrefix ?? fn(string $operator, Type $operand): Result => Err(new TypeMismatch('No prefix operation expected.')),
             $compileSymbol ?? fn(SymbolSource $symbol): Result => Err(new TypeMismatch('No symbol expected.')),
+            $compileScope ?? fn(\Superscript\Axiom\ScopedExpression $expression, array $parameters): Result => Err(new TypeMismatch('No scope expected.')),
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
             $recorder,
@@ -341,6 +347,45 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($node, $compilation->child($source)->node());
         $this->assertSame($source, $seen);
+    }
+
+    #[Test]
+    public function scope_compiles_without_an_analysis_recorder(): void
+    {
+        $expression = new ScopedExpression([], new StaticSource(1));
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $compilation = self::compilation(
+            compileScope: fn(ScopedExpression $candidate, array $parameters, LocalScope $scope, string $path): Result => Ok($node),
+        );
+
+        $this->assertSame($node->returns, $compilation->scope($expression, [])->returns);
+    }
+
+    #[Test]
+    public function a_scoped_body_that_refuses_records_its_abandoned_position(): void
+    {
+        $expression = new ScopedExpression([], new StaticSource(1));
+        $refusal = new TypeMismatch('The scoped body is invalid.');
+        $recorder = new \Superscript\Axiom\Analysis\CompilationRecorder();
+        $compilation = self::compilation(
+            compileScope: fn(ScopedExpression $candidate, array $parameters, LocalScope $scope, string $path): Result => Err($refusal),
+            recorder: $recorder,
+        );
+
+        try {
+            $compilation->scope($expression, [], 'predicate');
+            $this->fail('The scoped body should abort compilation.');
+        } catch (CompilationAborted $aborted) {
+            $this->assertSame($refusal, $aborted->mismatch);
+        }
+
+        $this->assertCount(1, $recorder->children());
+        $this->assertSame('predicate', $recorder->children()[0]->role);
+        $this->assertSame(StaticSource::class, $recorder->children()[0]->node->source);
+        $this->assertSame(
+            \Superscript\Axiom\Analysis\CompilationState::Abandoned,
+            $recorder->children()[0]->node->state,
+        );
     }
 
     #[Test]
