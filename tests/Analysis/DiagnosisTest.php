@@ -326,6 +326,23 @@ final class DiagnosisTest extends TestCase
     }
 
     #[Test]
+    public function an_undeclared_nested_field_keeps_its_full_path(): void
+    {
+        $diagnosis = self::diagnose(
+            new ReferencePath('answers', 'address', 'town'),
+            declarations: ['answers' => new RecordType([
+                'address' => new RecordType(['postcode' => new StringType()]),
+            ])],
+        );
+
+        $this->assertSame([
+            "Field 'town' does not exist on {postcode: String}.",
+        ], self::messages($diagnosis));
+        $this->assertEquals([new ReferencePath('answers', 'address', 'town')], $diagnosis->references);
+        $this->assertNull($diagnosis->returns);
+    }
+
+    #[Test]
     public function a_broken_operand_does_not_cascade_and_its_sibling_is_still_checked(): void
     {
         $diagnosis = self::diagnose(self::gate('mystery'), ['postcode' => new StringType()]);

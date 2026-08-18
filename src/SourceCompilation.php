@@ -130,7 +130,11 @@ final readonly class SourceCompilation
         $input = ($this->compileInputPath)($reference);
 
         if ($input === null) {
-            $this->recorder?->recordReferences($root->references);
+            $definitionKey = ($this->definitionKeyOf)($reference);
+            $references = $definitionKey === null && !$reference->isRoot() && $root->references !== []
+                ? [$reference]
+                : $root->references;
+            $this->recorder?->recordReferences($references);
             $compilation = $root->compilation();
 
             if ($this->recorder !== null && $compilation !== null) {
@@ -139,7 +143,6 @@ final readonly class SourceCompilation
 
             $node = $root;
 
-            $definitionKey = ($this->definitionKeyOf)($reference);
             $consumed = $definitionKey === null ? 1 : count(explode('.', $definitionKey));
 
             foreach (array_slice($reference->segments, $consumed) as $property) {
