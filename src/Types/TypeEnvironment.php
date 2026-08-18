@@ -122,8 +122,11 @@ final class TypeEnvironment
             return null;
         }
 
-        return $this->parent?->definitionKeyOf($reference)
-            ?? $this->definitions->keyOf($reference);
+        if ($this->parent !== null) {
+            return $this->parent->definitionKeyOf($reference);
+        }
+
+        return $this->definitions->keyOf($reference);
     }
 
     /** @return ?Result<CompiledNode, TypeMismatch> */

@@ -1027,6 +1027,7 @@ final class SourceCompilationTest extends TestCase
     {
         $compilation = self::compilation();
         $required = new RecordType(['amount' => new NumberType()]);
+        $observer = new SpyObserver();
 
         $array = $compilation->member(CompiledSource::constant($required, ['amount' => 7]), 'amount');
         $object = $compilation->member(CompiledSource::constant($required, (object) ['amount' => 8]), 'amount');
@@ -1037,9 +1038,14 @@ final class SourceCompilationTest extends TestCase
         );
         $missingRequired = $compilation->member(CompiledSource::constant($required, []), 'amount');
 
-        $this->assertSame(7, $array->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(7, $array->node()->evaluate(new Runtime(observer: $observer))->unwrap()->unwrap());
+        $this->assertContains(['result', 7], $observer->timeline);
+        $this->assertContains(['label', '.amount'], $observer->timeline);
         $this->assertSame(8, $object->node()->evaluate(new Runtime())->unwrap()->unwrap());
-        $this->assertTrue($absentObject->node()->evaluate(new Runtime())->unwrap()->isNone());
+
+        $observer = new SpyObserver();
+        $this->assertTrue($absentObject->node()->evaluate(new Runtime(observer: $observer))->unwrap()->isNone());
+        $this->assertContains(['label', '.amount'], $observer->timeline);
         $this->assertTrue($optional->node()->evaluate(new Runtime())->unwrap()->isNone());
         $this->assertInstanceOf(\RuntimeException::class, $missingRequired->node()->evaluate(new Runtime())->unwrapErr());
     }

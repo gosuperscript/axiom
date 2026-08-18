@@ -37,6 +37,7 @@ use Superscript\Axiom\Types\TypeInference;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\InfixExpressionCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[UsesClass(TypeInference::class)]
 #[UsesClass(Definitions::class)]
 #[UsesClass(Bindings::class)]
@@ -348,6 +349,9 @@ final class TypeEnvironmentTest extends TestCase
         $defined = new TypeEnvironment(definitions: $definitions);
         $this->assertSame('answers.risk', $defined->definitionKeyOf($reference));
 
+        $nested = $defined->nested(new LocalScope(), []);
+        $this->assertSame('answers.risk', $nested->definitionKeyOf($reference));
+
         $declared = new TypeEnvironment(
             definitions: $definitions,
             declarations: ['answers' => new RecordType([
@@ -458,6 +462,26 @@ final class TypeEnvironmentTest extends TestCase
 
         $this->assertTrue($result->isErr());
         $this->assertEquals([new ReferencePath('a')], $reads->references());
+    }
+
+    #[Test]
+    public function a_dotted_definition_cycle_records_every_segment_of_its_name(): void
+    {
+        $reference = new ReferencePath('answers', 'risk', 'score');
+        $environment = new TypeEnvironment(
+            definitions: new Definitions(['answers.risk.score' => $reference]),
+        );
+        $reads = new CompilationRecorder();
+
+        $result = $environment->nodeOfReference(
+            $reference,
+            self::compiler(recovery: new \Superscript\Axiom\Analysis\ErrorRecovery()),
+            '$',
+            $reads,
+        );
+
+        $this->assertTrue($result->isErr());
+        $this->assertEquals([$reference], $reads->references());
     }
 
     #[Test]
