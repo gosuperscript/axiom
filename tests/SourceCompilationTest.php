@@ -111,6 +111,7 @@ final readonly class HostLiteralSource implements Source
 }
 
 #[CoversClass(SourceCompilation::class)]
+#[CoversClass(\Superscript\Axiom\OptionLayers::class)]
 #[CoversClass(CompiledSource::class)]
 #[CoversClass(CompiledSources::class)]
 #[CoversClass(SourceEvaluation::class)]
@@ -764,6 +765,14 @@ final class SourceCompilationTest extends TestCase
             ->mapIncludingAbsent($type, fn(mixed $value) => $value ?? 7);
 
         $this->assertSame(7, $includingAbsent->node()->evaluate(new Runtime())->unwrap()->unwrap());
+
+        $mappedOption = CompiledSource::constant($type, 1)
+            ->mapPresent(new OptionType($type), fn() => Some(2));
+        $includingOption = CompiledSource::constant($type, 1)
+            ->mapIncludingAbsent(new OptionType($type), fn() => Some(3));
+
+        $this->assertSame(2, $mappedOption->node()->evaluate(new Runtime())->unwrap()->unwrap());
+        $this->assertSame(3, $includingOption->node()->evaluate(new Runtime())->unwrap()->unwrap());
     }
 
     #[Test]
@@ -1048,6 +1057,48 @@ final class SourceCompilationTest extends TestCase
         $this->assertContains(['label', '.amount'], $observer->timeline);
         $this->assertTrue($optional->node()->evaluate(new Runtime())->unwrap()->isNone());
         $this->assertInstanceOf(\RuntimeException::class, $missingRequired->node()->evaluate(new Runtime())->unwrapErr());
+    }
+
+    #[Test]
+    public function member_preserves_only_optional_option_property_presence(): void
+    {
+        $compilation = self::compilation();
+        $record = new RecordType([
+            'nested' => new \Superscript\Axiom\Types\Optional(new OptionType(new NumberType())),
+            'optional' => new \Superscript\Axiom\Types\Optional(new NumberType()),
+            'requiredOption' => new OptionType(new NumberType()),
+        ]);
+        $array = CompiledSource::constant($record, [
+            'nested' => null,
+            'optional' => null,
+            'requiredOption' => null,
+        ]);
+        $object = CompiledSource::constant($record, (object) [
+            'nested' => null,
+            'optional' => null,
+            'requiredOption' => null,
+        ]);
+
+        foreach ([$array, $object] as $source) {
+            $nested = $compilation->member($source, 'nested')->node()->evaluate(new Runtime())->unwrap();
+            $optional = $compilation->member($source, 'optional')->node()->evaluate(new Runtime())->unwrap();
+            $requiredOption = $compilation->member($source, 'requiredOption')->node()->evaluate(new Runtime())->unwrap();
+
+            $this->assertTrue($nested->isSome());
+            $this->assertTrue($nested->unwrap()->isNone());
+            $this->assertTrue($optional->isNone());
+            $this->assertTrue($requiredOption->isNone());
+        }
+    }
+
+    #[Test]
+    public function ordinary_custom_sources_do_not_expose_option_layers(): void
+    {
+        $source = CompiledSource::custom(new OptionType(new NumberType()), fn() => Some(5));
+        $value = $source->node()->evaluate(new Runtime())->unwrap();
+
+        $this->assertTrue($value->isSome());
+        $this->assertSame(5, $value->unwrap());
     }
 
     #[Test]

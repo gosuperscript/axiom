@@ -409,7 +409,7 @@ Shapes are value-set descriptions, not runtime validators. Custom types project 
 | `NumberShape` | `new NumberShape()` | Numeric values |
 | `StringShape` | `new StringShape()` | String values |
 | `LiteralShape` | `new LiteralShape($value)` | One scalar value |
-| `OptionShape` | `new OptionShape($inner)` | `null` plus the inner domain; nesting collapses |
+| `OptionShape` | `new OptionShape($inner)` | `None | Some(inner)`; nested constructors remain distinct |
 | `UnionShape` | `UnionShape::of(...$members)` | Canonical alternatives; construct through `of()` |
 | `ListShape` | `new ListShape($element, $min = 0, $max = null)` | Length-bounded list |
 | `DictShape` | `new DictShape($value)` | String-keyed homogeneous map |

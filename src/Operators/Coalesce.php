@@ -97,7 +97,10 @@ final readonly class Coalesce implements BinaryOperatorRule, IdentifiedOperatorR
         }
 
         $present = PresentType::of($left);
-        $admitted = TypeRelations::admits($right, new OptionType($present));
+        $collapsedRight = $rightShape instanceof OptionShape
+            ? new OptionType(PresentType::of($right))
+            : $right;
+        $admitted = TypeRelations::admits($collapsedRight, new OptionType($present));
 
         if ($admitted->isErr()) {
             return new UnsupportedOperation(

@@ -25,6 +25,7 @@ use Superscript\Axiom\Types\UnknownType;
  * is absent.
  */
 #[CoversClass(Connective::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(UnsupportedOperation::class)]
 #[UsesClass(BooleanType::class)]

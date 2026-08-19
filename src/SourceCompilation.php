@@ -26,6 +26,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeReifier;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Monads\Option\Option;
+use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
@@ -176,9 +177,9 @@ final readonly class SourceCompilation
 
         $field = $access->unwrap();
 
-        return $this->custom($field->returns, static function (SourceEvaluation $evaluation) use ($object, $property, $field) {
+        return CompiledSource::customLayered($field->returns, static function (SourceEvaluation $evaluation) use ($object, $property, $field) {
             try {
-                $value = $evaluation->value($object);
+                $value = $evaluation->layeredValue($object);
 
                 if ($value === null) {
                     return null;
@@ -202,14 +203,14 @@ final readonly class SourceCompilation
      *
      * @return Result<Option<mixed>, Throwable>
      */
-    private static function accessMember(mixed $value, string $property, bool $optional): Result
+    private static function accessMember(mixed $value, string $property, bool $optional, bool $nestedOption): Result
     {
         if (is_array($value) && array_key_exists($property, $value)) {
-            return Ok(Option::from($value[$property]));
+            return Ok(OptionLayers::read(new Some($value[$property]), $nestedOption));
         }
 
         if (is_object($value) && property_exists($value, $property)) {
-            return Ok(Option::from($value->{$property}));
+            return Ok(OptionLayers::read(new Some($value->{$property}), $nestedOption));
         }
 
         return $optional
@@ -237,7 +238,12 @@ final readonly class SourceCompilation
 
                 return Ok(new FieldAccess(
                     TypeReifier::reify($recordProperty->accessed()),
-                    static fn(mixed $value): Result => self::accessMember($value, $property, $recordProperty->optional),
+                    static fn(mixed $value): Result => self::accessMember(
+                        $value,
+                        $property,
+                        $recordProperty->optional,
+                        $recordProperty->optional && $recordProperty->value instanceof OptionShape,
+                    ),
                 ));
             }
 

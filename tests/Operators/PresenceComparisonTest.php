@@ -38,6 +38,7 @@ use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Axiom\Types\UnknownType;
+use Superscript\Monads\Option\Option;
 
 /**
  * Comparing an equality alias with the absence-only type is a core structural judgment.
@@ -45,6 +46,7 @@ use Superscript\Axiom\Types\UnknownType;
  * equality for its payload and independently of how many ordinary equality overloads exist.
  */
 #[CoversClass(InfixExpressionTyping::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[CoversClass(Equality::class)]
 #[UsesClass(BinaryOperatorResolver::class)]
 #[UsesClass(BooleanType::class)]
@@ -226,6 +228,34 @@ final class PresenceComparisonTest extends TestCase
         );
 
         self::assertInstanceOf(UnsupportedOperation::class, $resolution);
+    }
+
+    #[Test]
+    public function nested_option_null_comparison_distinguishes_omission_from_present_null(): void
+    {
+        $nested = new OptionType(new OptionType(new NumberType()));
+        $absence = new OptionType(new NeverType());
+        $equality = self::typing()->resolve('===', $nested, $absence)->unwrap();
+        $inequality = self::typing('!==', negated: true)->resolve('!==', $absence, $nested)->unwrap();
+
+        self::assertNull($equality->evaluate(null, null)->unwrap());
+        self::assertTrue($equality->evaluate(Option::from(null), null)->unwrap());
+        self::assertFalse($equality->evaluate(Option::from(5), null)->unwrap());
+        self::assertFalse($equality->evaluate(5, null)->unwrap());
+        self::assertFalse($inequality->evaluate(null, Option::from(null))->unwrap());
+        self::assertTrue($inequality->evaluate(null, Option::from(5))->unwrap());
+    }
+
+    #[Test]
+    public function value_equality_lifts_instead_of_flattening_nested_options(): void
+    {
+        $resolution = new Equality('===', negated: false)->resolve(
+            new OptionType(new OptionType(new NumberType())),
+            new NumberType(),
+        );
+
+        self::assertInstanceOf(UnsupportedOperation::class, $resolution);
+        self::assertStringContainsString('nested options', $resolution->message);
     }
 
     #[Test]

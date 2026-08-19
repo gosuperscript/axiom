@@ -104,11 +104,9 @@ final class DefaultValueTest extends TestCase
     }
 
     /**
-     * An optional field behind an optional owner is optional once, not
-     * twice: absence is one null in the value domain however many Option
-     * constructors the type is built from. So the default discharges it in
-     * full, and this spelling agrees with the `??` operator on the same
-     * expression.
+     * An optional field behind an optional owner retains each absence layer.
+     * The default deliberately discharges them all, and this spelling agrees
+     * with the `??` operator on the same expression.
      */
     #[Test]
     public function it_discharges_absence_behind_an_optional_owner(): void

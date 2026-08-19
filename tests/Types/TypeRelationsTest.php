@@ -105,6 +105,10 @@ final class TypeRelationsTest extends TestCase
             new OptionShape(new LiteralShape(1)),
             new OptionShape(new NumberShape()),
         ];
+        yield 'one option layer fills a nested option slot' => [
+            new OptionShape(new NumberShape()),
+            new OptionShape(new OptionShape(new NumberShape())),
+        ];
         yield 'the null type fills every option slot' => [
             new OptionShape(new NeverShape()),
             new OptionShape(new StringShape()),
@@ -215,6 +219,11 @@ final class TypeRelationsTest extends TestCase
             new OptionShape(new StringShape()),
             new OptionShape(new NumberShape()),
             'String is not assignable to Number',
+        ];
+        yield 'nested option cannot lose its inner absence state' => [
+            new OptionShape(new OptionShape(new NumberShape())),
+            new OptionShape(new NumberShape()),
+            'the value may be absent',
         ];
         yield 'present value must match the option inner' => [
             new StringShape(),

@@ -8,8 +8,9 @@ namespace Superscript\Axiom\Types\Shapes;
  * A set of alternatives, canonicalized on construction:
  *
  * - nested unions flatten;
- * - Option members hoist (Union(Option<A>, B) becomes Option(Union(A, B)) —
- *   canonical unions never contain Option members);
+ * - Option members hoist one outer constructor (Union(Option<A>, B) becomes
+ *   Option(Union(A, B))); a nested option remains inside that union because
+ *   its additional constructor is meaningful;
  * - an Unknown member absorbs the union (a union with an unknown branch
  *   tells you nothing more than Unknown does);
  * - Never members are eliminated (the union identity);

@@ -132,7 +132,9 @@ final class CompiledSource
                         return Ok(None());
                     }
 
-                    return self::normalize(fn() => $evaluate($option->unwrap()));
+                    $value = OptionLayers::collapse($option->unwrap());
+
+                    return $value === null ? Ok(None()) : self::normalize(fn() => $evaluate($value), false);
                 });
             }));
         });
@@ -183,7 +185,8 @@ final class CompiledSource
             return new self(CompiledNode::returning($returns, fn(Runtime $runtime) => $this->node
                 ->evaluate($runtime)
                 ->andThen(fn($option) => self::normalize(
-                    fn() => $evaluate($option->unwrapOr(null)),
+                    fn() => $evaluate(OptionLayers::collapse($option->unwrapOr(null))),
+                    false,
                 ))));
         });
     }
@@ -203,10 +206,22 @@ final class CompiledSource
      */
     public static function custom(Type $returns, callable $evaluate): self
     {
+        return self::customWithOptionLayers($returns, $evaluate, false);
+    }
+
+    /** @internal Structural core sources may return an Option as a present value. */
+    public static function customLayered(Type $returns, callable $evaluate): self
+    {
+        return self::customWithOptionLayers($returns, $evaluate, true);
+    }
+
+    private static function customWithOptionLayers(Type $returns, callable $evaluate, bool $preserveOptionValue): self
+    {
         $evaluate = $evaluate(...);
 
         return new self(CompiledNode::returning($returns, fn(Runtime $runtime) => self::normalize(
             fn() => $evaluate(new SourceEvaluation($runtime)),
+            $preserveOptionValue,
         )));
     }
 
@@ -236,7 +251,7 @@ final class CompiledSource
         return $this->node;
     }
 
-    /** Mapping a present value preserves optionality without nesting it. */
+    /** Mapping over any absence depth produces one optional result layer. */
     private function propagateAbsence(Type $returns): Type
     {
         return $this->node->returns->shape() instanceof OptionShape
@@ -246,7 +261,7 @@ final class CompiledSource
     }
 
     /** @return Result<\Superscript\Monads\Option\Option<mixed>, \Throwable> */
-    private static function normalize(Closure $evaluate): Result
+    private static function normalize(Closure $evaluate, bool $preserveOptionValue): Result
     {
         try {
             $value = $evaluate();
@@ -256,9 +271,9 @@ final class CompiledSource
 
         if ($value instanceof Result) {
             /** @var Result<mixed, \Throwable> $value */
-            return $value->map(Option::from(...));
+            return $value->map(fn(mixed $result): Option => OptionLayers::normalize($result, $preserveOptionValue));
         }
 
-        return Ok(Option::from($value));
+        return Ok(OptionLayers::normalize($value, $preserveOptionValue));
     }
 }

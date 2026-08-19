@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeRelations;
@@ -24,6 +25,13 @@ final readonly class Equality implements BinaryOperatorRule
 
     public function resolve(Type $left, Type $right): OperatorResolution
     {
+        if (self::isNestedOption($left) || self::isNestedOption($right)) {
+            return new UnsupportedOperation(sprintf(
+                '[%s] compares the present values inside nested options; absence propagates unless the counterpart is null.',
+                $this->operator,
+            ));
+        }
+
         $support = ValueEquality::supports($left, $right);
 
         if ($support->isErr()) {
@@ -53,5 +61,12 @@ final readonly class Equality implements BinaryOperatorRule
                 ? !ValueEquality::equals($left, $right)
                 : ValueEquality::equals($left, $right),
         );
+    }
+
+    private static function isNestedOption(Type $type): bool
+    {
+        $shape = $type->shape();
+
+        return $shape instanceof OptionShape && $shape->inner instanceof OptionShape;
     }
 }

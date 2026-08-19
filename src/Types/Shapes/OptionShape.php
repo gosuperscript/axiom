@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types\Shapes;
 
 /**
- * A possibly-absent value: denotes exactly {null} ∪ values(inner).
+ * A possibly-absent value: denotes None | Some(inner).
  *
- * Nesting collapses on construction — the runtime value domain threads a
- * single null and cannot represent Some(None), so Option<Option<T>> and
- * Option<T> denote the same set.
+ * Option constructors remain nested. The runtime represents an inner option
+ * as an Option value inside the compiled node's outer Option channel, so
+ * Option<Option<T>> can distinguish None from Some(None).
  */
 final class OptionShape extends Shape
 {
@@ -17,7 +17,7 @@ final class OptionShape extends Shape
 
     public function __construct(Shape $inner)
     {
-        $this->inner = $inner instanceof self ? $inner->inner : $inner;
+        $this->inner = $inner;
     }
 
     public function equals(Shape $other): bool

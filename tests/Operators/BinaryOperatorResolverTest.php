@@ -22,8 +22,11 @@ use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Monads\Option\Option;
+use Superscript\Monads\Option\Some;
 
 #[CoversClass(BinaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[CoversClass(UnsupportedOperation::class)]
 #[CoversClass(DeadOperation::class)]
 #[CoversClass(ResolvedOperation::class)]
@@ -390,6 +393,19 @@ final class BinaryOperatorResolverTest extends TestCase
         $this->assertSame(3, $lifted->evaluate(0, 3)->unwrap(), 'a falsy present operand is not absence');
         $this->assertNull($lifted->evaluate(null, 3)->unwrap(), 'an absent left operand answers absence');
         $this->assertNull($lifted->evaluate(2, null)->unwrap(), 'an absent right operand answers absence');
+        $this->assertSame(5, $lifted->evaluate(new Some(new Some(2)), 3)->unwrap());
+        $this->assertNull($lifted->evaluate(new Some(Option::from(null)), 3)->unwrap());
+    }
+
+    #[Test]
+    public function structural_operations_can_observe_option_layers(): void
+    {
+        $operation = (new ResolvedOperation(
+            new BooleanType(),
+            static fn(mixed $operand): bool => $operand instanceof Option && $operand->isNone(),
+        ))->observingOptionLayers();
+
+        $this->assertTrue($operation->evaluate(Option::from(null))->unwrap());
     }
 
     #[Test]

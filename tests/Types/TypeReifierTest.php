@@ -85,6 +85,7 @@ final class TypeReifierTest extends TestCase
         yield 'String' => [new StringShape()];
         yield 'literal' => [new LiteralShape('shop')];
         yield 'option' => [new OptionShape(new NumberShape())];
+        yield 'nested option' => [new OptionShape(new OptionShape(new NumberShape()))];
         yield 'union' => [UnionShape::of(new LiteralShape('a'), new LiteralShape('b'))];
         yield 'list' => [new ListShape(new NumberShape())];
         yield 'bounded list' => [new ListShape(new NumberShape(), 1, 3)];

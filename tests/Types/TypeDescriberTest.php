@@ -83,6 +83,7 @@ final class TypeDescriberTest extends TestCase
         yield [new LiteralShape(5.5), '5.5'];
 
         yield [new OptionShape(new NumberShape()), 'Number?'];
+        yield [new OptionShape(new OptionShape(new NumberShape())), 'Number??'];
         yield [
             new OptionShape(UnionShape::of(new LiteralShape('shop'), new LiteralShape('office'))),
             "('shop' | 'office')?",

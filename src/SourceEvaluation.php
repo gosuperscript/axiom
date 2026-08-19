@@ -16,8 +16,18 @@ final readonly class SourceEvaluation
     /** @internal Constructed while a CompiledSource is evaluated. */
     public function __construct(private Runtime $runtime) {}
 
-    /** Evaluate a child; absence is represented as null. */
+    /** Evaluate a child; every option layer is represented as null. */
     public function value(CompiledSource $source): mixed
+    {
+        return OptionLayers::collapse($this->layeredValue($source));
+    }
+
+    /**
+     * Evaluate a child without collapsing nested option constructors.
+     *
+     * @internal Structural core sources use this to observe property presence.
+     */
+    public function layeredValue(CompiledSource $source): mixed
     {
         $result = $source->node()->evaluate($this->runtime);
 
@@ -42,7 +52,7 @@ final readonly class SourceEvaluation
             throw new EvaluationAborted($result->unwrapErr());
         }
 
-        return $result->unwrap()->unwrapOr(null);
+        return OptionLayers::collapse($result->unwrap()->unwrapOr(null));
     }
 
     public function annotate(string $key, mixed $value): void

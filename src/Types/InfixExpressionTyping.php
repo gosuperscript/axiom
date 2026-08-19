@@ -10,6 +10,7 @@ use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
+use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Ok;
@@ -51,9 +52,11 @@ final readonly class InfixExpressionTyping
             return $this->overloads->resolve($operator, $left, $right);
         }
 
+        $leftIsAbsence = self::isAbsenceOnly($left);
+        $rightIsAbsence = self::isAbsenceOnly($right);
         $counterpart = match (true) {
-            self::isAbsenceOnly($left) => $right,
-            self::isAbsenceOnly($right) => $left,
+            $leftIsAbsence => $right,
+            $rightIsAbsence => $left,
             default => null,
         };
 
@@ -64,6 +67,10 @@ final readonly class InfixExpressionTyping
         $structural = self::nullComparison($operator);
 
         if ($counterpart->shape() instanceof OptionShape) {
+            if ($counterpart->shape()->inner instanceof OptionShape) {
+                return Ok(self::nestedNullComparison($operator, counterpartIsLeft: $rightIsAbsence));
+            }
+
             return Ok($structural);
         }
 
@@ -85,6 +92,33 @@ final readonly class InfixExpressionTyping
                 extension: 'axiom.core',
             ),
         );
+    }
+
+    private static function nestedNullComparison(string $operator, bool $counterpartIsLeft): ResolvedOperation
+    {
+        $negated = self::EqualityNegations[$operator];
+
+        return (new ResolvedOperation(
+            new OptionType(new BooleanType()),
+            static function (mixed $left, mixed $right) use ($counterpartIsLeft, $negated): ?bool {
+                $counterpart = $counterpartIsLeft ? $left : $right;
+
+                if ($counterpart === null) {
+                    return null;
+                }
+
+                if (!$counterpart instanceof Option) {
+                    return $negated;
+                }
+
+                return $negated ? $counterpart->isSome() : $counterpart->isNone();
+            },
+            new OperatorRuleProvenance(
+                identifier: 'axiom.option.nested-null-comparison',
+                implementation: self::class,
+                extension: 'axiom.core',
+            ),
+        ))->observingOptionLayers();
     }
 
     private static function isAbsenceOnly(Type $type): bool

@@ -49,6 +49,7 @@ final class OptionLiftingTest extends TestCase
         $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new BooleanType()))->isOk());
         $this->assertTrue($program(['x' => 0.3])->unwrap()->unwrap());
         $this->assertFalse($program(['x' => 0.1])->unwrap()->unwrap());
+        $this->assertTrue($program(['x' => null])->unwrap()->isNone(), 'an explicitly absent value does not participate in an ordering');
         $this->assertTrue($program([])->unwrap()->isNone(), 'an unanswered symbol answers absence, not an error');
     }
 
@@ -89,7 +90,7 @@ final class OptionLiftingTest extends TestCase
     }
 
     #[Test]
-    public function the_emptiness_probe_is_untouched_by_lifting(): void
+    public function a_null_probe_distinguishes_an_omitted_property_from_a_present_absent_value(): void
     {
         // Equality reads optional operands as given — `x == null` stays the
         // presence probe it has always been, present in its answer.
@@ -98,8 +99,42 @@ final class OptionLiftingTest extends TestCase
             declarations: ['x' => new Optional(new OptionType(new NumberType()))],
         ))->compile()->unwrap();
 
-        $this->assertTrue($program([])->unwrap()->unwrap());
+        $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new BooleanType()))->isOk());
+        $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertTrue($program(['x' => null])->unwrap()->unwrap());
         $this->assertFalse($program(['x' => 1])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function typed_equality_propagates_both_property_and_value_absence(): void
+    {
+        $program = (new Expression(
+            source: new InfixExpression(new SymbolSource('x'), '!=', new StaticSource(1)),
+            declarations: ['x' => new Optional(new OptionType(new NumberType()))],
+        ))->compile()->unwrap();
+
+        $this->assertTrue(TypeRelations::areEquivalent($program->returns, new OptionType(new BooleanType()))->isOk());
+        $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertTrue($program(['x' => null])->unwrap()->isNone());
+        $this->assertFalse($program(['x' => 1])->unwrap()->unwrap());
+        $this->assertTrue($program(['x' => 2])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_present_branch_can_decide_an_or_while_the_other_property_is_omitted(): void
+    {
+        $noValue = new InfixExpression(new SymbolSource('x'), '==', new StaticSource(null));
+        $program = (new Expression(
+            source: new InfixExpression($noValue, '||', new SymbolSource('other')),
+            declarations: [
+                'x' => new Optional(new OptionType(new NumberType())),
+                'other' => new BooleanType(),
+            ],
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program(['other' => true])->unwrap()->unwrap());
+        $this->assertTrue($program(['other' => false])->unwrap()->isNone());
+        $this->assertTrue($program(['x' => null, 'other' => false])->unwrap()->unwrap());
     }
 
     #[Test]
@@ -157,11 +192,9 @@ final class OptionLiftingTest extends TestCase
     }
 
     /**
-     * An optional field behind an optional owner is optional once, not
-     * twice: absence is one null in the value domain however many Option
-     * constructors the type is built from. So the authored default
-     * discharges it in full, and the comparison is definite — the same
-     * guarantee a directly declared optional symbol gets.
+     * An optional field behind an optional owner retains property omission
+     * separately from its own absent value. An authored default deliberately
+     * collapses every absence layer, so the comparison is still definite.
      */
     #[Test]
     public function an_authored_default_discharges_absence_behind_an_optional_owner(): void
@@ -172,7 +205,10 @@ final class OptionLiftingTest extends TestCase
         ]))];
 
         $bare = (new Expression(source: $premium, declarations: $declarations))->compile()->unwrap();
-        $this->assertTrue(TypeRelations::areEquivalent($bare->returns, new OptionType(new NumberType()))->isOk());
+        $this->assertTrue(TypeRelations::areEquivalent(
+            $bare->returns,
+            new OptionType(new OptionType(new NumberType())),
+        )->isOk());
 
         $program = (new Expression(
             source: new InfixExpression(

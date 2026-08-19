@@ -24,8 +24,8 @@ final readonly class InfixExpressionCompiler
 
         return $compilation->custom($operation->returns, static function (SourceEvaluation $evaluation) use ($left, $right, $operation, $source) {
             try {
-                $leftValue = $evaluation->value($left);
-                $rightValue = $evaluation->value($right);
+                $leftValue = $evaluation->layeredValue($left);
+                $rightValue = $evaluation->layeredValue($right);
 
                 $evaluation->annotate('left', $leftValue);
                 $evaluation->annotate('right', $rightValue);

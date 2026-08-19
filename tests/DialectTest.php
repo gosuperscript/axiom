@@ -26,6 +26,7 @@ use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 
 #[CoversClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Extension::class)]
 #[UsesClass(\Superscript\Axiom\Operators\BinaryOperatorResolver::class)]

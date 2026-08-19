@@ -31,6 +31,7 @@ use Superscript\Axiom\Types\UnknownType;
  * is absent.
  */
 #[CoversClass(Coalesce::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(DeadOperation::class)]
 #[UsesClass(ResolvedOperation::class)]
 #[UsesClass(UnsupportedOperation::class)]
@@ -81,6 +82,18 @@ final class CoalesceTest extends TestCase
         $resolution = (new Coalesce())->resolve(
             new OptionType(new NumberType()),
             new OptionType(new LiteralType(0)),
+        );
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertTrue(TypeRelations::areEquivalent($resolution->returns, new OptionType(new NumberType()))->isOk());
+    }
+
+    #[Test]
+    public function a_nested_optional_fallback_is_collapsed_before_admission(): void
+    {
+        $resolution = (new Coalesce())->resolve(
+            new OptionType(new OptionType(new NumberType())),
+            new OptionType(new OptionType(new NumberType())),
         );
 
         $this->assertInstanceOf(ResolvedOperation::class, $resolution);
