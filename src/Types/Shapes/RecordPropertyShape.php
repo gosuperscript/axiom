@@ -15,9 +15,7 @@ final readonly class RecordPropertyShape
     /** The shape observed by member access, including omission. */
     public function accessed(): Shape
     {
-        return $this->optional && !$this->value instanceof OptionShape
-            ? new OptionShape($this->value)
-            : $this->value;
+        return $this->optional ? new OptionShape($this->value) : $this->value;
     }
 
     public function equals(self $other): bool

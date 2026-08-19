@@ -40,6 +40,7 @@ use Superscript\Axiom\Types\UnknownType;
 use function Superscript\Monads\Result\Ok;
 
 #[CoversClass(Operator::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[CoversClass(InfixOperatorRuleBuilder::class)]
 #[CoversClass(InfixOperatorRuleWithOperands::class)]
 #[CoversClass(InfixOperatorRuleWithReturn::class)]

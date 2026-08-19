@@ -13,15 +13,11 @@ use Superscript\Axiom\Types\Shapes\OptionShape;
  * only OptionType itself.
  *
  * The answer is always present, however many Option constructors a type
- * happens to be built from. Nesting collapses in the shape algebra but not
- * in the types themselves — member access on an optional owner wraps an
- * already-optional field, so `q.premium` on an
- * `Option<{premium: Option<Number>}>` is the type `Option<Option<Number>>`,
- * which describes as `Number?` and denotes {null} ∪ Number. Peeling one
- * constructor off that would answer `Option<Number>` — still optional, so
- * an operator asking what it gets when the value is present would be told
- * "possibly nothing", and `q.premium ?? 0` would certify an optional result
- * for a value that can never be absent.
+ * carries. Constructors remain distinct in the shape algebra, but this
+ * projection is deliberately the innermost present type used by strict
+ * operations and authored defaults. Peeling only one constructor would
+ * leave those operations with an optional operand rather than the value
+ * they operate on.
  *
  * Peeling is preferred to reifying wherever a constructor is there to peel:
  * a host's own `Type` survives (an `Option<Money>` exposes the host's

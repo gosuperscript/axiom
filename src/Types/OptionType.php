@@ -13,13 +13,17 @@ use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Ok;
 
 /**
- * A possibly-absent value: {null} ∪ inner.
+ * A possibly-absent value: None | Some(inner).
  *
  * Coercion law: null coerces to a *present* Some(null) — absence is a legal
  * value of the option, not a failed coercion. That is what lets an optional
  * field live inside a record whose fields treat a None coercion as
  * "required but missing". An inner absence reading ('' for strings, etc.)
  * coerces to Some(null) for the same reason.
+ *
+ * Option constructors remain distinct in the shape algebra. The compiled
+ * runtime carries additional constructors as nested Option values, allowing
+ * property omission to remain separate from an absent supplied value.
  *
  * @implements Type<mixed>
  */

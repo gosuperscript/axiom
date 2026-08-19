@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Operators;
 
 use Closure;
+use Superscript\Axiom\OptionLayers;
 use Superscript\Axiom\Analysis\OperatorRuleProvenance;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -33,12 +34,19 @@ final readonly class ResolvedOperation implements OperatorResolution
         public Type $returns,
         private Closure $evaluation,
         public ?OperatorRuleProvenance $provenance = null,
+        private bool $observesOptionLayers = false,
     ) {}
 
     /** @internal The resolver attaches the identity of the rule it selected. */
     public function attributedTo(OperatorRuleProvenance $provenance): self
     {
-        return new self($this->returns, $this->evaluation, $provenance);
+        return new self($this->returns, $this->evaluation, $provenance, $this->observesOptionLayers);
+    }
+
+    /** @internal Structural option operations inspect constructors before ordinary absence collapse. */
+    public function observingOptionLayers(): self
+    {
+        return new self($this->returns, $this->evaluation, $this->provenance, true);
     }
 
     /**
@@ -57,8 +65,19 @@ final readonly class ResolvedOperation implements OperatorResolution
 
         return new self(
             $this->returns->shape() instanceof OptionShape ? $this->returns : new OptionType($this->returns),
-            static fn(mixed ...$operands) => in_array(null, $operands, true) ? null : $evaluation(...$operands),
+            static function (mixed ...$operands) use ($evaluation): mixed {
+                foreach ($operands as $index => $operand) {
+                    if ($operand === null) {
+                        return null;
+                    }
+
+                    $operands[$index] = $operand;
+                }
+
+                return $evaluation(...$operands);
+            },
             $this->provenance,
+            $this->observesOptionLayers,
         );
     }
 
@@ -70,6 +89,10 @@ final readonly class ResolvedOperation implements OperatorResolution
      */
     public function evaluate(mixed ...$operands): Result
     {
+        if (!$this->observesOptionLayers) {
+            $operands = array_map(OptionLayers::collapse(...), $operands);
+        }
+
         $value = ($this->evaluation)(...$operands);
 
         if ($value instanceof Result) {

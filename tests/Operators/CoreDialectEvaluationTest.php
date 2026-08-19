@@ -36,6 +36,7 @@ use Superscript\Monads\Result\Result;
  * refusals.
  */
 #[CoversClass(Dialect::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[CoversClass(Equality::class)]
 #[CoversClass(Has::class)]

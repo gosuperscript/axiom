@@ -206,7 +206,11 @@ final class RecordTypeTest extends TestCase
         $this->assertSame($record->property('required')->type, $record->property('required')->accessedType());
         $this->assertInstanceOf(OptionType::class, $record->property('omittable')->accessedType());
         $this->assertSame($record->property('nullable')->type, $record->property('nullable')->accessedType());
-        $this->assertSame($record->property('omittable_nullable')->type, $record->property('omittable_nullable')->accessedType());
+        $this->assertInstanceOf(OptionType::class, $record->property('omittable_nullable')->accessedType());
+        $this->assertSame(
+            $record->property('omittable_nullable')->type,
+            $record->property('omittable_nullable')->accessedType()->inner,
+        );
         $this->assertNull($record->property('missing'));
     }
 

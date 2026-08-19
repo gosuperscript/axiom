@@ -185,7 +185,8 @@ final class ShapeTest extends TestCase
 
         $this->assertInstanceOf(NumberShape::class, $required->accessed());
         $this->assertInstanceOf(OptionShape::class, $optional->accessed());
-        $this->assertSame($optionalOption->value, $optionalOption->accessed());
+        $this->assertInstanceOf(OptionShape::class, $optionalOption->accessed());
+        $this->assertSame($optionalOption->value, $optionalOption->accessed()->inner);
         $this->assertTrue($required->equals(new \Superscript\Axiom\Types\Shapes\RecordPropertyShape(new NumberShape(), false)));
         $this->assertFalse($required->equals($optional));
         $this->assertSame($optional, (new RecordShape(['value' => $optional]))->properties['value']);
@@ -202,12 +203,13 @@ final class ShapeTest extends TestCase
     }
 
     #[Test]
-    public function option_nesting_collapses_on_construction(): void
+    public function option_nesting_is_retained_on_construction(): void
     {
         $nested = new OptionShape(new OptionShape(new NumberShape()));
 
-        $this->assertInstanceOf(NumberShape::class, $nested->inner);
-        $this->assertTrue($nested->equals(new OptionShape(new NumberShape())));
+        $this->assertInstanceOf(OptionShape::class, $nested->inner);
+        $this->assertInstanceOf(NumberShape::class, $nested->inner->inner);
+        $this->assertFalse($nested->equals(new OptionShape(new NumberShape())));
     }
 
     #[Test]

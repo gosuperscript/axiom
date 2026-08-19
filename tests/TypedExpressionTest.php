@@ -51,6 +51,7 @@ use Superscript\Axiom\Types\UnionType;
  * citizens — all through compile() and the Program it returns.
  */
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\AdmissionNode::class)]
@@ -244,7 +245,7 @@ final class TypedExpressionTest extends TestCase
      */
     #[Test]
     #[DataProvider('absenceReadings')]
-    public function absence_is_judged_by_property_presence_and_value_type(Type|Optional $declared, array $bindings, ?string $refusal, string $message): void
+    public function absence_is_judged_by_property_presence_and_value_type(Type|Optional $declared, array $bindings, ?string $refusal, string $message, bool $presentAbsence = false): void
     {
         $program = (new Expression(
             source: new SymbolSource('x'),
@@ -254,6 +255,15 @@ final class TypedExpressionTest extends TestCase
         $result = $program($bindings);
 
         if ($refusal === null) {
+            if ($presentAbsence) {
+                $outer = $result->unwrap();
+                $this->assertTrue($outer->isSome());
+                $this->assertInstanceOf(\Superscript\Monads\Option\Option::class, $outer->unwrap());
+                $this->assertTrue($outer->unwrap()->isNone());
+
+                return;
+            }
+
             $this->assertTrue($result->unwrap()->isNone(), 'the declaration admits absence, so the value is None');
 
             return;
@@ -265,7 +275,7 @@ final class TypedExpressionTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Type|Optional, array<string, mixed>, class-string<BoundaryViolation>|null, string}>
+     * @return iterable<string, array{Type|Optional, array<string, mixed>, class-string<BoundaryViolation>|null, string, 4?: bool}>
      */
     public static function absenceReadings(): iterable
     {
@@ -294,7 +304,7 @@ final class TypedExpressionTest extends TestCase
         yield 'Optional(String), bound ""' => [new Optional(new StringType()), ['x' => ''], InadmissibleBinding::class, 'binding [x] reads as missing, but String is required'];
         yield 'Optional(String), unbound' => [new Optional(new StringType()), [], null, ''];
         yield 'Optional(String), bound null' => [new Optional(new StringType()), ['x' => null], InadmissibleBinding::class, 'binding [x]:'];
-        yield 'Optional(String?), bound null' => [new Optional(new OptionType(new StringType())), ['x' => null], null, ''];
+        yield 'Optional(String?), bound null' => [new Optional(new OptionType(new StringType())), ['x' => null], null, '', true];
         yield 'Optional(String?), unbound' => [new Optional(new OptionType(new StringType())), [], null, ''];
     }
 

@@ -29,6 +29,7 @@ use Superscript\Axiom\Types\TypeEnvironment;
 use Superscript\Axiom\Types\TypeInference;
 
 #[CoversClass(TypeEnvironment::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(CompilationRecorder::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\ErrorRecovery::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\References::class)]
@@ -144,6 +145,30 @@ final class TypeEnvironmentTest extends TestCase
     }
 
     #[Test]
+    public function a_root_read_preserves_only_optional_option_property_presence(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'nested' => new Optional(new OptionType(new NumberType())),
+            'optional' => new Optional(new NumberType()),
+            'requiredOption' => new OptionType(new NumberType()),
+        ]);
+        $runtime = new Runtime(new Bindings([
+            'nested' => null,
+            'optional' => null,
+            'requiredOption' => null,
+        ]));
+
+        $nested = $environment->nodeOfSymbol('nested', self::compiler())->unwrap()->evaluate($runtime)->unwrap();
+        $optional = $environment->nodeOfSymbol('optional', self::compiler())->unwrap()->evaluate($runtime)->unwrap();
+        $requiredOption = $environment->nodeOfSymbol('requiredOption', self::compiler())->unwrap()->evaluate($runtime)->unwrap();
+
+        $this->assertTrue($nested->isSome());
+        $this->assertTrue($nested->unwrap()->isNone());
+        $this->assertTrue($optional->isNone());
+        $this->assertTrue($requiredOption->isNone());
+    }
+
+    #[Test]
     public function nested_declarations_shadow_by_scope_identity_and_free_reads_resolve_outward(): void
     {
         $number = new NumberType();
@@ -241,6 +266,33 @@ final class TypeEnvironmentTest extends TestCase
             'customer' => (object) ['turnover' => 700000],
         ])))->unwrap()->unwrap());
         $this->assertEquals([new ReferencePath('customer', 'turnover')], $result->unwrap()->references);
+    }
+
+    #[Test]
+    public function a_path_read_preserves_only_optional_option_property_presence(): void
+    {
+        $environment = new TypeEnvironment(declarations: [
+            'answers' => new RecordType([
+                'nested' => new Optional(new OptionType(new NumberType())),
+                'optional' => new Optional(new NumberType()),
+                'requiredOption' => new OptionType(new NumberType()),
+            ]),
+        ]);
+
+        foreach ([
+            ['nested' => null, 'optional' => null, 'requiredOption' => null],
+            (object) ['nested' => null, 'optional' => null, 'requiredOption' => null],
+        ] as $answers) {
+            $runtime = new Runtime(new Bindings(['answers' => $answers]));
+            $nested = $environment->nodeOfInputPath(new ReferencePath('answers', 'nested'))->unwrap()->evaluate($runtime)->unwrap();
+            $optional = $environment->nodeOfInputPath(new ReferencePath('answers', 'optional'))->unwrap()->evaluate($runtime)->unwrap();
+            $requiredOption = $environment->nodeOfInputPath(new ReferencePath('answers', 'requiredOption'))->unwrap()->evaluate($runtime)->unwrap();
+
+            $this->assertTrue($nested->isSome());
+            $this->assertTrue($nested->unwrap()->isNone());
+            $this->assertTrue($optional->isNone());
+            $this->assertTrue($requiredOption->isNone());
+        }
     }
 
     #[Test]

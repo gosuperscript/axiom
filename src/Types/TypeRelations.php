@@ -33,8 +33,9 @@ use function Superscript\Monads\Result\Ok;
  *   overlaps everything — an unknown value can never be ruled out.
  * - A base type accepts its literals ('shop' fits a String slot) and
  *   unions of them; a literal never accepts its base.
- * - Option<T> holds null or a T. So T fits an Option<T> slot,
- *   Option<Option<T>> collapses to Option<T>, and the null literal
+ * - Option<T> holds None or Some(T). So T fits an Option<T> slot,
+ *   Option<T> fits Option<Option<T>>, the reverse does not (Some(None)
+ *   has no single-layer representation), and the null literal
  *   (Option<Never>) fits every option slot.
  * - overlaps asks whether any single value could inhabit both types. It
  *   is symmetric, and weaker than assignability in both directions.

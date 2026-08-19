@@ -25,6 +25,7 @@ use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\UnknownType;
 
 #[CoversClass(UnaryOperatorResolver::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(Dialect::class)]
 #[UsesClass(ResolvedOperation::class)]

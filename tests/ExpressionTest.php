@@ -19,6 +19,7 @@ use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\NumberType;
 
 #[CoversClass(Expression::class)]
+#[UsesClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\Types\Optional::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]
@@ -259,7 +260,7 @@ final class ExpressionTest extends TestCase
         // A region the dialect cannot compile is never descended, so a
         // symbol under it does not appear — the refusal that explains the
         // smaller answer is in diagnose()'s diagnostics.
-        $unregistered = new readonly class(new SymbolSource('hidden')) implements \Superscript\Axiom\Source {
+        $unregistered = new readonly class (new SymbolSource('hidden')) implements \Superscript\Axiom\Source {
             public function __construct(public SymbolSource $child) {}
         };
 

@@ -8,9 +8,11 @@ use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\LocalScope;
+use Superscript\Axiom\OptionLayers;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Runtime;
 use Superscript\Monads\Option\Option;
+use Superscript\Monads\Option\Some;
 use Superscript\Monads\Result\Result;
 
 use function Superscript\Monads\Result\Err;
@@ -75,11 +77,14 @@ final class TypeEnvironment
 
             return Ok(CompiledNode::returning(
                 $property->accessedType(),
-                static function (Runtime $runtime) use ($name, $root, $scope) {
+                static function (Runtime $runtime) use ($name, $property, $root, $scope) {
                     $binding = $scope === null
                         ? $runtime->bindings->get($name)
                         : $runtime->local($scope, $name);
-                    $value = $binding->andThen(static fn(mixed $item) => Option::from($item));
+                    $value = OptionLayers::read(
+                        $binding,
+                        $property->optional && $property->type->shape() instanceof Shapes\OptionShape,
+                    );
 
                     $runtime->annotate('label', $root->describe());
                     $value->inspect(fn(mixed $item) => $runtime->annotate('result', $item));
@@ -188,33 +193,26 @@ final class TypeEnvironment
             return $this->parent?->nodeOfInputPath($reference);
         }
 
-        $type = $this->structuralTypeAt($reference);
+        $path = $this->structuralPath($reference);
 
-        if ($type === null) {
+        if ($path === null) {
             return $this->parent?->nodeOfInputPath($reference);
         }
+
+        $type = $path['type'];
+        $properties = $path['properties'];
 
         $scope = $this->localScope;
 
         return Ok(CompiledNode::returning(
             $type,
-            static function (Runtime $runtime) use ($reference, $scope) {
+            static function (Runtime $runtime) use ($reference, $scope, $properties) {
                 $current = $scope === null
                     ? $runtime->bindings->get($reference->root())
                     : $runtime->local($scope, $reference->root());
 
-                foreach ($reference->properties() as $property) {
-                    $current = $current->andThen(static function (mixed $value) use ($property): Option {
-                        if (is_array($value) && array_key_exists($property, $value)) {
-                            return self::optionFrom($value[$property]);
-                        }
-
-                        if (is_object($value) && property_exists($value, $property)) {
-                            return self::optionFrom($value->{$property});
-                        }
-
-                        return Option::from(null);
-                    });
+                foreach ($properties as ['name' => $name, 'property' => $property]) {
+                    $current = self::accessPathProperty($current, $name, $property);
                 }
 
                 $runtime->annotate('label', $reference->describe());
@@ -226,13 +224,45 @@ final class TypeEnvironment
         ));
     }
 
-    /** Resolve only paths structurally owned by concrete RecordTypes. */
-    private function structuralTypeAt(ReferencePath $reference): ?Type
+    /**
+     * @param  Option<mixed>  $current
+     * @return Option<mixed>
+     */
+    private static function accessPathProperty(Option $current, string $name, RecordProperty $property): Option
+    {
+        return $current->andThen(static function (mixed $value) use ($name, $property): Option {
+            $value = OptionLayers::collapse($value);
+
+            if (is_array($value) && array_key_exists($name, $value)) {
+                return OptionLayers::read(
+                    new Some($value[$name]),
+                    $property->optional && $property->type->shape() instanceof Shapes\OptionShape,
+                );
+            }
+
+            if (is_object($value) && property_exists($value, $name)) {
+                return OptionLayers::read(
+                    new Some($value->{$name}),
+                    $property->optional && $property->type->shape() instanceof Shapes\OptionShape,
+                );
+            }
+
+            return Option::from(null);
+        });
+    }
+
+    /**
+     * Resolve only paths structurally owned by concrete RecordTypes.
+     *
+     * @return ?array{type: Type, properties: list<array{name: string, property: RecordProperty}>}
+     */
+    private function structuralPath(ReferencePath $reference): ?array
     {
         $current = $this->declarations;
         $lifted = false;
+        $properties = [];
 
-        foreach ($reference->segments as $name) {
+        foreach ($reference->segments as $index => $name) {
             while ($current instanceof OptionType) {
                 $lifted = true;
                 $current = $current->inner;
@@ -242,6 +272,9 @@ final class TypeEnvironment
                 return null;
             }
 
+            if ($index > 0) {
+                $properties[] = ['name' => $name, 'property' => $property];
+            }
             $current = $property->accessedType();
 
             if ($lifted && !$current->shape() instanceof \Superscript\Axiom\Types\Shapes\OptionShape) {
@@ -249,7 +282,7 @@ final class TypeEnvironment
             }
         }
 
-        return $current;
+        return ['type' => $current, 'properties' => $properties];
     }
 
     private static function referenceOfKey(string $key): ReferencePath
@@ -259,9 +292,4 @@ final class TypeEnvironment
         return new ReferencePath($segments[0], ...array_slice($segments, 1));
     }
 
-    /** @return Option<mixed> */
-    private static function optionFrom(mixed $value): Option
-    {
-        return Option::from($value);
-    }
 }

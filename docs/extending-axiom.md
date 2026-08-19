@@ -258,11 +258,11 @@ final class EmailType implements Type
 
 ### Optional Values
 
-Value absence is a type: `OptionType<T>` denotes `{null} ∪ T`. Property omission is the independent `Optional` qualifier. Your extension inherits the consequences for free:
+Value absence is a type: `OptionType<T>` denotes `None | Some(T)`. Property omission is the independent `Optional` qualifier. Your extension inherits the consequences for free:
 
-- A present `T` fills an `Option<T>` slot, and `Option<Option<T>>` collapses.
+- A present `T` fills an `Option<T>` slot. Nested options remain distinct: `Option<Option<T>>` additionally represents `Some(None)`.
 - `OptionType::coerce(null)` yields a **present** `Some(null)` — absence is a legal value of the option, not a failed coercion.
-- `new Optional($type)` permits a record property to be omitted. A missing optional property remains omitted; it is not canonicalized to `null`. Wrap the property type in `OptionType` separately when an explicitly supplied absent value is also legal.
+- `new Optional($type)` permits a record property to be omitted. A missing optional property remains omitted; it is not canonicalized to `null`. Wrap the property type in `OptionType` separately when an explicitly supplied absent value is also legal; access then yields `Option<Option<T>>` and retains both states.
 - Don't hand-roll "nullable" variants of your types — wrap them.
 
 ## Literal Registration

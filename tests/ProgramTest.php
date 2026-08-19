@@ -63,12 +63,14 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MemberAccessSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]
+#[CoversClass(\Superscript\Axiom\OptionLayers::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
 #[UsesClass(\Superscript\Axiom\BoundOperation::class)]
 #[UsesClass(\Superscript\Axiom\SourceEvaluation::class)]
@@ -307,6 +309,30 @@ final class ProgramTest extends TestCase
     }
 
     #[Test]
+    public function optional_option_access_retains_property_presence_and_value_absence(): void
+    {
+        $program = (new Expression(
+            new ReferencePath('answers', 'limit'),
+            declarations: ['answers' => new RecordType([
+                'limit' => new \Superscript\Axiom\Types\Optional(new OptionType(new NumberType())),
+            ])],
+        ))->compile()->unwrap();
+
+        $this->assertEquals(new OptionType(new OptionType(new NumberType())), $program->returns);
+        $this->assertTrue($program(['answers' => []])->unwrap()->isNone());
+
+        $presentAbsence = $program(['answers' => ['limit' => null]])->unwrap();
+        $this->assertTrue($presentAbsence->isSome());
+        $this->assertInstanceOf(\Superscript\Monads\Option\Option::class, $presentAbsence->unwrap());
+        $this->assertTrue($presentAbsence->unwrap()->isNone());
+
+        $presentValue = $program(['answers' => ['limit' => 2]])->unwrap();
+        $this->assertTrue($presentValue->isSome());
+        $this->assertInstanceOf(\Superscript\Monads\Option\Option::class, $presentValue->unwrap());
+        $this->assertSame(2, $presentValue->unwrap()->unwrap());
+    }
+
+    #[Test]
     public function member_access_propagates_absence(): void
     {
         $program = (new Expression(
@@ -455,6 +481,7 @@ final class ProgramTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertTrue($program([])->unwrap()->isNone());
+        $this->assertTrue($program(['flag' => null])->unwrap()->isNone());
         $this->assertFalse($program(['flag' => true])->unwrap()->unwrap());
         $this->assertTrue($program(['flag' => false])->unwrap()->unwrap());
     }
