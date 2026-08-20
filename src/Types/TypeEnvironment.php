@@ -34,6 +34,10 @@ final class TypeEnvironment
 
     private ?LocalScope $localScope = null;
 
+    private ?string $narrowedReference = null;
+
+    private ?Type $narrowedType = null;
+
     private readonly RecordType $declarations;
 
     /** @param RecordType|array<string, Type|Optional> $declarations */
@@ -57,6 +61,28 @@ final class TypeEnvironment
         return $nested;
     }
 
+    /**
+     * This environment with one reference retyped, for compiling a scope
+     * that proved the narrower type — a match arm whose type pattern
+     * guarantees the subject inhabits one union member. The reference keeps
+     * its own evaluation (same binding read, same recorded reads); only its
+     * certified type changes, and only for the exact spelled path — a root
+     * reference or a structural input path — never for other paths through
+     * the same root.
+     *
+     * @internal Match compilation owns narrowing; the runtime guard that
+     *           makes the claim sound lives with the pattern that asks for it.
+     */
+    public function narrowed(ReferencePath $reference, Type $type): self
+    {
+        $narrowed = new self();
+        $narrowed->parent = $this;
+        $narrowed->narrowedReference = $reference->describe();
+        $narrowed->narrowedType = $type;
+
+        return $narrowed;
+    }
+
     /** @return Result<CompiledNode, TypeMismatch> */
     public function nodeOfSymbol(string $name, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): Result
     {
@@ -66,6 +92,17 @@ final class TypeEnvironment
     /** @return Result<CompiledNode, TypeMismatch> */
     public function nodeOfReference(ReferencePath $reference, TypeInference $compiler, string $path = '$', ?CompilationRecorder $reads = null): Result
     {
+        // A narrowed root reference resolves as the parent resolves it and
+        // is retyped; a structural path is narrowed as one input read below,
+        // never at its root, whose record type the narrowing says nothing
+        // about.
+        if ($this->narrowedType !== null && $reference->isRoot() && $reference->describe() === $this->narrowedReference) {
+            assert($this->parent !== null);
+
+            return $this->parent->nodeOfReference($reference, $compiler, $path, $reads)
+                ->map($this->retype(...));
+        }
+
         $name = $reference->root();
         $property = $this->declarations->property($name);
 
@@ -180,6 +217,10 @@ final class TypeEnvironment
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
+        if ($this->narrowedType !== null && $reference->describe() === $this->narrowedReference) {
+            return $this->parent?->nodeOfInputPath($reference)?->map($this->retype(...));
+        }
+
         if ($reference->isRoot() || $this->definitionKeyOf($reference) !== null) {
             return null;
         }
@@ -224,6 +265,22 @@ final class TypeEnvironment
             },
             references: $scope === null ? [$reference] : [],
         ));
+    }
+
+    /**
+     * The same node under the narrowed type: the evaluation — and with it
+     * the recorded reads — is the parent's own; only the certified type is
+     * this scope's claim.
+     */
+    private function retype(CompiledNode $node): CompiledNode
+    {
+        assert($this->narrowedType !== null);
+
+        return CompiledNode::returning(
+            $this->narrowedType,
+            static fn(Runtime $runtime): Result => $node->evaluate($runtime),
+            references: $node->references,
+        );
     }
 
     /** Resolve only paths structurally owned by concrete RecordTypes. */

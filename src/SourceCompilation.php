@@ -55,6 +55,7 @@ final readonly class SourceCompilation
      * @param Closure(ScopedExpression, array<string, Type>, LocalScope, string): Result<CompiledNode, TypeMismatch> $compileScope
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
+     * @param ?Closure(Source, ReferencePath, Type, string): Result<CompiledNode, TypeMismatch> $compileNarrowed
      */
     public function __construct(
         private Closure $compileNode,
@@ -67,11 +68,37 @@ final readonly class SourceCompilation
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
+        private ?Closure $compileNarrowed = null,
     ) {}
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
         $node = $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role);
+
+        $this->recorder?->recordReferences($node->references);
+
+        if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {
+            $this->recorder->child($compilation, $role);
+        }
+
+        return new CompiledSource($node);
+    }
+
+    /**
+     * Compile a child that has proven one reference inhabits a narrower
+     * type: inside it, the reference resolves at that type while everything
+     * else keeps this compilation's environment. The proof is the caller's —
+     * a match arm's type pattern guards the values that reach the child —
+     * which is why this door exists only for compilers that install such a
+     * guard.
+     */
+    public function narrowedChild(Source $source, ReferencePath $reference, Type $type, ?string $role = null): CompiledSource
+    {
+        if ($this->compileNarrowed === null) {
+            return $this->child($source, $role);
+        }
+
+        $node = $this->compiled(($this->compileNarrowed)($source, $reference, $type, $this->childPath()), $source, $role);
 
         $this->recorder?->recordReferences($node->references);
 

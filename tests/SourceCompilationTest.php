@@ -368,6 +368,21 @@ final class SourceCompilationTest extends TestCase
     }
 
     #[Test]
+    public function a_narrowed_child_compiles_plainly_without_the_narrowing_capability(): void
+    {
+        // A capability built without a narrowing door still answers: the
+        // child compiles in the unnarrowed environment, which is the honest
+        // reading when no environment override exists to narrow in.
+        $source = new StaticSource(1);
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $compilation = self::compilation(fn(Source $candidate): Result => Ok($node));
+
+        $narrowed = $compilation->narrowedChild($source, new ReferencePath('limit'), new NumberType());
+
+        $this->assertSame($node, $narrowed->node());
+    }
+
+    #[Test]
     public function scope_compiles_without_an_analysis_recorder(): void
     {
         $expression = new ScopedExpression([], new StaticSource(1));

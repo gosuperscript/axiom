@@ -8,12 +8,16 @@ use Closure;
 use RuntimeException;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Operators\ValueEquality;
+use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceEvaluation;
 use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchExpression;
+use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Sources\MatchPattern;
+use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Sources\TypePattern;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\Shapes;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
@@ -21,8 +25,10 @@ use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
+use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
+use Superscript\Axiom\Types\TypeRelations;
 use Superscript\Axiom\Types\UnionType;
 
 use function Superscript\Monads\Result\Err;
@@ -51,7 +57,9 @@ final readonly class MatchExpressionCompiler
         $armTypes = [];
         $arms = [];
         $literals = [];
+        $patternShapes = [];
         $wildcard = false;
+        $subjectReference = self::subjectReference($source->subject);
 
         foreach ($source->arms as $index => $arm) {
             if ($arm->pattern instanceof WildcardPattern) {
@@ -62,13 +70,33 @@ final readonly class MatchExpressionCompiler
                 $literals[] = $arm->pattern->value;
             }
 
+            if ($arm->pattern instanceof TypePattern) {
+                $patternShapes[] = $arm->pattern->type->shape();
+
+                // A type sharing no values with the subject is an arm that
+                // can never match — an authoring mistake, not a fallback.
+                if (!$subject->failed() && TypeRelations::overlaps($subject->returns, $arm->pattern->type)->isErr()) {
+                    $compilation->reject(new TypeMismatch(sprintf(
+                        'Match arm %d can never match: %s shares no values with the subject %s.',
+                        $index,
+                        TypeDescriber::describe($arm->pattern->type),
+                        TypeDescriber::describe($subject->returns),
+                    )));
+                }
+            }
+
             $pattern = $compilation->within(
                 sprintf('The pattern of match arm %d cannot be compiled.', $index),
                 fn() => self::compilePattern($arm->pattern, $index, $compilation),
             );
             $body = $compilation->within(
                 sprintf('Match arm %d cannot be typed.', $index),
-                fn() => $compilation->child($arm->expression, "arm.{$index}.expression"),
+                // A type-pattern arm over a referenced subject knows the
+                // member the value inhabits, so its body compiles with the
+                // reference narrowed to it.
+                fn() => $arm->pattern instanceof TypePattern && $subjectReference !== null
+                    ? $compilation->narrowedChild($arm->expression, $subjectReference, $arm->pattern->type, "arm.{$index}.expression")
+                    : $compilation->child($arm->expression, "arm.{$index}.expression"),
             );
 
             // An arm that did not compile contributes no type. The match is
@@ -86,7 +114,7 @@ final readonly class MatchExpressionCompiler
         // A subject that did not compile promises no values, so any set of
         // patterns covers it and there is no exhaustiveness to judge;
         // refusing here would blame this match for the fault below it.
-        if (!$wildcard && !$subject->failed() && !self::covers($subject->returns->shape(), $literals)) {
+        if (!$wildcard && !$subject->failed() && !self::covers($subject->returns->shape(), $literals, $patternShapes)) {
             $compilation->reject(new TypeMismatch(sprintf(
                 'This match over %s may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.',
                 TypeDescriber::describe($subject->returns),
@@ -123,8 +151,10 @@ final readonly class MatchExpressionCompiler
     }
 
     /**
-     * A pattern compiles to a predicate over the subject value. Matching and
-     * coverage analysis consume the same value-equality definition.
+     * A pattern compiles to a predicate over the subject value. Literal and
+     * type patterns both match by inhabitation — the same judgment coverage
+     * analysis reasons over — so a value can never match an arm its
+     * compilation did not admit.
      *
      * The arm's index reaches here only to name the child an expression
      * pattern compiles. A role is how a caller tells one child from another,
@@ -142,7 +172,28 @@ final readonly class MatchExpressionCompiler
         }
 
         if ($pattern instanceof LiteralPattern) {
-            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => ValueEquality::equals($pattern->value, $subject);
+            $value = $pattern->value;
+
+            // A scalar literal matches by inhabitation of its literal type —
+            // total over any subject, where raw value equality is not: a
+            // union can hold members (money, dates) whose equality belongs
+            // to their own packages, and a literal arm beside them asks only
+            // "is this that scalar?", never "are these two comparable?".
+            if (is_bool($value) || is_int($value) || is_float($value) || is_string($value)) {
+                $literal = new LiteralType($value);
+
+                return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $literal->assert($subject)->isOk();
+            }
+
+            if ($value === null) {
+                return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $subject === null;
+            }
+
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => ValueEquality::equals($value, $subject);
+        }
+
+        if ($pattern instanceof TypePattern) {
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $pattern->type->assert($subject)->isOk();
         }
 
         if ($pattern instanceof ExpressionPattern) {
@@ -154,16 +205,39 @@ final readonly class MatchExpressionCompiler
         $compilation->reject(new TypeMismatch(sprintf('No pattern rule exists for [%s].', get_class($pattern))));
     }
 
-    /** @param list<mixed> $literals */
-    private static function covers(Shape $subject, array $literals): bool
+    /**
+     * The reference a match narrows: the subject spelled as a path, when it
+     * is one. Any other subject still matches and evaluates; its arms simply
+     * compile without narrowing, because there is no symbol to retype.
+     */
+    private static function subjectReference(Source $subject): ?ReferencePath
     {
+        return match (true) {
+            $subject instanceof ReferencePath => $subject,
+            $subject instanceof SymbolSource => $subject->reference(),
+            default => null,
+        };
+    }
+
+    /**
+     * @param list<mixed> $literals
+     * @param list<Shape> $patternShapes
+     */
+    private static function covers(Shape $subject, array $literals, array $patternShapes = []): bool
+    {
+        // A type pattern covers every subject assignable to it: the arm
+        // admits all of the subject's values, so nothing can fall through.
+        if (array_any($patternShapes, fn(Shape $pattern) => TypeRelations::assignable($subject, $pattern)->isOk())) {
+            return true;
+        }
+
         // Never has no inhabitants, so any set of patterns covers it.
         if ($subject instanceof Shapes\NeverShape) {
             return true;
         }
 
         if ($subject instanceof OptionShape) {
-            return in_array(null, $literals, strict: true) && self::covers($subject->inner, $literals);
+            return in_array(null, $literals, strict: true) && self::covers($subject->inner, $literals, $patternShapes);
         }
 
         if ($subject instanceof BooleanShape) {
@@ -179,7 +253,7 @@ final readonly class MatchExpressionCompiler
         }
 
         if ($subject instanceof UnionShape) {
-            return array_all($subject->members, fn(Shape $member) => self::covers($member, $literals));
+            return array_all($subject->members, fn(Shape $member) => self::covers($member, $literals, $patternShapes));
         }
 
         return false;
