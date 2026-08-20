@@ -218,7 +218,9 @@ final class TypeEnvironment
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
         if ($this->narrowedType !== null && $reference->describe() === $this->narrowedReference) {
-            return $this->parent?->nodeOfInputPath($reference)?->map($this->retype(...));
+            assert($this->parent !== null);
+
+            return $this->parent->nodeOfInputPath($reference)?->map($this->retype(...));
         }
 
         if ($reference->isRoot() || $this->definitionKeyOf($reference) !== null) {

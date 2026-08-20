@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
@@ -24,8 +25,10 @@ use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
+use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
+use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
@@ -44,6 +47,7 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(\Superscript\Axiom\Sources\TypePattern::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
+#[UsesClass(\Superscript\Axiom\Analysis\AnalysisTypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationAnalysis::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationChild::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\CompilationNode::class)]
@@ -104,7 +108,13 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\ListType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
+#[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\OptionType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordType::class)]
@@ -346,6 +356,96 @@ final class TypePatternTest extends TestCase
         $this->assertSame(250_100, $program(['limit' => 250_000])->unwrap()->unwrap());
         $this->assertSame(100, $program(['limit' => 'unanswered'])->unwrap()->unwrap());
         $this->assertSame(100, $program(['limit' => 'novalue'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_scalar_literal_arm_beside_a_domain_member_never_compares_the_domain_value(): void
+    {
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('limit'), [
+                new MatchArm(new LiteralPattern(5), new StaticSource('five')),
+                new MatchArm(new WildcardPattern(), new StaticSource('other')),
+            ]),
+            declarations: ['limit' => new UnionType(new LiteralType(5), new MoneyType('GBP'))],
+        ))->compile()->unwrap();
+
+        $this->assertSame('five', $program(['limit' => 5])->unwrap()->unwrap());
+        $this->assertSame('other', $program(['limit' => new Money(5, 'GBP')])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_null_literal_arm_matches_exactly_the_absent_value(): void
+    {
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('flag'), [
+                new MatchArm(new LiteralPattern(null), new StaticSource('missing')),
+                new MatchArm(new WildcardPattern(), new StaticSource('answered')),
+            ]),
+            declarations: ['flag' => new OptionType(new BooleanType())],
+        ))->compile()->unwrap();
+
+        $this->assertSame('missing', $program(['flag' => null])->unwrap()->unwrap());
+        $this->assertSame('answered', $program(['flag' => true])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function the_analysis_records_a_narrowed_arm_like_any_child(): void
+    {
+        $program = self::program(
+            self::guarded(
+                new ReferencePath('limit'),
+                new InfixExpression(new ReferencePath('limit'), '>', new StaticSource(100_000)),
+            ),
+            self::answerType(),
+        );
+
+        $export = json_encode($program->analysis->toArray(), JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('"arm.0.expression"', $export);
+        $this->assertStringContainsString('"arm.1.expression"', $export);
+    }
+
+    #[Test]
+    public function a_definition_rooted_subject_matches_without_narrowing(): void
+    {
+        // A definition-rooted path resolves through the definition's own
+        // record, which narrowing says nothing about: the arm compiles the
+        // reference exactly as the enclosing program does.
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('answers', 'limit'), [
+                new MatchArm(new TypePattern(new NumberType()), new ReferencePath('answers', 'limit')),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ]),
+            definitions: new Definitions(['answers' => new StaticSource(['limit' => 250_000])]),
+        ))->compile()->unwrap();
+
+        $this->assertSame(250_000, $program([])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function narrowing_touches_only_the_subject_path_never_its_siblings(): void
+    {
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('answers', 'limit'), [
+                new MatchArm(
+                    new TypePattern(new NumberType()),
+                    new InfixExpression(
+                        new InfixExpression(new ReferencePath('answers', 'limit'), '>', new StaticSource(100_000)),
+                        '&&',
+                        new ReferencePath('answers', 'flag'),
+                    ),
+                ),
+                new MatchArm(new WildcardPattern(), new StaticSource(false)),
+            ]),
+            declarations: ['answers' => new RecordType([
+                'limit' => self::answerType(),
+                'flag' => new BooleanType(),
+            ])],
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program(['answers' => ['limit' => 250_000, 'flag' => true]])->unwrap()->unwrap());
+        $this->assertFalse($program(['answers' => ['limit' => 250_000, 'flag' => false]])->unwrap()->unwrap());
+        $this->assertFalse($program(['answers' => ['limit' => 'novalue', 'flag' => true]])->unwrap()->unwrap());
     }
 
     #[Test]
