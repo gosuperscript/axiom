@@ -208,6 +208,7 @@ final class SourceCompilationTest extends TestCase
         ?Closure $typeOfValue = null,
         ?\Superscript\Axiom\Analysis\CompilationRecorder $recorder = null,
         ?Closure $resolveOpaqueField = null,
+        ?Closure $compileNarrowed = null,
     ): SourceCompilation {
         return new SourceCompilation(
             $compileNode ?? fn(Source $source): Result => Err(new TypeMismatch('No source compilation expected.')),
@@ -220,6 +221,7 @@ final class SourceCompilationTest extends TestCase
             $typeOfValue ?? fn(mixed $value): Result => Err(new TypeMismatch('No value typing expected.')),
             $resolveOpaqueField,
             $recorder,
+            $compileNarrowed,
         );
     }
 
@@ -365,6 +367,31 @@ final class SourceCompilationTest extends TestCase
 
         $this->assertSame($node, $compilation->child($source)->node());
         $this->assertSame($source, $seen);
+    }
+
+    #[Test]
+    public function a_compilation_without_the_narrowing_capability_refuses_to_narrow(): void
+    {
+        // A child compiled unnarrowed would silently break the caller's
+        // claim, so the missing capability is a defect, not a degradation.
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('cannot narrow');
+
+        self::compilation()->narrowedChild(new StaticSource(1), new ReferencePath('limit'), new NumberType());
+    }
+
+    #[Test]
+    public function a_narrowed_child_compiles_without_a_recorder(): void
+    {
+        $source = new StaticSource(1);
+        $node = CompiledNode::returning(new NumberType(), fn(Runtime $runtime) => Ok(Some(1)));
+        $compilation = self::compilation(
+            compileNarrowed: fn(Source $candidate, ReferencePath $reference, Type $type, string $path): Result => Ok($node),
+        );
+
+        $narrowed = $compilation->narrowedChild($source, new ReferencePath('limit'), new NumberType());
+
+        $this->assertSame($node, $narrowed->node());
     }
 
     #[Test]

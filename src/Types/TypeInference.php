@@ -191,6 +191,12 @@ final readonly class TypeInference
             fn(mixed $value): Result => $this->inferValue($value),
             fn(string $identity, string $name): ?OpaqueField => $this->opaqueFields->resolve($identity, $name),
             $recorder,
+            fn(Source $child, ReferencePath $reference, Type $type, string $path): Result => $this->compile(
+                $child,
+                $environment->narrowed($reference, $type),
+                $path,
+                $recorder,
+            ),
         );
     }
 

@@ -403,9 +403,12 @@ A match where **no** arm matches is a runtime error, so add a wildcard arm for a
 
 The patterns:
 
-- **`LiteralPattern`** — matches via **value equality**, the same one definition the comparison operators and the exhaustiveness analysis use (`5` matches `5.0`; never PHP juggling across bases)
+- **`LiteralPattern`** — a scalar literal matches by **inhabitation** of its literal type (`5` matches `5.0` — loose numeric identity, never PHP juggling across bases), so a literal arm is total even beside union members whose equality belongs to their own packages; an array literal matches entry-wise by value equality
+- **`TypePattern`** — matches when the subject value **inhabits the type** (the boundary's own `assert` judgment), and when the subject is a declared reference the arm's body compiles with that reference **narrowed** to the matched member: for `limit : 'unanswered' | 'novalue' | Number`, `match limit { Number => limit > 100000, _ => false }` judges the comparison by the number rules while the bare comparison stays refused
 - **`WildcardPattern`** — always matches (the default/catch-all arm)
 - **`ExpressionPattern`** — wraps a `Source`: it is a program like any other, compiled with the rest of the match and compared to the subject at runtime
+
+Exhaustiveness counts type arms: a union subject is covered once every member is claimed by a literal arm, a type arm it is assignable to, or a wildcard, and an option subject's null component is claimed by a literal `null` arm or any option-typed arm. Liveness is judged from the same claims: an arm that can never match — its claimed type shares no values with the subject — is a compile error naming that arm.
 
 If/then/else:
 

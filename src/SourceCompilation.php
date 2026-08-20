@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use LogicException;
 use RuntimeException;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
@@ -55,6 +56,7 @@ final readonly class SourceCompilation
      * @param Closure(ScopedExpression, array<string, Type>, LocalScope, string): Result<CompiledNode, TypeMismatch> $compileScope
      * @param Closure(mixed): Result<Type, TypeMismatch> $typeOfValue
      * @param ?Closure(string, string): ?OpaqueField $resolveOpaqueField
+     * @param ?Closure(Source, ReferencePath, Type, string): Result<CompiledNode, TypeMismatch> $compileNarrowed
      */
     public function __construct(
         private Closure $compileNode,
@@ -67,12 +69,42 @@ final readonly class SourceCompilation
         private Closure $typeOfValue,
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
+        private ?Closure $compileNarrowed = null,
     ) {}
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
-        $node = $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role);
+        return $this->record(
+            $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role),
+            $role,
+        );
+    }
 
+    /**
+     * Compile a child that has proven one reference inhabits a narrower
+     * type: inside it, the reference resolves at that type while everything
+     * else keeps this compilation's environment. The proof is the caller's —
+     * a match arm's type pattern guards the values that reach the child —
+     * which is why this door exists only for compilers that install such a
+     * guard.
+     */
+    public function narrowedChild(Source $source, ReferencePath $reference, Type $type, ?string $role = null): CompiledSource
+    {
+        // A capability without the narrowing door must not pretend: a child
+        // compiled unnarrowed would silently break the caller's claim.
+        if ($this->compileNarrowed === null) {
+            throw new LogicException('This compilation cannot narrow; construct it with the narrowing capability TypeInference supplies.');
+        }
+
+        return $this->record(
+            $this->compiled(($this->compileNarrowed)($source, $reference, $type, $this->childPath()), $source, $role),
+            $role,
+        );
+    }
+
+    /** Record a compiled child's reads and compilation, then hand it back. */
+    private function record(CompiledNode $node, ?string $role): CompiledSource
+    {
         $this->recorder?->recordReferences($node->references);
 
         if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {

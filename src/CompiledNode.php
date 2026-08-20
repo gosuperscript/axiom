@@ -149,6 +149,29 @@ final class CompiledNode
         return new self($this->certifiedType, $this->evaluation, $source::class, $compilation, $references);
     }
 
+    /**
+     * The same node under a narrower type claim. Everything else — the
+     * evaluation, the source identity, the recorded compilation, the
+     * references, and with them the observed lifecycle — stays the node's
+     * own: a retyped node is one node, one Entered/Exited pair, so
+     * narrowing is invisible to tracing. The claim is the caller's
+     * obligation; match-arm narrowing makes it sound by guarding the arm
+     * with a pattern that admits exactly the values the narrower type
+     * certifies.
+     *
+     * A node that failed has no type to re-claim and answers with itself.
+     *
+     * @internal
+     */
+    public function retyped(Type $returns): self
+    {
+        if ($this->failed) {
+            return $this;
+        }
+
+        return new self($returns, $this->evaluation, $this->sourceType, $this->compilation, $this->references);
+    }
+
     /** @internal Compilation infrastructure and Program consume this metadata. */
     public function compilation(): ?CompilationNode
     {
