@@ -9,23 +9,16 @@ use Superscript\Axiom\Analysis\CompilationAnalysis;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\Diagnosis;
 use Superscript\Axiom\Exceptions\BoundaryViolation;
-use Superscript\Axiom\Exceptions\InadmissibleBinding;
-use Superscript\Axiom\Exceptions\MissingRequiredInput;
-use Superscript\Axiom\Exceptions\RejectedBinding;
 use Superscript\Axiom\Execution\Observer;
 use Superscript\Axiom\Analysis\CompilationState;
 use Superscript\Axiom\Types\Optional;
-use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
-use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Type;
-use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
 use function Superscript\Monads\Result\Err;
-use function Superscript\Monads\Result\Ok;
 
 /**
  * A compiled, certified, callable program — the only callable thing in the
@@ -85,7 +78,7 @@ final readonly class Program
      *
      * Projection preserves required/optional qualifiers at every level.
      */
-    private RecordType $inputs;
+    private InputBoundary $inputs;
 
     /**
      * @param RecordType|array<string, Type|Optional> $declarations
@@ -108,7 +101,7 @@ final readonly class Program
         $this->returns = $node->returns;
         $this->references = $node->references;
         $this->declarations = $record;
-        $this->inputs = $record->project($node->references);
+        $this->inputs = new InputBoundary($record, $node->references, $this->boundary);
         $this->analysis = CompilationAnalysis::certified($compilation, $this->declarations, $this->boundary);
     }
 
@@ -193,117 +186,12 @@ final readonly class Program
      */
     public function call(array $bindings = [], ?Observer $observer = null): Result
     {
-        $admitted = $this->admit($bindings);
+        $admitted = $this->inputs->admit($bindings);
 
         if ($admitted->isErr()) {
             return Err($admitted->unwrapErr());
         }
 
         return $this->node->evaluate(new Runtime($admitted->unwrap(), $observer));
-    }
-
-    /**
-     * The boundary: every binding this program reads passes through its
-     * declared type (coerce or assert, per policy), and every other key is
-     * stripped — the reads are the program's complete runtime signature, and
-     * a declaration nothing reads is neither demanded nor admitted. Callers
-     * bind keys exactly as declared — symbol lookup has no other reading.
-     *
-     * Absence arrives two ways and the declaration answers them independently.
-     * {@see Optional} governs an omitted key. The property's type governs a
-     * supplied value that admission reads as absent. Thus `Option<T>` still
-     * requires its key, while `Optional(T)` permits omission but rejects null.
-     *
-     * Violations aggregate, named by binding, and are sorted into the kinds
-     * {@see BoundaryViolation} describes: a fault dominates absence, so the
-     * refusal is a {@see MissingRequiredInput} only when every violation is
-     * an input the call did not supply.
-     *
-     * @param array<string, mixed> $raw
-     * @return Result<Bindings, BoundaryViolation>
-     */
-    private function admit(array $raw): Result
-    {
-        // Keyed by input: an input is answered for once, so a rejection
-        // replaces nothing and the keys are the inputs at fault, in order.
-        $rejections = [];
-        $overlay = [];
-        $fault = false;
-
-        foreach ($this->inputs->properties as $key => $property) {
-            $type = $property->type;
-
-            if (!array_key_exists($key, $raw)) {
-                if (!$property->optional) {
-                    $rejections[$key] = new RejectedBinding($key, sprintf('required input [%s] is missing', $key));
-                }
-
-                continue;
-            }
-
-            $value = $raw[$key];
-
-            $admitted = match ($this->boundary) {
-                Boundary::Coerce => $type->coerce($value),
-                Boundary::Assert => $type->assert(self::declaredSlice($type, $value)),
-            };
-
-            if ($admitted->isErr()) {
-                $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s]: %s', $key, $admitted->unwrapErr()->getMessage()));
-                $fault = true;
-
-                continue;
-            }
-
-            // An absence reading ('' → None) where the declaration requires
-            // presence: a value was supplied, and it does not inhabit the
-            // type it was declared at. Where the declaration admits absence,
-            // None is simply the value, and falls through to the overlay as
-            // the null a symbol reads back as absent — including on a
-            // demanded input, which was demanded so that this answer could be
-            // told apart from no answer, not so that it could be refused.
-            if ($admitted->unwrap()->isNone() && !$type->shape() instanceof OptionShape) {
-                $rejections[$key] = new RejectedBinding($key, sprintf('binding [%s] reads as missing, but %s is required', $key, TypeDescriber::describe($type)));
-                $fault = true;
-
-                continue;
-            }
-
-            $overlay[$key] = $admitted->unwrap()->unwrapOr(null);
-        }
-
-        if ($rejections !== []) {
-            return Err($fault
-                ? new InadmissibleBinding(array_values($rejections))
-                : new MissingRequiredInput(array_values($rejections)));
-        }
-
-        return Ok(new Bindings($overlay));
-    }
-
-    /**
-     * Strip unread nested properties before strict membership is asserted,
-     * just as {@see admit()} strips unread root inputs. RecordType itself
-     * remains exact; this is projection of one program's runtime signature.
-     */
-    private static function declaredSlice(Type $type, mixed $value): mixed
-    {
-        while ($type instanceof OptionType) {
-            $type = $type->inner;
-        }
-
-        if (!$type instanceof RecordType || !is_array($value)) {
-            return $value;
-        }
-
-        $slice = [];
-
-        foreach ($type->properties as $name => $property) {
-            if (array_key_exists($name, $value)) {
-                $slice[$name] = self::declaredSlice($property->type, $value[$name]);
-            }
-        }
-
-        return $slice;
     }
 }

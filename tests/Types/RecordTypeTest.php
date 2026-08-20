@@ -23,6 +23,7 @@ use Superscript\Axiom\Types\UnionType;
 
 #[CoversClass(RecordType::class)]
 #[UsesClass(TransformValueException::class)]
+#[CoversClass(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(UnionType::class)]
@@ -127,6 +128,20 @@ final class RecordTypeTest extends TestCase
 
         $this->assertTrue($result->isErr());
         $this->assertStringContainsString('Property [age]:', $result->unwrapErr()->getMessage());
+    }
+
+    #[Test]
+    public function a_nested_field_error_retains_its_structural_path(): void
+    {
+        $record = new RecordType([
+            'details' => new RecordType(['score' => new NumberType()]),
+        ]);
+
+        $failure = $record->assert(['details' => ['score' => 'not a number']])->unwrapErr();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['details', 'score'], $failure->path);
+        $this->assertStringContainsString('Property [details]: Property [score]:', $failure->getMessage());
     }
 
     #[Test]

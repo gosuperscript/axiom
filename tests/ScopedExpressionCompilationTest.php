@@ -13,6 +13,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Superscript\Axiom\CompiledScopedExpression;
 use Superscript\Axiom\CompiledSource;
+use Superscript\Axiom\Boundary;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
 use Superscript\Axiom\Expression;
@@ -21,6 +22,7 @@ use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
 use Superscript\Axiom\SourceCompilation;
 use Superscript\Axiom\SourceEvaluation;
+use Superscript\Axiom\Exceptions\InadmissibleBinding;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
@@ -29,6 +31,7 @@ use Superscript\Axiom\ScopedExpression;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\ListType;
+use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Type;
@@ -72,6 +75,15 @@ final readonly class InvokeScopedExpressionSource implements Source
     ) {}
 }
 
+/** @internal Host fixture returning raw data under one declared type. */
+final readonly class DeclaredSource implements Source
+{
+    public function __construct(
+        public Type $returns,
+        public mixed $value,
+    ) {}
+}
+
 /** @internal Dialect fixture implementing the callers the scoped-expression interface is for. */
 final class ScopedExpressionExtension extends Extension
 {
@@ -88,6 +100,7 @@ final class ScopedExpressionExtension extends Extension
             CountedPredicateSource::class => $this->compileCountedPredicate(...),
             FailingPredicateSource::class => $this->compileFailingPredicate(...),
             InvokeScopedExpressionSource::class => $this->compileInvocation(...),
+            DeclaredSource::class => $this->compileDeclared(...),
         ];
     }
 
@@ -154,10 +167,16 @@ final class ScopedExpressionExtension extends Extension
             static fn(SourceEvaluation $evaluation): mixed => $evaluation->invoke($scoped, $source->bindings),
         );
     }
+
+    private function compileDeclared(DeclaredSource $source, SourceCompilation $compilation): CompiledSource
+    {
+        return $compilation->custom($source->returns, static fn(): mixed => $source->value);
+    }
 }
 
 #[CoversClass(ScopedExpression::class)]
 #[CoversClass(CompiledScopedExpression::class)]
+#[CoversClass(\Superscript\Axiom\LocalScope::class)]
 #[CoversClass(SourceCompilation::class)]
 #[CoversClass(SourceEvaluation::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
@@ -222,6 +241,112 @@ final class ScopedExpressionExtension extends Extension
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
 final class ScopedExpressionCompilationTest extends TestCase
 {
+    #[Test]
+    public function a_scoped_record_is_admitted_through_only_the_properties_its_body_reads(): void
+    {
+        $record = new RecordType([
+            'score' => new \Superscript\Axiom\Types\NumberType(),
+            'unread' => new \Superscript\Axiom\Types\StringType(),
+        ]);
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'score')),
+            ['item' => $record],
+            ['item' => ['score' => '2']],
+        ))->compile()->unwrap();
+
+        $this->assertSame(2, $program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_missing_required_scoped_property_makes_that_invocation_absent(): void
+    {
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'score')),
+            ['item' => new RecordType(['score' => new \Superscript\Axiom\Types\NumberType()])],
+            ['item' => []],
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program()->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function an_invalid_present_scoped_property_remains_a_boundary_fault(): void
+    {
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'details', 'score')),
+            ['item' => new RecordType([
+                'details' => new RecordType(['score' => new \Superscript\Axiom\Types\NumberType()]),
+            ])],
+            ['item' => ['details' => ['score' => 'not a number']]],
+        ))->compile()->unwrap();
+
+        $failure = $program()->unwrapErr();
+
+        $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+        $this->assertSame('item.details.score', $failure->rejections[0]->input);
+        $this->assertStringContainsString('binding [item.details.score]', $failure->getMessage());
+    }
+
+    #[Test]
+    public function an_omitted_optional_scoped_property_keeps_option_semantics(): void
+    {
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'note')),
+            ['item' => new RecordType([
+                'note' => new Optional(new \Superscript\Axiom\Types\StringType()),
+                'unread' => new \Superscript\Axiom\Types\NumberType(),
+            ])],
+            ['item' => []],
+        ))->compile()->unwrap();
+
+        $this->assertTrue($program()->unwrap()->isNone());
+    }
+
+    #[Test]
+    public function scoped_admission_uses_the_expressions_boundary_policy(): void
+    {
+        $source = new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'score')),
+            ['item' => new RecordType(['score' => new \Superscript\Axiom\Types\NumberType()])],
+            ['item' => ['score' => '2']],
+        );
+
+        $coercing = $this->invocationExpression($source)->compile()->unwrap();
+        $strict = new Expression(
+            $source,
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
+            boundary: Boundary::Assert,
+        )->compile()->unwrap();
+
+        $this->assertSame(2, $coercing()->unwrap()->unwrap());
+        $this->assertInstanceOf(InadmissibleBinding::class, $strict()->unwrapErr());
+    }
+
+    #[Test]
+    public function quantifiers_over_one_list_admit_rows_for_their_own_predicate_reads(): void
+    {
+        $number = new \Superscript\Axiom\Types\NumberType();
+        $rows = new DeclaredSource(
+            new ListType(new RecordType(['left' => $number, 'right' => $number])),
+            [['left' => 1], ['right' => 1]],
+        );
+        $left = new ScopedAnySource(new SymbolSource('rows'), new ScopedExpression(
+            ['item'],
+            new InfixExpression(new ReferencePath('item', 'left'), '>', new StaticSource(0)),
+        ));
+        $right = new ScopedAnySource(new SymbolSource('rows'), new ScopedExpression(
+            ['item'],
+            new InfixExpression(new ReferencePath('item', 'right'), '>', new StaticSource(0)),
+        ));
+        $program = new Expression(
+            new InfixExpression($left, '&&', $right),
+            definitions: new Definitions(['rows' => $rows]),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
+        )->compile()->unwrap();
+
+        $this->assertTrue($program()->unwrap()->unwrap());
+    }
+
     #[Test]
     public function it_compiles_once_invokes_repeatedly_and_short_circuits(): void
     {

@@ -65,6 +65,8 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(Coerce::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
+#[CoversClass(\Superscript\Axiom\InputBoundary::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class)]
 #[CoversClass(Optional::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
@@ -177,6 +179,21 @@ final class TypedExpressionTest extends TestCase
         $program = $this->gate()->compile()->unwrap();
 
         $this->assertTrue($program(['quote' => ['turnover' => '600000']])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_missing_required_nested_path_is_named_as_missing_input(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('item', 'score'),
+            declarations: ['item' => new RecordType(['score' => new NumberType()])],
+        ))->compile()->unwrap();
+
+        $failure = $program(['item' => []])->unwrapErr();
+
+        $this->assertInstanceOf(MissingRequiredInput::class, $failure);
+        $this->assertSame('item.score', $failure->rejections[0]->input);
+        $this->assertStringContainsString('required input [item.score] is missing', $failure->getMessage());
     }
 
     #[Test]
@@ -578,7 +595,7 @@ final class TypedExpressionTest extends TestCase
 
         // Field errors are named under the input.
         $bad = $program(['customer' => ['turnover' => 'lots']]);
-        $this->assertStringContainsString('binding [customer]:', $bad->unwrapErr()->getMessage());
+        $this->assertStringContainsString('binding [customer.turnover]:', $bad->unwrapErr()->getMessage());
     }
 
     #[Test]

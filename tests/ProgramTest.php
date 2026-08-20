@@ -67,6 +67,7 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\UnaryExpressionCompiler::class)]
 #[CoversClass(Program::class)]
+#[UsesClass(\Superscript\Axiom\InputBoundary::class)]
 #[CoversClass(Runtime::class)]
 #[CoversClass(CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]

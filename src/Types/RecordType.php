@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Exceptions\RecordPropertyViolation;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -143,21 +144,23 @@ final readonly class RecordType implements Type
                     continue;
                 }
 
-                return new Err(new InvalidArgumentException(sprintf('Required property [%s] is missing.', $name)));
+                return new Err(RecordPropertyViolation::missing($name));
             }
 
             $result = $transform($property->type, $value[$name]);
 
             if ($result->isErr()) {
-                return new Err(new InvalidArgumentException(
-                    sprintf('Property [%s]: %s', $name, $result->unwrapErr()->getMessage()),
-                ));
+                $failure = $result->unwrapErr();
+
+                return new Err($failure instanceof RecordPropertyViolation
+                    ? $failure->beneath($name)
+                    : RecordPropertyViolation::invalid($name, $failure));
             }
 
             $admitted = $result->unwrap();
 
             if ($admitted->isNone() && !$property->type->shape() instanceof OptionShape) {
-                return new Err(new InvalidArgumentException(sprintf('Property [%s] reads as absent, but %s is required.', $name, TypeDescriber::describe($property->type))));
+                return new Err(RecordPropertyViolation::absent($name, TypeDescriber::describe($property->type)));
             }
 
             $record[$name] = $admitted->unwrapOr(null);

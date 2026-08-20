@@ -268,7 +268,7 @@ Use numeric keys for ordinary positional arguments.
 
 The certified result of `SourceCompilation::scope()`. `$returns` is the body's inferred type, and `expectPresent(Type $expected)` checks its present member like the equivalent method on `CompiledSource`.
 
-Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the ScopedExpression's parameters; key order carries no meaning. Values are not admitted through a second public boundary: they must come from compiled parents already certified at the parameter types supplied during compilation. Axiom trusts the host compiler to preserve that provenance and does not re-check a local value at invocation, consistently with the trusted return values of `produces()` and `custom()`.
+Source compilers do not invoke one directly. Pass it to `SourceEvaluation::invoke()` from a `custom()` evaluation. The binding keys must exactly match the ScopedExpression's parameters; key order carries no meaning. Each invocation admits the local access paths the body reads through the parameter types supplied during compilation, using the enclosing expression's `Boundary` policy. Unread record properties are stripped, omitted optional properties retain their ordinary option semantics, and invalid supplied values propagate as boundary failures. A missing required local path yields absence for that invocation, leaving the owning source to decide what absence means.
 
 Each invocation adds its exact local bindings to the current runtime. Free symbols retain their lexical meaning, definitions stay memoized across repeated invocation, expected failures propagate into the enclosing program, and its observer receives the nested source events. Opaque scope identities—not names—select local bindings, so a local parameter cannot accidentally rebind an outer definition compiled against an equal name.
 
@@ -294,7 +294,7 @@ Available only inside `SourceCompilation::custom()`:
 | Method | Meaning |
 | --- | --- |
 | `value(CompiledSource $source): mixed` | Evaluate an already-compiled child in the current invocation. Returns its value or `null` for absence; propagates its expected failure. |
-| `invoke(CompiledScopedExpression $expression, array $bindings): mixed` | Evaluate a lexically scoped compiled body with exact, already-certified local bindings. Returns its value or `null` for absence; propagates its expected failure. |
+| `invoke(CompiledScopedExpression $expression, array $bindings): mixed` | Admit and evaluate a lexically scoped compiled body with exact local bindings. Returns its value or `null` for body absence or a missing required local path; propagates invalid supplied values and other expected failures. |
 | `annotate(string $key, mixed $value): void` | Attach domain-specific metadata to the current source's observation node. No-op when the invocation has no observer. |
 
 Use `custom()` only when ordinary mapping cannot express the source, such as lazy fallback, conditional child evaluation, or source-specific annotations. It is not a way to recover `Runtime` or perform dynamic compilation.

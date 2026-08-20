@@ -70,6 +70,7 @@ final readonly class SourceCompilation
         private ?Closure $resolveOpaqueField = null,
         private ?CompilationRecorder $recorder = null,
         private ?Closure $compileNarrowed = null,
+        private Boundary $boundary = Boundary::Coerce,
     ) {}
 
     public function child(Source $source, ?string $role = null): CompiledSource
@@ -330,7 +331,14 @@ final readonly class SourceCompilation
             $this->absorb();
         }
 
-        return new CompiledScopedExpression($node, $expression->parameters, $path, $scope);
+        return new CompiledScopedExpression(
+            $node,
+            $expression->parameters,
+            $parameterTypes,
+            $path,
+            $scope,
+            $this->boundary,
+        );
     }
 
     /**
