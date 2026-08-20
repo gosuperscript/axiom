@@ -91,18 +91,28 @@ final class RecordTypeTest extends TestCase
     public function a_missing_required_key_is_an_error(): void
     {
         $result = self::subject()->assert(['name' => 'Ada']);
+        $failure = $result->unwrapErr();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Required property [age]', $result->unwrapErr()->getMessage());
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['age'], $failure->path);
+        $this->assertTrue($failure->missing);
+        $this->assertSame('is missing', $failure->detail);
+        $this->assertStringContainsString('Required property [age]', $failure->getMessage());
     }
 
     #[Test]
     public function a_none_coercion_reads_as_required_but_missing(): void
     {
         $result = self::subject()->coerce(['name' => 'Ada', 'age' => '']);
+        $failure = $result->unwrapErr();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Property [age] reads as absent', $result->unwrapErr()->getMessage());
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['age'], $failure->path);
+        $this->assertFalse($failure->missing);
+        $this->assertSame('reads as absent, but Number is required.', $failure->detail);
+        $this->assertStringContainsString('Property [age] reads as absent', $failure->getMessage());
     }
 
     #[Test]
@@ -125,23 +135,94 @@ final class RecordTypeTest extends TestCase
     public function a_field_error_names_the_field(): void
     {
         $result = self::subject()->assert(['name' => 'Ada', 'age' => 'not a number']);
+        $failure = $result->unwrapErr();
 
         $this->assertTrue($result->isErr());
-        $this->assertStringContainsString('Property [age]:', $result->unwrapErr()->getMessage());
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['age'], $failure->path);
+        $this->assertFalse($failure->missing);
+        $this->assertStringContainsString('Property [age]:', $failure->getMessage());
     }
 
     #[Test]
     public function a_nested_field_error_retains_its_structural_path(): void
     {
         $record = new RecordType([
-            'details' => new RecordType(['score' => new NumberType()]),
+            'details' => new RecordType([
+                'metrics' => new RecordType(['score' => new NumberType()]),
+            ]),
         ]);
 
-        $failure = $record->assert(['details' => ['score' => 'not a number']])->unwrapErr();
+        $failure = $record->assert(['details' => ['metrics' => ['score' => 'not a number']]])->unwrapErr();
 
         $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
-        $this->assertSame(['details', 'score'], $failure->path);
-        $this->assertStringContainsString('Property [details]: Property [score]:', $failure->getMessage());
+        $this->assertSame(['details', 'metrics', 'score'], $failure->path);
+        $this->assertFalse($failure->missing);
+        $this->assertStringContainsString('Property [details]: Property [metrics]: Property [score]:', $failure->getMessage());
+    }
+
+    #[Test]
+    public function an_invalid_sibling_wins_over_a_missing_nested_property(): void
+    {
+        $type = new RecordType([
+            'details' => new RecordType(['score' => new NumberType()]),
+            'total' => new NumberType(),
+        ]);
+
+        $failure = $type->coerce([
+            'details' => [],
+            'total' => 'not a number',
+        ])->unwrapErr();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['total'], $failure->path);
+        $this->assertFalse($failure->missing);
+    }
+
+    #[Test]
+    public function an_invalid_supplied_property_wins_over_an_earlier_missing_property(): void
+    {
+        $type = new RecordType([
+            'missing' => new NumberType(),
+            'invalid' => new NumberType(),
+        ]);
+
+        $failure = $type->coerce(['invalid' => 'not a number'])->unwrapErr();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['invalid'], $failure->path);
+        $this->assertFalse($failure->missing);
+    }
+
+    #[Test]
+    public function the_first_missing_path_is_retained_after_all_properties_are_inspected(): void
+    {
+        $nested = new RecordType(['score' => new NumberType()]);
+        $type = new RecordType([
+            'first' => $nested,
+            'second' => $nested,
+        ]);
+
+        $failure = $type->coerce(['first' => [], 'second' => []])->unwrapErr();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['first', 'score'], $failure->path);
+        $this->assertTrue($failure->missing);
+    }
+
+    #[Test]
+    public function the_first_of_multiple_missing_properties_is_reported(): void
+    {
+        $type = new RecordType([
+            'first' => new NumberType(),
+            'second' => new NumberType(),
+        ]);
+
+        $failure = $type->coerce([])->unwrapErr();
+
+        $this->assertInstanceOf(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class, $failure);
+        $this->assertSame(['first'], $failure->path);
+        $this->assertTrue($failure->missing);
     }
 
     #[Test]

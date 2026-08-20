@@ -137,6 +137,7 @@ final readonly class RecordType implements Type
     {
         /** @var array<array-key, mixed> $record */
         $record = [];
+        $missing = null;
 
         foreach ($this->properties as $name => $property) {
             if (!array_key_exists($name, $value)) {
@@ -144,17 +145,26 @@ final readonly class RecordType implements Type
                     continue;
                 }
 
-                return new Err(RecordPropertyViolation::missing($name));
+                $missing ??= RecordPropertyViolation::missing($name);
+
+                continue;
             }
 
             $result = $transform($property->type, $value[$name]);
 
             if ($result->isErr()) {
                 $failure = $result->unwrapErr();
-
-                return new Err($failure instanceof RecordPropertyViolation
+                $violation = $failure instanceof RecordPropertyViolation
                     ? $failure->beneath($name)
-                    : RecordPropertyViolation::invalid($name, $failure));
+                    : RecordPropertyViolation::invalid($name, $failure);
+
+                if ($violation->missing) {
+                    $missing ??= $violation;
+
+                    continue;
+                }
+
+                return new Err($violation);
             }
 
             $admitted = $result->unwrap();
@@ -164,6 +174,10 @@ final readonly class RecordType implements Type
             }
 
             $record[$name] = $admitted->unwrapOr(null);
+        }
+
+        if ($missing !== null) {
+            return new Err($missing);
         }
 
         return Ok(Some($record));

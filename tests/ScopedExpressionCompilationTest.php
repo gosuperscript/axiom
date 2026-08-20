@@ -179,6 +179,8 @@ final class ScopedExpressionExtension extends Extension
 #[CoversClass(\Superscript\Axiom\LocalScope::class)]
 #[CoversClass(SourceCompilation::class)]
 #[CoversClass(SourceEvaluation::class)]
+#[CoversClass(\Superscript\Axiom\InputBoundary::class)]
+#[CoversClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom')]
 #[UsesClass(\Superscript\Axiom\CompiledNode::class)]
@@ -221,7 +223,6 @@ final class ScopedExpressionExtension extends Extension
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\PresentType::class)]
 #[UsesClass(RecordType::class)]
-#[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeMismatch::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeRelations::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
@@ -285,6 +286,55 @@ final class ScopedExpressionCompilationTest extends TestCase
         $this->assertInstanceOf(InadmissibleBinding::class, $failure);
         $this->assertSame('item.details.score', $failure->rejections[0]->input);
         $this->assertStringContainsString('binding [item.details.score]', $failure->getMessage());
+    }
+
+    #[Test]
+    public function a_scoped_opaque_member_read_admits_the_declared_root_value(): void
+    {
+        $fieldOwner = new class extends Extension {
+            public function fields(): array
+            {
+                return [
+                    \Superscript\Axiom\Fields\Field::on('money')->named('amount')
+                        ->returns(new \Superscript\Axiom\Types\NumberType())
+                        ->extractedWith(fn(\Superscript\Axiom\Tests\Fixtures\Money $money): int => $money->minor),
+                ];
+            }
+        };
+        $source = new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new ReferencePath('item', 'amount')),
+            ['item' => new \Superscript\Axiom\Tests\Fixtures\MoneyType('GBP')],
+            ['item' => new \Superscript\Axiom\Tests\Fixtures\Money(500, 'GBP')],
+        );
+        $program = (new Expression(
+            $source,
+            dialect: Dialect::core()->with(new ScopedExpressionExtension(), $fieldOwner),
+        ))->compile()->unwrap();
+
+        $this->assertSame(500, $program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_invalid_present_sibling_is_a_fault_when_a_nested_required_property_is_missing(): void
+    {
+        $number = new \Superscript\Axiom\Types\NumberType();
+        $program = $this->invocationExpression(new InvokeScopedExpressionSource(
+            new ScopedExpression(['item'], new InfixExpression(
+                new ReferencePath('item', 'details', 'a'),
+                '+',
+                new ReferencePath('item', 'b'),
+            )),
+            ['item' => new RecordType([
+                'details' => new RecordType(['a' => $number]),
+                'b' => $number,
+            ])],
+            ['item' => ['details' => [], 'b' => 'not a number']],
+        ))->compile()->unwrap();
+
+        $failure = $program()->unwrapErr();
+
+        $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+        $this->assertSame('item.b', $failure->rejections[0]->input);
     }
 
     #[Test]
