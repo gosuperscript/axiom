@@ -25,7 +25,7 @@ use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
-use Superscript\Axiom\Types\LiteralType;
+use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\TypeRelations;
@@ -56,8 +56,7 @@ final readonly class MatchExpressionCompiler
 
         $armTypes = [];
         $arms = [];
-        $literals = [];
-        $patternShapes = [];
+        $claims = [];
         $wildcard = false;
         $subjectReference = self::subjectReference($source->subject);
 
@@ -66,28 +65,34 @@ final readonly class MatchExpressionCompiler
                 $wildcard = true;
             }
 
-            if ($arm->pattern instanceof LiteralPattern) {
-                $literals[] = $arm->pattern->value;
-            }
+            // Every judgment about an arm reads its one claim: the predicate
+            // asks whether the subject inhabits it, coverage asks whether the
+            // claims exhaust the subject, and liveness asks whether it can
+            // hold at all.
+            $claim = self::claim($arm->pattern, $compilation);
 
-            if ($arm->pattern instanceof TypePattern) {
-                $patternShapes[] = $arm->pattern->type->shape();
+            if ($claim !== null) {
+                $claims[] = $claim->shape();
 
-                // A type sharing no values with the subject is an arm that
+                // A claim sharing no values with the subject is an arm that
                 // can never match — an authoring mistake, not a fallback.
-                if (!$subject->failed() && TypeRelations::overlaps($subject->returns, $arm->pattern->type)->isErr()) {
-                    $compilation->reject(new TypeMismatch(sprintf(
-                        'Match arm %d can never match: %s shares no values with the subject %s.',
-                        $index,
-                        TypeDescriber::describe($arm->pattern->type),
-                        TypeDescriber::describe($subject->returns),
-                    )));
+                if (!$subject->failed()) {
+                    $overlap = $compilation->overlaps($compilation->typeOf($subject), $claim);
+
+                    if ($overlap->isErr()) {
+                        $compilation->reject(new TypeMismatch(sprintf(
+                            'Match arm %d can never match: %s shares no values with the subject %s.',
+                            $index,
+                            TypeDescriber::describe($claim),
+                            TypeDescriber::describe($subject->returns),
+                        ), [$overlap->unwrapErr()]));
+                    }
                 }
             }
 
             $pattern = $compilation->within(
                 sprintf('The pattern of match arm %d cannot be compiled.', $index),
-                fn() => self::compilePattern($arm->pattern, $index, $compilation),
+                fn() => self::compilePattern($arm->pattern, $claim, $index, $compilation),
             );
             $body = $compilation->within(
                 sprintf('Match arm %d cannot be typed.', $index),
@@ -114,7 +119,7 @@ final readonly class MatchExpressionCompiler
         // A subject that did not compile promises no values, so any set of
         // patterns covers it and there is no exhaustiveness to judge;
         // refusing here would blame this match for the fault below it.
-        if (!$wildcard && !$subject->failed() && !self::covers($subject->returns->shape(), $literals, $patternShapes)) {
+        if (!$wildcard && !$subject->failed() && !self::covers($subject->returns->shape(), $claims)) {
             $compilation->reject(new TypeMismatch(sprintf(
                 'This match over %s may not be exhaustive, and an unmatched subject is a runtime error; add a wildcard arm.',
                 TypeDescriber::describe($subject->returns),
@@ -151,10 +156,33 @@ final readonly class MatchExpressionCompiler
     }
 
     /**
-     * A pattern compiles to a predicate over the subject value. Literal and
-     * type patterns both match by inhabitation — the same judgment coverage
-     * analysis reasons over — so a value can never match an arm its
-     * compilation did not admit.
+     * The type an arm claims its subject inhabits — the one judgment the
+     * predicate, coverage, and liveness all read, so they can never
+     * disagree. A type pattern claims its type; a scalar or null literal
+     * claims the type the compiler's own literal inference gives that value
+     * (`5` claims `Literal(5)`, `null` claims `Option<Never>` — absence
+     * only). Wildcards claim nothing by design, and so do expression
+     * patterns and array literals, whose matching is value comparison
+     * rather than membership.
+     */
+    private static function claim(MatchPattern $pattern, SourceCompilation $compilation): ?Type
+    {
+        return match (true) {
+            $pattern instanceof TypePattern => $pattern->type,
+            $pattern instanceof LiteralPattern && ($pattern->value === null || is_scalar($pattern->value))
+                => $compilation->typeOfValue($pattern->value),
+            default => null,
+        };
+    }
+
+    /**
+     * A pattern compiles to a predicate over the subject value. An arm with
+     * a claim matches by inhabitation of that claim — total over any
+     * subject, where raw value equality is not: a union can hold members
+     * (money, dates) whose equality belongs to their own packages, and a
+     * literal arm beside them asks only "is this that scalar?", never "are
+     * these two comparable?". Array literals keep entry-wise value
+     * equality.
      *
      * The arm's index reaches here only to name the child an expression
      * pattern compiles. A role is how a caller tells one child from another,
@@ -164,9 +192,14 @@ final readonly class MatchExpressionCompiler
      */
     private static function compilePattern(
         MatchPattern $pattern,
+        ?Type $claim,
         int $index,
         SourceCompilation $compilation,
     ): Closure {
+        if ($claim !== null) {
+            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $claim->assert($subject)->isOk();
+        }
+
         if ($pattern instanceof WildcardPattern) {
             return static fn(mixed $subject, SourceEvaluation $evaluation): bool => true;
         }
@@ -174,26 +207,7 @@ final readonly class MatchExpressionCompiler
         if ($pattern instanceof LiteralPattern) {
             $value = $pattern->value;
 
-            // A scalar literal matches by inhabitation of its literal type —
-            // total over any subject, where raw value equality is not: a
-            // union can hold members (money, dates) whose equality belongs
-            // to their own packages, and a literal arm beside them asks only
-            // "is this that scalar?", never "are these two comparable?".
-            if (is_bool($value) || is_int($value) || is_float($value) || is_string($value)) {
-                $literal = new LiteralType($value);
-
-                return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $literal->assert($subject)->isOk();
-            }
-
-            if ($value === null) {
-                return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $subject === null;
-            }
-
             return static fn(mixed $subject, SourceEvaluation $evaluation): bool => ValueEquality::equals($value, $subject);
-        }
-
-        if ($pattern instanceof TypePattern) {
-            return static fn(mixed $subject, SourceEvaluation $evaluation): bool => $pattern->type->assert($subject)->isOk();
         }
 
         if ($pattern instanceof ExpressionPattern) {
@@ -220,14 +234,17 @@ final readonly class MatchExpressionCompiler
     }
 
     /**
-     * @param list<mixed> $literals
-     * @param list<Shape> $patternShapes
+     * Is every value of the subject claimed by some arm? One subset
+     * question — is this shape assignable to a claim? — asked directly of
+     * the subject, and of each component when the subject decomposes: a
+     * union member by member, an option as its null component ({null} is
+     * Option<Never>) beside its inner, a boolean as its two literals.
+     *
+     * @param list<Shape> $claims
      */
-    private static function covers(Shape $subject, array $literals, array $patternShapes = []): bool
+    private static function covers(Shape $subject, array $claims): bool
     {
-        // A type pattern covers every subject assignable to it: the arm
-        // admits all of the subject's values, so nothing can fall through.
-        if (array_any($patternShapes, fn(Shape $pattern) => TypeRelations::assignable($subject, $pattern)->isOk())) {
+        if (self::claimed($subject, $claims)) {
             return true;
         }
 
@@ -237,25 +254,24 @@ final readonly class MatchExpressionCompiler
         }
 
         if ($subject instanceof OptionShape) {
-            return in_array(null, $literals, strict: true) && self::covers($subject->inner, $literals, $patternShapes);
+            return self::claimed(new OptionShape(new Shapes\NeverShape()), $claims)
+                && self::covers($subject->inner, $claims);
         }
 
         if ($subject instanceof BooleanShape) {
-            return in_array(true, $literals, strict: true) && in_array(false, $literals, strict: true);
-        }
-
-        if ($subject instanceof LiteralShape) {
-            return array_any(
-                $literals,
-                fn(mixed $value) => (is_bool($value) || is_int($value) || is_float($value) || is_string($value))
-                    && (new LiteralShape($value))->equals($subject),
-            );
+            return self::covers(new LiteralShape(true), $claims) && self::covers(new LiteralShape(false), $claims);
         }
 
         if ($subject instanceof UnionShape) {
-            return array_all($subject->members, fn(Shape $member) => self::covers($member, $literals, $patternShapes));
+            return array_all($subject->members, fn(Shape $member) => self::covers($member, $claims));
         }
 
         return false;
+    }
+
+    /** @param list<Shape> $claims */
+    private static function claimed(Shape $subject, array $claims): bool
+    {
+        return array_any($claims, fn(Shape $claim) => TypeRelations::assignable($subject, $claim)->isOk());
     }
 }

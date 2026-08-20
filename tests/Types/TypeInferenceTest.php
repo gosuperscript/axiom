@@ -730,8 +730,11 @@ final class TypeInferenceTest extends TestCase
     }
 
     #[Test]
-    public function a_literal_scrutinee_is_not_exhausted_by_a_different_literal(): void
+    public function a_literal_arm_disjoint_from_the_scrutinee_names_the_arm_not_the_gap(): void
     {
+        // The arm is the mistake, so the diagnostic names it — a coverage
+        // complaint would send the author hunting for a missing arm when the
+        // one they wrote can never fire.
         $env = self::env(declarations: ['five' => new LiteralType(5)]);
 
         $result = self::inference()->infer(new MatchExpression(
@@ -739,11 +742,11 @@ final class TypeInferenceTest extends TestCase
             arms: [new MatchArm(new LiteralPattern(6), new StaticSource('no'))],
         ), $env);
 
-        $this->assertStringContainsString('may not be exhaustive', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('can never match', $result->unwrapErr()->describe());
     }
 
     #[Test]
-    public function a_boolean_literal_scrutinee_ignores_null_patterns_safely(): void
+    public function a_null_arm_over_a_never_null_subject_can_never_match(): void
     {
         $env = self::env(declarations: ['flag' => new LiteralType(true)]);
 
@@ -755,7 +758,7 @@ final class TypeInferenceTest extends TestCase
             ],
         ), $env);
 
-        $this->assertTrue($result->isOk(), self::describe($result));
+        $this->assertStringContainsString('can never match', $result->unwrapErr()->describe());
     }
 
     #[Test]

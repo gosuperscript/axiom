@@ -29,7 +29,9 @@ use Superscript\Axiom\Types\TypeDescriber;
  *
  * A type pattern also proves coverage: a union subject is exhaustively
  * matched once every member is claimed by a literal arm, a type arm it is
- * assignable to, or a wildcard.
+ * assignable to, or a wildcard — and an option subject's null component
+ * ({null} is Option<Never>) is claimed by a literal null arm or any
+ * option-typed arm.
  */
 final readonly class TypePattern implements MatchPattern, Describable
 {

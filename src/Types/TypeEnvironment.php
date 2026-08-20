@@ -34,9 +34,7 @@ final class TypeEnvironment
 
     private ?LocalScope $localScope = null;
 
-    private ?string $narrowedReference = null;
-
-    private ?Type $narrowedType = null;
+    private ?Narrowing $narrowing = null;
 
     private readonly RecordType $declarations;
 
@@ -77,8 +75,7 @@ final class TypeEnvironment
     {
         $narrowed = new self();
         $narrowed->parent = $this;
-        $narrowed->narrowedReference = $reference->describe();
-        $narrowed->narrowedType = $type;
+        $narrowed->narrowing = new Narrowing($reference, $type);
 
         return $narrowed;
     }
@@ -96,11 +93,13 @@ final class TypeEnvironment
         // is retyped; a structural path is narrowed as one input read below,
         // never at its root, whose record type the narrowing says nothing
         // about.
-        if ($this->narrowedType !== null && $reference->isRoot() && $reference->describe() === $this->narrowedReference) {
+        $narrowing = $this->narrowing;
+
+        if ($narrowing !== null && $reference->isRoot() && $narrowing->narrows($reference)) {
             assert($this->parent !== null);
 
             return $this->parent->nodeOfReference($reference, $compiler, $path, $reads)
-                ->map($this->retype(...));
+                ->map(fn(CompiledNode $node) => $node->retyped($narrowing->type));
         }
 
         $name = $reference->root();
@@ -217,10 +216,12 @@ final class TypeEnvironment
      */
     public function nodeOfInputPath(ReferencePath $reference): ?Result
     {
-        if ($this->narrowedType !== null && $reference->describe() === $this->narrowedReference) {
+        $narrowing = $this->narrowing;
+
+        if ($narrowing !== null && $narrowing->narrows($reference)) {
             assert($this->parent !== null);
 
-            return $this->parent->nodeOfInputPath($reference)?->map($this->retype(...));
+            return $this->parent->nodeOfInputPath($reference)?->map(fn(CompiledNode $node) => $node->retyped($narrowing->type));
         }
 
         if ($reference->isRoot() || $this->definitionKeyOf($reference) !== null) {
@@ -267,22 +268,6 @@ final class TypeEnvironment
             },
             references: $scope === null ? [$reference] : [],
         ));
-    }
-
-    /**
-     * The same node under the narrowed type: the evaluation — and with it
-     * the recorded reads — is the parent's own; only the certified type is
-     * this scope's claim.
-     */
-    private function retype(CompiledNode $node): CompiledNode
-    {
-        assert($this->narrowedType !== null);
-
-        return CompiledNode::returning(
-            $this->narrowedType,
-            static fn(Runtime $runtime): Result => $node->evaluate($runtime),
-            references: $node->references,
-        );
     }
 
     /** Resolve only paths structurally owned by concrete RecordTypes. */

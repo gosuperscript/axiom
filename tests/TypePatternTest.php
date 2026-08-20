@@ -8,12 +8,15 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\Definitions;
 use Superscript\Axiom\Dialect;
+use Superscript\Axiom\Execution\Entered;
 use Superscript\Axiom\Expression;
 use Superscript\Axiom\Program;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Source;
+use Superscript\Axiom\Sources\ExpressionPattern;
 use Superscript\Axiom\Sources\InfixExpression;
 use Superscript\Axiom\Sources\LiteralPattern;
 use Superscript\Axiom\Sources\MatchArm;
@@ -25,8 +28,10 @@ use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Tests\Fixtures\Money;
 use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
+use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\LiteralType;
+use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\RecordType;
@@ -42,9 +47,11 @@ use Superscript\Axiom\Types\UnionType;
  * explicitly unanswered ('novalue' is a chosen answer carrying no value),
  * or not answered yet.
  */
+#[CoversClass(\Superscript\Axiom\CompiledNode::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\MatchExpressionCompiler::class)]
 #[CoversClass(\Superscript\Axiom\Sources\TypePattern::class)]
+#[CoversClass(\Superscript\Axiom\Types\Narrowing::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeEnvironment::class)]
 #[CoversClass(\Superscript\Axiom\Types\TypeInference::class)]
 #[UsesClass(\Superscript\Axiom\Analysis\AnalysisTypeDescriber::class)]
@@ -58,13 +65,16 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Analysis\References::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\BoundOperation::class)]
-#[UsesClass(\Superscript\Axiom\CompiledNode::class)]
 #[UsesClass(\Superscript\Axiom\CompiledSource::class)]
 #[UsesClass(\Superscript\Axiom\CoreSourceCompilers::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Dialect::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\CompilationAborted::class)]
 #[UsesClass(\Superscript\Axiom\Exceptions\TransformValueException::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Annotated::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Entered::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Exited::class)]
+#[UsesClass(\Superscript\Axiom\Execution\Node::class)]
 #[UsesClass(\Superscript\Axiom\Expression::class)]
 #[UsesClass(\Superscript\Axiom\Extension::class)]
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueFieldRegistry::class)]
@@ -97,6 +107,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\StaticSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\SymbolSourceCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceEvaluation::class)]
+#[UsesClass(\Superscript\Axiom\Sources\ExpressionPattern::class)]
 #[UsesClass(\Superscript\Axiom\Sources\InfixExpression::class)]
 #[UsesClass(\Superscript\Axiom\Sources\LiteralPattern::class)]
 #[UsesClass(\Superscript\Axiom\Sources\MatchArm::class)]
@@ -109,8 +120,10 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\LiteralType::class)]
 #[UsesClass(\Superscript\Axiom\Types\LiteralTypeRegistry::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
+#[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
 #[UsesClass(\Superscript\Axiom\Types\OptionType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordShape::class)]
@@ -289,6 +302,24 @@ final class TypePatternTest extends TestCase
     }
 
     #[Test]
+    public function a_literal_arm_that_can_never_match_refuses(): void
+    {
+        // The liveness guard reads the arm's claim, not its pattern kind: a
+        // literal that shares no values with the subject is the same
+        // authoring mistake as an unmatchable type arm.
+        $compiled = (new Expression(
+            new MatchExpression(new ReferencePath('limit'), [
+                new MatchArm(new LiteralPattern('x'), new StaticSource(true)),
+                new MatchArm(new WildcardPattern(), new StaticSource(false)),
+            ]),
+            declarations: ['limit' => new NumberType()],
+        ))->compile();
+
+        $this->assertTrue($compiled->isErr());
+        $this->assertStringContainsString('can never match', $compiled->unwrapErr()->describe());
+    }
+
+    #[Test]
     public function a_literal_arm_beside_a_domain_member_asks_inhabitation_not_equality(): void
     {
         $program = (new Expression(
@@ -459,6 +490,90 @@ final class TypePatternTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertSame('pair', $program([])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function option_typed_arms_prove_the_null_component_without_a_literal(): void
+    {
+        // {null} is Option<Never>: an option-typed arm claims it, so
+        // Option<Number> is exhausted by a Number arm and an Option<Never>
+        // arm with no literal null in sight.
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('limit'), [
+                new MatchArm(new TypePattern(new NumberType()), new StaticSource('answered')),
+                new MatchArm(new TypePattern(new OptionType(new NeverType())), new StaticSource('missing')),
+            ]),
+            declarations: ['limit' => new OptionType(new NumberType())],
+        ))->compile()->unwrap();
+
+        $this->assertSame('answered', $program(['limit' => 5])->unwrap()->unwrap());
+        $this->assertSame('missing', $program(['limit' => null])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_unclaimed_null_component_is_a_compile_error(): void
+    {
+        $compiled = (new Expression(
+            new MatchExpression(new ReferencePath('limit'), [
+                new MatchArm(new TypePattern(new NumberType()), new StaticSource('answered')),
+            ]),
+            declarations: ['limit' => new OptionType(new NumberType())],
+        ))->compile();
+
+        $this->assertTrue($compiled->isErr());
+        $this->assertStringContainsString('may not be exhaustive', $compiled->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function a_narrowed_reference_keeps_one_observed_lifecycle(): void
+    {
+        $program = self::program(
+            self::guarded(
+                new ReferencePath('limit'),
+                new InfixExpression(new ReferencePath('limit'), '>', new StaticSource(100_000)),
+            ),
+            self::answerType(),
+        );
+
+        $observer = new SpyObserver();
+        $program->call(['limit' => 250_000], $observer);
+
+        // The subject read and the narrowed arm's read: two reference nodes,
+        // one Entered each — retyping never wraps an evaluation in a second
+        // observable node.
+        $references = array_filter(
+            $observer->events,
+            fn(object $event) => $event instanceof Entered && $event->node->sourceType === ReferencePath::class,
+        );
+
+        $this->assertCount(2, $references);
+    }
+
+    #[Test]
+    public function a_match_over_never_is_vacuously_exhaustive_with_no_claims(): void
+    {
+        // Never has no inhabitants, so even arms that claim nothing exhaust
+        // it — the one subject the direct claim check cannot answer for,
+        // because there are no claims to ask about.
+        $compiled = (new Expression(
+            new MatchExpression(new ReferencePath('impossible'), [
+                new MatchArm(new ExpressionPattern(new StaticSource(1)), new StaticSource('unreachable')),
+            ]),
+            declarations: ['impossible' => new NeverType()],
+        ))->compile();
+
+        $this->assertTrue($compiled->isOk());
+    }
+
+    #[Test]
+    public function a_failed_node_has_no_type_to_reclaim(): void
+    {
+        // Retyping is a claim over an evaluation, and a failed node has
+        // neither half to claim over; it answers with itself, like
+        // evaluatedBy(), so failure can never grow a type.
+        $failed = CompiledNode::failed();
+
+        $this->assertSame($failed, $failed->retyped(new NumberType()));
     }
 
     #[Test]

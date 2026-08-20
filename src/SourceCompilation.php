@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom;
 
 use Closure;
+use LogicException;
 use RuntimeException;
 use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
@@ -73,15 +74,10 @@ final readonly class SourceCompilation
 
     public function child(Source $source, ?string $role = null): CompiledSource
     {
-        $node = $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role);
-
-        $this->recorder?->recordReferences($node->references);
-
-        if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {
-            $this->recorder->child($compilation, $role);
-        }
-
-        return new CompiledSource($node);
+        return $this->record(
+            $this->compiled(($this->compileNode)($source, $this->childPath()), $source, $role),
+            $role,
+        );
     }
 
     /**
@@ -94,12 +90,21 @@ final readonly class SourceCompilation
      */
     public function narrowedChild(Source $source, ReferencePath $reference, Type $type, ?string $role = null): CompiledSource
     {
+        // A capability without the narrowing door must not pretend: a child
+        // compiled unnarrowed would silently break the caller's claim.
         if ($this->compileNarrowed === null) {
-            return $this->child($source, $role);
+            throw new LogicException('This compilation cannot narrow; construct it with the narrowing capability TypeInference supplies.');
         }
 
-        $node = $this->compiled(($this->compileNarrowed)($source, $reference, $type, $this->childPath()), $source, $role);
+        return $this->record(
+            $this->compiled(($this->compileNarrowed)($source, $reference, $type, $this->childPath()), $source, $role),
+            $role,
+        );
+    }
 
+    /** Record a compiled child's reads and compilation, then hand it back. */
+    private function record(CompiledNode $node, ?string $role): CompiledSource
+    {
         $this->recorder?->recordReferences($node->references);
 
         if ($this->recorder !== null && ($compilation = $node->compilation()) !== null) {

@@ -432,7 +432,7 @@ Internally, the release is staged as a PR series, in this order:
 
 **Follow-ups after `0.5.0`**:
 - `axiom-time` (any time after; the seam canary).
-- The narrowing bundle on the runtime AST: `is`-type patterns in `match` (which is what makes cross-base unions like `Number | String` usable at operand positions) and literal-pattern scrutinee narrowing inside arm bodies.
+- Literal-pattern scrutinee narrowing inside arm bodies. (Type patterns in `match` — the other half of the narrowing bundle, which is what makes cross-base unions like `Number | String` usable at operand positions — ship as `TypePattern` with subject-reference narrowing.)
 - Explicit `get(dict, key): Option<V>` if hosts demonstrate the need.
 
 ## Future work: a typed authoring surface

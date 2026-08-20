@@ -936,6 +936,16 @@ The body compiles through the same dialect in a nested lexical environment. Its 
 
 The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
 
+### Compile a Child Under a Narrowed Reference
+
+`narrowedChild()` compiles a child in an environment where one declared reference — a root or a structural input path — resolves at a narrower type:
+
+```php
+$compilation->narrowedChild($arm->expression, $subjectReference, $pattern->type, "arm.{$index}.expression");
+```
+
+The narrowing is a claim the caller must make true at runtime: the child's values of that reference must actually inhabit the narrower type. The core match compiler is the canonical caller — a `TypePattern` arm guards evaluation with the same `assert` judgment the narrowed compilation relies on, so only admitted values reach the arm. A host compiler that installs an equivalent guard may use the same door; one that cannot guarantee the values should compile with `child()` and let the declared type stand.
+
 ### Compile Owned References Explicitly
 
 When a host source owns a rooted reference, store the actual `ReferencePath` as a public persisted child and compile it through `reference()`:
