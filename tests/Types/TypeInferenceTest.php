@@ -743,6 +743,7 @@ final class TypeInferenceTest extends TestCase
         ), $env);
 
         $this->assertStringContainsString('can never match', $result->unwrapErr()->describe());
+        $this->assertStringContainsString('5 and 6 share no values', $result->unwrapErr()->describe());
     }
 
     #[Test]

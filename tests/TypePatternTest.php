@@ -493,6 +493,36 @@ final class TypePatternTest extends TestCase
     }
 
     #[Test]
+    public function an_array_literal_arm_never_matches_a_rearrangement(): void
+    {
+        // Arrays claim nothing: matching is entry-wise value equality, so a
+        // list holding the same elements in another order is not this value —
+        // where an inhabitation reading would wrongly admit it.
+        $program = (new Expression(
+            new MatchExpression(new StaticSource([2, 1]), [
+                new MatchArm(new LiteralPattern([1, 2]), new StaticSource('pair')),
+                new MatchArm(new WildcardPattern(), new StaticSource('other')),
+            ]),
+        ))->compile()->unwrap();
+
+        $this->assertSame('other', $program([])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_boolean_subject_needs_both_of_its_literals_claimed(): void
+    {
+        $onlyOne = fn(bool $claimed) => (new Expression(
+            new MatchExpression(new ReferencePath('flag'), [
+                new MatchArm(new LiteralPattern($claimed), new StaticSource('claimed')),
+            ]),
+            declarations: ['flag' => new BooleanType()],
+        ))->compile();
+
+        $this->assertTrue($onlyOne(true)->isErr());
+        $this->assertTrue($onlyOne(false)->isErr());
+    }
+
+    #[Test]
     public function option_typed_arms_prove_the_null_component_without_a_literal(): void
     {
         // {null} is Option<Never>: an option-typed arm claims it, so
