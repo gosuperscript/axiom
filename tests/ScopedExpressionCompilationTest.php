@@ -243,6 +243,21 @@ final class ScopedExpressionExtension extends Extension
 final class ScopedExpressionCompilationTest extends TestCase
 {
     #[Test]
+    public function a_local_scope_refuses_reads_recorded_after_its_boundary_is_built(): void
+    {
+        $scope = new \Superscript\Axiom\LocalScope();
+        $reference = new ReferencePath('item', 'score');
+        $scope->record($reference);
+
+        $this->assertEquals([$reference], $scope->seal());
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('after its input boundary is sealed');
+
+        $scope->record(new ReferencePath('item', 'late'));
+    }
+
+    #[Test]
     public function a_scoped_record_is_admitted_through_only_the_properties_its_body_reads(): void
     {
         $record = new RecordType([

@@ -226,6 +226,17 @@ final class RecordTypeTest extends TestCase
     }
 
     #[Test]
+    public function a_record_violation_becomes_a_fault_when_it_crosses_a_collection_element(): void
+    {
+        $violation = (new RecordType(['score' => new NumberType()]))->coerce([])->unwrapErr();
+
+        $failure = $violation->asElementFailure(2);
+
+        $this->assertSame('Element [2]: Required property [score] is missing.', $failure->getMessage());
+        $this->assertSame($violation, $failure->getPrevious());
+    }
+
+    #[Test]
     public function assert_is_strict_membership_so_an_extra_key_is_a_rejection(): void
     {
         $result = self::subject()->assert(['name' => 'Ada', 'age' => 36, 'extra' => 1]);

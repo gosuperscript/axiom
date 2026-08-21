@@ -66,4 +66,13 @@ final class RecordPropertyViolation extends InvalidArgumentException
             $this,
         );
     }
+
+    /** A dynamic collection element is malformed input, never an omitted declared path. */
+    public function asElementFailure(int|string $key): InvalidArgumentException
+    {
+        return new InvalidArgumentException(
+            sprintf('Element [%s]: %s', $key, $this->getMessage()),
+            previous: $this,
+        );
+    }
 }

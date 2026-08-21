@@ -71,13 +71,7 @@ final readonly class Program
      */
     private RecordType $declarations;
 
-    /**
-     * The inputs this program reads, in first-read order — the boundary's
-     * entire subject. Every other declaration names something the program
-     * never mentions, and so has nothing to demand or admit.
-     *
-     * Projection preserves required/optional qualifiers at every level.
-     */
+    /** Admission prepared from this program's declarations and read paths. */
     private InputBoundary $inputs;
 
     /**

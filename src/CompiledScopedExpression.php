@@ -50,7 +50,7 @@ final readonly class CompiledScopedExpression
 
         $this->parameters = $parameters;
         $this->returns = $node->returns;
-        $this->inputs = new InputBoundary(new RecordType($parameterTypes), $scope->references(), $boundary);
+        $this->inputs = new InputBoundary(new RecordType($parameterTypes), $scope->seal(), $boundary);
     }
 
     /** Require the present result to fill one expected type. */

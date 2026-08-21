@@ -66,7 +66,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilation::class)]
 #[CoversClass(Program::class)]
 #[CoversClass(\Superscript\Axiom\InputBoundary::class)]
-#[UsesClass(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class)]
+#[CoversClass(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class)]
 #[CoversClass(Optional::class)]
 #[CoversClass(Dialect::class)]
 #[CoversClass(Extension::class)]
@@ -122,7 +122,8 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
-#[UsesClass(\Superscript\Axiom\Types\DictType::class)]
+#[CoversClass(\Superscript\Axiom\Types\DictType::class)]
+#[CoversClass(\Superscript\Axiom\Types\ListType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(RecordType::class)]
 #[UsesClass(StringType::class)]
@@ -194,6 +195,60 @@ final class TypedExpressionTest extends TestCase
         $this->assertInstanceOf(MissingRequiredInput::class, $failure);
         $this->assertSame('item.score', $failure->rejections[0]->input);
         $this->assertStringContainsString('required input [item.score] is missing', $failure->getMessage());
+    }
+
+    #[Test]
+    public function a_missing_record_property_inside_a_list_is_an_invalid_binding(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('items'),
+            declarations: ['items' => new \Superscript\Axiom\Types\ListType(
+                new RecordType(['score' => new NumberType()]),
+            )],
+        ))->compile()->unwrap();
+
+        $failure = $program(['items' => [['score' => 1], []]])->unwrapErr();
+
+        $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+        $this->assertSame('items', $failure->rejections[0]->input);
+        $this->assertStringContainsString('element [1]', strtolower($failure->getMessage()));
+        $this->assertStringContainsString('Required property [score] is missing', $failure->getMessage());
+    }
+
+    #[Test]
+    public function a_missing_record_property_inside_a_dictionary_is_an_invalid_binding(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('items'),
+            declarations: ['items' => new \Superscript\Axiom\Types\DictType(
+                new RecordType(['score' => new NumberType()]),
+            )],
+        ))->compile()->unwrap();
+
+        $failure = $program(['items' => ['valid' => ['score' => 1], 'invalid' => []]])->unwrapErr();
+
+        $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+        $this->assertSame('items', $failure->rejections[0]->input);
+        $this->assertStringContainsString('element [invalid]', strtolower($failure->getMessage()));
+        $this->assertStringContainsString('Required property [score] is missing', $failure->getMessage());
+    }
+
+    #[Test]
+    public function a_missing_record_property_inside_a_union_is_an_invalid_root_binding(): void
+    {
+        $program = (new Expression(
+            source: new ReferencePath('item'),
+            declarations: ['item' => new UnionType(
+                new RecordType(['score' => new NumberType()]),
+                new StringType(),
+            )],
+        ))->compile()->unwrap();
+
+        $failure = $program(['item' => []])->unwrapErr();
+
+        $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+        $this->assertSame('item', $failure->rejections[0]->input);
+        $this->assertStringContainsString('binding [item]', $failure->getMessage());
     }
 
     #[Test]

@@ -137,6 +137,8 @@ final readonly class RecordType implements Type
     {
         /** @var array<array-key, mixed> $record */
         $record = [];
+        // Retain the first omission but inspect every supplied sibling: any
+        // malformed value is a fault and must dominate missing-only input.
         $missing = null;
 
         foreach ($this->properties as $name => $property) {
