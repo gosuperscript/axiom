@@ -934,7 +934,7 @@ private function compileAny(
 
 The body compiles through the same dialect in a nested lexical environment. Its parameters shadow equal outer names; every other symbol resolves through the enclosing inputs and definitions. Repeated invocations share definition memoization and observation with the enclosing runtime, while opaque scope identities ensure a local name cannot change what an already-compiled outer definition reads.
 
-The supplied local values skip a redundant public-boundary admission because the owning compiler obtained them from certified compiled parents. `scope()` certifies Axiom semantics only: a host that projects the same persisted language into another runtime still owns that portability policy and should admit the body before compiling it here.
+Each invocation admits its local values through the parameter types supplied to `scope()`, using the enclosing expression's boundary policy. Admission is projected to the local access paths that body actually reads, so two predicates over the same record can demand different properties independently. A missing required local path makes that invocation absent; an invalid supplied value remains an evaluation failure. This lets a quantifier decide what absence means—for example, an `any` source naturally treats an absent predicate result as a row that cannot witness the predicate.
 
 ### Compile a Child Under a Narrowed Reference
 

@@ -39,6 +39,7 @@ use function Superscript\Monads\Result\Ok;
 #[CoversClass(Exited::class)]
 #[CoversClass(Threw::class)]
 #[UsesClass(Program::class)]
+#[UsesClass(\Superscript\Axiom\InputBoundary::class)]
 #[UsesClass(Bindings::class)]
 #[UsesClass(LocalScope::class)]
 #[UsesClass(\Superscript\Axiom\Sources\SymbolSource::class)]

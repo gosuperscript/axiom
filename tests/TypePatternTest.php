@@ -99,6 +99,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Operators\UnsupportedOperation::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
+#[UsesClass(\Superscript\Axiom\InputBoundary::class)]
 #[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[UsesClass(\Superscript\Axiom\Runtime::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ConstantNode::class)]

@@ -6,11 +6,12 @@ namespace Superscript\Axiom\Types;
 
 use Illuminate\Support\Arr;
 use InvalidArgumentException;
+use Superscript\Axiom\Exceptions\RecordPropertyViolation;
 use Superscript\Monads\Option\Option;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Result;
+use Throwable;
 
-use function Psl\Vec\map;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
@@ -54,12 +55,7 @@ class DictType implements Type
             ));
         }
 
-        return Result::collect(map($value, function (mixed $item) {
-            return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('Dict item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
-            ));
-        }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
+        return $this->transform($value, $this->type->assert(...));
     }
 
     public function coerce(mixed $value): Result
@@ -81,12 +77,7 @@ class DictType implements Type
             ));
         }
 
-        return Result::collect(map($value, function (mixed $item) {
-            return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
-                default: Err(new InvalidArgumentException('Dict item can not be a None')),
-                f: fn(mixed $value) => Ok($value),
-            ));
-        }))->map(fn(array $items) => Some(array_combine($this->stringKeys($value), $items)));
+        return $this->transform($value, $this->type->coerce(...));
     }
 
     /**
@@ -103,5 +94,34 @@ class DictType implements Type
     public function shape(): Shapes\Shape
     {
         return new Shapes\DictShape($this->type->shape());
+    }
+
+    /**
+     * @param array<array-key, mixed> $items
+     * @param callable(mixed): Result<Option<T>, Throwable> $transform
+     * @return Result<Option<array<string, T>>, Throwable>
+     */
+    private function transform(array $items, callable $transform): Result
+    {
+        $keys = $this->stringKeys($items);
+
+        /** @var list<Result<T, Throwable>> $admitted */
+        $admitted = array_map(
+            static fn(string $key, mixed $item): Result => $transform($item)
+                ->mapErr(static fn(Throwable $failure): Throwable => $failure instanceof RecordPropertyViolation
+                    ? $failure->asElementFailure($key)
+                    : $failure)
+                ->andThen(fn(Option $value) => $value->mapOr(
+                    default: Err(new InvalidArgumentException('Dict item can not be a None')),
+                    f: fn($value) => Ok($value),
+                )),
+            $keys,
+            $items,
+        );
+
+        $result = Result::collect($admitted)->map(fn(array $values) => Some(array_combine($keys, $values)));
+
+        /** @var Result<Option<array<string, T>>, Throwable> $result */
+        return $result;
     }
 }

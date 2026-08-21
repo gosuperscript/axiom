@@ -144,6 +144,8 @@ final readonly class HostLiteralSource implements Source
 #[UsesClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[UsesClass(\Superscript\Axiom\Program::class)]
+#[UsesClass(\Superscript\Axiom\InputBoundary::class)]
+#[UsesClass(LocalScope::class)]
 #[UsesClass(\Superscript\Axiom\Bindings::class)]
 #[UsesClass(\Superscript\Axiom\Definitions::class)]
 #[UsesClass(\Superscript\Axiom\Types\TypeEnvironment::class)]

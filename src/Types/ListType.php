@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Exceptions\RecordPropertyViolation;
 use Superscript\Monads\Option\Option;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Monads\Result\Result;
+use Throwable;
 
-use function Psl\Vec\map;
 use function Superscript\Monads\Option\Some;
 use function Superscript\Monads\Result\Err;
 use function Superscript\Monads\Result\Ok;
@@ -51,14 +52,8 @@ class ListType implements Type
             ));
         }
 
-        return $this->checkBounds($value)->andThen(
-            fn(array $items) => Result::collect(map($items, function (mixed $item) {
-                return $this->type->assert($item)->andThen(fn(Option $value) => $value->mapOr(
-                    default: Err(new InvalidArgumentException('List item can not be a None')),
-                    f: fn(mixed $value) => Ok($value),
-                ));
-            }))->map(fn(array $items) => Some($items)),
-        );
+        return $this->checkBounds($value)
+            ->andThen(fn(array $items) => $this->transform($items, $this->type->assert(...)));
     }
 
     public function coerce(mixed $value): Result
@@ -74,14 +69,8 @@ class ListType implements Type
             ));
         }
 
-        return $this->checkBounds($value)->andThen(
-            fn(array $items) => Result::collect(map($items, function (mixed $item) {
-                return $this->type->coerce($item)->andThen(fn(Option $value) => $value->mapOr(
-                    default: Err(new InvalidArgumentException('List item can not be a None')),
-                    f: fn(mixed $value) => Ok($value),
-                ));
-            }))->map(fn(array $items) => Some($items)),
-        );
+        return $this->checkBounds($value)
+            ->andThen(fn(array $items) => $this->transform($items, $this->type->coerce(...)));
     }
 
     /**
@@ -95,6 +84,35 @@ class ListType implements Type
     public function shape(): Shapes\Shape
     {
         return new Shapes\ListShape($this->type->shape(), $this->min ?? 0, $this->max);
+    }
+
+    /**
+     * @param array<array-key, mixed> $items
+     * @param callable(mixed): Result<Option<T>, Throwable> $transform
+     * @return Result<Option<list<T>>, Throwable>
+     */
+    private function transform(array $items, callable $transform): Result
+    {
+        $items = array_values($items);
+
+        /** @var list<Result<T, Throwable>> $admitted */
+        $admitted = array_map(
+            static fn(int $index, mixed $item): Result => $transform($item)
+                ->mapErr(static fn(Throwable $failure): Throwable => $failure instanceof RecordPropertyViolation
+                    ? $failure->asElementFailure($index)
+                    : $failure)
+                ->andThen(fn(Option $value) => $value->mapOr(
+                    default: Err(new InvalidArgumentException('List item can not be a None')),
+                    f: fn($value) => Ok($value),
+                )),
+            array_keys($items),
+            $items,
+        );
+
+        $result = Result::collect($admitted)->map(fn(array $items) => Some($items));
+
+        /** @var Result<Option<list<T>>, Throwable> $result */
+        return $result;
     }
 
     /**

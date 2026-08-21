@@ -180,6 +180,7 @@ final readonly class RecoveringCompiler
             $dialect->sourceCompilerExtensions(),
             $dialect->opaqueFields(),
             $recovery,
+            $this->expression->boundary,
         )->compile(
             $this->expression->source,
             new TypeEnvironment($this->expression->definitions, $this->expression->declarations),

@@ -48,6 +48,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(NeverType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(RecordType::class)]
+#[UsesClass(\Superscript\Axiom\Exceptions\RecordPropertyViolation::class)]
 #[UsesClass(UnionType::class)]
 #[UsesClass(UnknownType::class)]
 #[UsesClass(\Superscript\Axiom\Types\OpaqueType::class)]

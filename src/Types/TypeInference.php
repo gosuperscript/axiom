@@ -8,6 +8,7 @@ use Superscript\Axiom\Analysis\CompilationNode;
 use Superscript\Axiom\Analysis\CompilationRecorder;
 use Superscript\Axiom\Analysis\ErrorRecovery;
 use Superscript\Axiom\Analysis\RecoveringCompiler;
+use Superscript\Axiom\Boundary;
 use Superscript\Axiom\CompiledNode;
 use Superscript\Axiom\CompiledSource;
 use Superscript\Axiom\Exceptions\CompilationAborted;
@@ -71,6 +72,7 @@ final readonly class TypeInference
         array $sourceCompilerExtensions = [],
         ?OpaqueFieldRegistry $opaqueFields = null,
         private ?ErrorRecovery $recovery = null,
+        private Boundary $boundary = Boundary::Coerce,
     ) {
         $this->sourceCompilers = $sourceCompilers;
         $this->sourceCompilerExtensions = $sourceCompilerExtensions;
@@ -197,6 +199,7 @@ final readonly class TypeInference
                 $path,
                 $recorder,
             ),
+            boundary: $this->boundary,
         );
     }
 

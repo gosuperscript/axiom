@@ -7,7 +7,7 @@ namespace Superscript\Axiom\Exceptions;
 use RuntimeException;
 
 /**
- * Bindings failed at the {@see \Superscript\Axiom\Program} boundary.
+ * Bindings failed at a program or compiled-scope input boundary.
  * Violations are aggregated — every input the call got wrong is reported at
  * once, named by binding, before any evaluation happens.
  *

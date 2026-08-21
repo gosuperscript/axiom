@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use InvalidArgumentException;
+use Superscript\Axiom\Exceptions\RecordPropertyViolation;
 use Superscript\Axiom\Exceptions\TransformValueException;
 use Superscript\Axiom\ReferencePath;
 use Superscript\Axiom\Types\Shapes\OptionShape;
@@ -136,6 +137,9 @@ final readonly class RecordType implements Type
     {
         /** @var array<array-key, mixed> $record */
         $record = [];
+        // Retain the first omission but inspect every supplied sibling: any
+        // malformed value is a fault and must dominate missing-only input.
+        $missing = null;
 
         foreach ($this->properties as $name => $property) {
             if (!array_key_exists($name, $value)) {
@@ -143,24 +147,39 @@ final readonly class RecordType implements Type
                     continue;
                 }
 
-                return new Err(new InvalidArgumentException(sprintf('Required property [%s] is missing.', $name)));
+                $missing ??= RecordPropertyViolation::missing($name);
+
+                continue;
             }
 
             $result = $transform($property->type, $value[$name]);
 
             if ($result->isErr()) {
-                return new Err(new InvalidArgumentException(
-                    sprintf('Property [%s]: %s', $name, $result->unwrapErr()->getMessage()),
-                ));
+                $failure = $result->unwrapErr();
+                $violation = $failure instanceof RecordPropertyViolation
+                    ? $failure->beneath($name)
+                    : RecordPropertyViolation::invalid($name, $failure);
+
+                if ($violation->missing) {
+                    $missing ??= $violation;
+
+                    continue;
+                }
+
+                return new Err($violation);
             }
 
             $admitted = $result->unwrap();
 
             if ($admitted->isNone() && !$property->type->shape() instanceof OptionShape) {
-                return new Err(new InvalidArgumentException(sprintf('Property [%s] reads as absent, but %s is required.', $name, TypeDescriber::describe($property->type))));
+                return new Err(RecordPropertyViolation::absent($name, TypeDescriber::describe($property->type)));
             }
 
             $record[$name] = $admitted->unwrapOr(null);
+        }
+
+        if ($missing !== null) {
+            return new Err($missing);
         }
 
         return Ok(Some($record));

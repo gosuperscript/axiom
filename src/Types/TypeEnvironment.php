@@ -108,6 +108,7 @@ final class TypeEnvironment
         if ($property !== null) {
             $scope = $this->localScope;
             $root = new ReferencePath($name);
+            $scope?->record($reference);
 
             return Ok(CompiledNode::returning(
                 $property->accessedType(),
@@ -239,6 +240,7 @@ final class TypeEnvironment
         }
 
         $scope = $this->localScope;
+        $scope?->record($reference);
 
         return Ok(CompiledNode::returning(
             $type,
