@@ -45,6 +45,7 @@ final readonly class ScopedAnySource implements Source
     public function __construct(
         public Source $items,
         public ScopedExpression $predicate,
+        public ?Type $parameterType = null,
     ) {}
 }
 
@@ -120,7 +121,7 @@ final class ScopedExpressionExtension extends Extension
 
         $parameter = $source->predicate->parameters[0];
         $predicate = $compilation
-            ->scope($source->predicate, [$parameter => $itemsType->type], 'predicate')
+            ->scope($source->predicate, [$parameter => $source->parameterType ?? $itemsType->type], 'predicate')
             ->expectPresent(new BooleanType());
 
         return $compilation->custom(new BooleanType(), static function (SourceEvaluation $evaluation) use ($items, $parameter, $predicate): bool {
@@ -410,6 +411,38 @@ final class ScopedExpressionCompilationTest extends TestCase
         )->compile()->unwrap();
 
         $this->assertTrue($program()->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function quantifiers_over_a_declared_list_input_admit_rows_for_their_own_predicate_reads(): void
+    {
+        $number = new \Superscript\Axiom\Types\NumberType();
+        $row = new RecordType(['left' => $number, 'right' => $number]);
+        $input = new RecordType([
+            'left' => new Optional($number),
+            'right' => new Optional($number),
+        ]);
+        $left = new ScopedAnySource(new SymbolSource('rows'), new ScopedExpression(
+            ['item'],
+            new InfixExpression(new ReferencePath('item', 'left'), '>', new StaticSource(0)),
+        ), $row);
+        $right = new ScopedAnySource(new SymbolSource('rows'), new ScopedExpression(
+            ['item'],
+            new InfixExpression(new ReferencePath('item', 'right'), '>', new StaticSource(0)),
+        ), $row);
+        $program = new Expression(
+            new InfixExpression($left, '&&', $right),
+            dialect: Dialect::core()->with(new ScopedExpressionExtension()),
+            declarations: ['rows' => new ListType($input)],
+        )->compile()->unwrap();
+
+        $result = $program(['rows' => [['left' => 1], ['right' => 1]]]);
+
+        $this->assertTrue(
+            $result->isOk(),
+            $result->isErr() ? $result->unwrapErr()::class . ': ' . $result->unwrapErr()->getMessage() : '',
+        );
+        $this->assertTrue($result->unwrap()->unwrap());
     }
 
     #[Test]
