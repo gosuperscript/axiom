@@ -936,6 +936,8 @@ The body compiles through the same dialect in a nested lexical environment. Its 
 
 Each invocation admits its local values through the parameter types supplied to `scope()`, using the enclosing expression's boundary policy. Admission is projected to the local access paths that body actually reads, so two predicates over the same record can demand different properties independently. A missing required local path makes that invocation absent; an invalid supplied value remains an evaluation failure. This lets a quantifier decide what absence means—for example, an `any` source naturally treats an absent predicate result as a row that cannot witness the predicate.
 
+The collection's element type and the scoped parameter type need not be the same. A host may deliberately admit submitted rows through a permissive record whose properties are `Optional`, then supply the authored, required record as the parameter type passed to `scope()`. The program boundary admits the outer list honestly; the scoped boundary independently admits only the required properties each predicate reads. Do not make a strict collection type accept sparse values to achieve this—the source compiler owns the narrower parameter declaration.
+
 ### Compile a Child Under a Narrowed Reference
 
 `narrowedChild()` compiles a child in an environment where one declared reference — a root or a structural input path — resolves at a narrower type:
