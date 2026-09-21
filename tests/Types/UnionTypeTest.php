@@ -31,6 +31,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(StringType::class)]
 #[UsesClass(TypeDescriber::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 #[UsesClass(BooleanShape::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(StringShape::class)]
@@ -112,5 +113,27 @@ final class UnionTypeTest extends TestCase
             NumberType::class,
             UnionType::join(new \Superscript\Axiom\Types\NeverType(), new NumberType()),
         );
+    }
+
+    #[Test]
+    public function join_collapses_by_value_equality_and_keeps_the_first_agreeing_type(): void
+    {
+        // 5 and 5.0 denote the same Number: the join keeps the first spelling.
+        $numeric = UnionType::join(new LiteralType(5), new LiteralType(5.0), new LiteralType('5'));
+        $this->assertInstanceOf(UnionType::class, $numeric);
+        $this->assertCount(2, $numeric->members);
+        $this->assertInstanceOf(LiteralType::class, $numeric->members[0]);
+        $this->assertSame(5, $numeric->members[0]->value);
+
+        // A literal is never equivalent to its bare base: both stand.
+        $widened = UnionType::join(new LiteralType('a'), new StringType(), new LiteralType('a'), new StringType());
+        $this->assertInstanceOf(UnionType::class, $widened);
+        $this->assertSame("'a' | String", TypeDescriber::describe($widened));
+
+        // Two large integers can share a float image while remaining
+        // distinct values; the join must not merge them.
+        $large = UnionType::join(new LiteralType(9007199254740993), new LiteralType(9007199254740992));
+        $this->assertInstanceOf(UnionType::class, $large);
+        $this->assertCount(2, $large->members);
     }
 }

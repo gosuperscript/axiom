@@ -70,6 +70,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\TypeDescriber::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class ShapeProjectionCensusTest extends TestCase
 {
     /**

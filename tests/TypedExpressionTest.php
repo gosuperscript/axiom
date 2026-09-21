@@ -147,6 +147,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[CoversClass(\Superscript\Axiom\SourceCompilers\ReferencePathCompiler::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class TypedExpressionTest extends TestCase
 {
     private function gate(): Expression

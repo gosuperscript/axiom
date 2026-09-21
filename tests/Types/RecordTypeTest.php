@@ -38,6 +38,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(StringShape::class)]
 #[UsesClass(Optional::class)]
 #[UsesClass(ReferencePath::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class RecordTypeTest extends TestCase
 {
     private static function subject(): RecordType
