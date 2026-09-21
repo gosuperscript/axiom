@@ -29,7 +29,7 @@ final class UnionShape extends Shape
 
     public static function of(Shape ...$members): Shape
     {
-        $flat = [];
+        $distinct = new DistinctShapes(static fn(Shape $a, Shape $b) => $a->equals($b));
         $optional = false;
         $unknown = false;
 
@@ -42,11 +42,17 @@ final class UnionShape extends Shape
             foreach ($member instanceof self ? $member->members : [$member] as $candidate) {
                 if ($candidate instanceof UnknownShape) {
                     $unknown = true;
-                } elseif (!$candidate instanceof NeverShape && !self::contains($flat, $candidate)) {
-                    $flat[] = $candidate;
+
+                    continue;
+                }
+
+                if (!$candidate instanceof NeverShape) {
+                    $distinct->add($candidate);
                 }
             }
         }
+
+        $flat = $distinct->all();
 
         $base = match (true) {
             $unknown => new UnknownShape(),
@@ -56,14 +62,6 @@ final class UnionShape extends Shape
         };
 
         return $optional ? new OptionShape($base) : $base;
-    }
-
-    /**
-     * @param list<Shape> $shapes
-     */
-    private static function contains(array $shapes, Shape $candidate): bool
-    {
-        return array_any($shapes, fn(Shape $shape) => $shape->equals($candidate));
     }
 
     public function equals(Shape $other): bool

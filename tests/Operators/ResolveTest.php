@@ -97,6 +97,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom\\Analysis')]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class ResolveTest extends TestCase
 {
     private static function core(): BinaryOperatorResolver

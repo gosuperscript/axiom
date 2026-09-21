@@ -150,6 +150,7 @@ use function Superscript\Monads\Result\Ok;
 #[UsesClass(\Superscript\Axiom\ReferencePath::class)]
 #[UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class TypeInferenceTest extends TestCase
 {
     private static function inference(?LiteralTypeRegistry $literals = null, ?Dialect $dialect = null): TypeInference

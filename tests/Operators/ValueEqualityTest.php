@@ -58,6 +58,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\UnionShape::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\RecordProperty::class)]
 #[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\RecordPropertyShape::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\Shapes\DistinctShapes::class)]
 final class ValueEqualityTest extends TestCase
 {
     #[Test]

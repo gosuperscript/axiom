@@ -8,8 +8,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\DistinctShapes;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
@@ -23,6 +25,7 @@ use Superscript\Axiom\Types\Shapes\UnionShape;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
 
 #[CoversClass(BooleanShape::class)]
+#[CoversClass(DistinctShapes::class)]
 #[CoversClass(NumberShape::class)]
 #[CoversClass(StringShape::class)]
 #[CoversClass(LiteralShape::class)]
@@ -252,6 +255,119 @@ final class ShapeTest extends TestCase
         );
 
         $this->assertTrue($shape->equals(UnionShape::of(new LiteralShape('a'), new LiteralShape('c'))));
+    }
+
+    #[Test]
+    public function literal_deduplication_is_value_equality_not_key_identity(): void
+    {
+        // 5 and 5.0 denote the same Number and merge; the string '5', the
+        // boolean true and the number 1 all stay distinct from one another.
+        $numbers = UnionShape::of(new LiteralShape(5), new LiteralShape(5.0), new LiteralShape('5'));
+        $this->assertTrue($numbers->equals(UnionShape::of(new LiteralShape(5), new LiteralShape('5'))));
+
+        $mixed = UnionShape::of(new LiteralShape(true), new LiteralShape(1), new LiteralShape(false));
+        $this->assertInstanceOf(UnionShape::class, $mixed);
+        $this->assertCount(3, $mixed->members);
+
+        // Both zeroes are one value (-0.0 equals 0.0), whatever their prints.
+        $zeroes = UnionShape::of(new LiteralShape(0.0), new LiteralShape(-0.0));
+        $this->assertInstanceOf(LiteralShape::class, $zeroes);
+
+        // Two large integers can share a float image (their bucket) while
+        // remaining distinct values; the bucket must not merge them.
+        $large = UnionShape::of(new LiteralShape(9007199254740993), new LiteralShape(9007199254740992));
+        $this->assertInstanceOf(UnionShape::class, $large);
+        $this->assertCount(2, $large->members);
+
+        // NAN equals nothing, itself included: duplicates stay.
+        $nan = UnionShape::of(new LiteralShape(NAN), new LiteralShape(NAN));
+        $this->assertInstanceOf(UnionShape::class, $nan);
+        $this->assertCount(2, $nan->members);
+    }
+
+    #[Test]
+    public function literal_deduplication_matches_a_pairwise_oracle(): void
+    {
+        // The index is an optimization of pairwise deduplication, so its
+        // result must be indistinguishable from the naive scan — the spec —
+        // over values chosen to stress every key corner at once.
+        $shapes = array_map(
+            static fn(bool|int|float|string $value): LiteralShape => new LiteralShape($value),
+            self::hostileLiteralValues(),
+        );
+
+        $oracle = [];
+
+        foreach ($shapes as $shape) {
+            if (!array_any($oracle, static fn(LiteralShape $kept): bool => $kept->equals($shape))) {
+                $oracle[] = $shape;
+            }
+        }
+
+        $union = UnionShape::of(...$shapes);
+
+        $this->assertInstanceOf(UnionShape::class, $union);
+        $this->assertSame($oracle, $union->members);
+    }
+
+    #[Test]
+    public function value_keys_stay_in_lockstep_with_value_equality(): void
+    {
+        // The law the index rests on: equal literals must share a key, or a
+        // bucket hides candidates from itself and equal members stop merging.
+        // This test is the alarm for that invariant — a future change to
+        // ValueEquality that is not mirrored in LiteralShape::valueKey()
+        // turns it red, provided the pool exercises the changed rule.
+        $values = self::hostileLiteralValues();
+
+        foreach ($values as $a) {
+            foreach ($values as $b) {
+                if (!ValueEquality::equals($a, $b)) {
+                    continue;
+                }
+
+                $this->assertSame(
+                    new LiteralShape($a)->valueKey(),
+                    new LiteralShape($b)->valueKey(),
+                    sprintf(
+                        'ValueEquality calls %s and %s equal but their valueKeys differ; LiteralShape::valueKey() must change in lockstep with ValueEquality.',
+                        var_export($a, true),
+                        var_export($b, true),
+                    ),
+                );
+            }
+        }
+    }
+
+    /**
+     * Literal values picked to collide or nearly collide under every key
+     * rule, plus sentinels for plausible future equality changes (letter
+     * case, surrounding whitespace, numeric strings, unicode composition).
+     *
+     * @return list<bool|int|float|string>
+     */
+    private static function hostileLiteralValues(): array
+    {
+        return [
+            true, false,
+            0, 1, -1, 5, 9007199254740992, 9007199254740993, PHP_INT_MAX,
+            0.0, -0.0, 1.0, 5.0, 0.1, 0.3, 0.1 + 0.2, 1e308, INF, -INF, NAN,
+            9007199254740992.0,
+            '', '0', '-0', '1', '5', '0.0', 'a', 'A', ' a', 'a ', 'true', "\u{00E9}", "e\u{0301}",
+        ];
+    }
+
+    #[Test]
+    public function deduplication_keeps_literals_and_their_base_apart(): void
+    {
+        // A literal is substitutable for its base but never equal to it:
+        // 'a' | String keeps both members, in first-seen order.
+        $shape = UnionShape::of(new LiteralShape('a'), new StringShape(), new LiteralShape('a'), new StringShape());
+
+        $this->assertInstanceOf(UnionShape::class, $shape);
+        $this->assertCount(2, $shape->members);
+        $this->assertInstanceOf(LiteralShape::class, $shape->members[0]);
+        $this->assertInstanceOf(StringShape::class, $shape->members[1]);
     }
 
     #[Test]

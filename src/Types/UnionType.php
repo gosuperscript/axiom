@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Types;
 
 use SebastianBergmann\Exporter\Exporter;
 use Superscript\Axiom\Exceptions\TransformValueException;
+use Superscript\Axiom\Types\Shapes\DistinctShapes;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\UnionShape;
@@ -38,18 +39,18 @@ final readonly class UnionType implements Type
      * The union join, deduplicated by equivalence: agreeing alternatives
      * collapse to the single type, so `join(Number, Number)` is Number and
      * `join('a', 'b')` keeps its literal precision as 'a' | 'b'. The join
-     * of nothing is Never, the union identity.
+     * of nothing is Never, the union identity. Each type's shape is judged
+     * once ({@see DistinctShapes}), so an enum-sized join stays linear.
      */
     public static function join(Type ...$types): Type
     {
         $unique = [];
+        $distinct = new DistinctShapes(static fn(Shape $a, Shape $b) => TypeRelations::shapesEquivalent($a, $b)->isOk());
 
         foreach ($types as $type) {
-            if ($type->shape() instanceof NeverShape) {
-                continue;
-            }
+            $shape = $type->shape();
 
-            if (!array_any($unique, fn(Type $existing) => TypeRelations::areEquivalent($existing, $type)->isOk())) {
+            if (!$shape instanceof NeverShape && $distinct->add($shape)) {
                 $unique[] = $type;
             }
         }
