@@ -42,11 +42,7 @@ final class UnionShape extends Shape
             foreach ($member instanceof self ? $member->members : [$member] as $candidate) {
                 if ($candidate instanceof UnknownShape) {
                     $unknown = true;
-
-                    continue;
-                }
-
-                if (!$candidate instanceof NeverShape) {
+                } elseif (!$candidate instanceof NeverShape) {
                     $distinct->add($candidate);
                 }
             }

@@ -205,6 +205,33 @@ final class ShapeTest extends TestCase
     }
 
     #[Test]
+    public function value_key_is_pinned_to_its_type_prefixed_format(): void
+    {
+        // valueKey() is public and documented on its own terms: pin its
+        // exact output so a format regression is caught here, directly,
+        // rather than surfacing three calls away as a stray bucket
+        // collision inside DistinctShapes.
+        $true = new LiteralShape(true);
+        $false = new LiteralShape(false);
+        $shop = new LiteralShape('shop');
+        $five = new LiteralShape(5);
+        $fiveFloat = new LiteralShape(5.0);
+        $zero = new LiteralShape(0.0);
+        $negativeZero = new LiteralShape(-0.0);
+
+        $this->assertSame('b:1', $true->valueKey());
+        $this->assertSame('b:0', $false->valueKey());
+        $this->assertSame('s:shop', $shop->valueKey());
+        $this->assertSame('n:' . var_export(5.0, true), $five->valueKey());
+
+        // 5 and 5.0 denote the same Number and must land in the same
+        // bucket; both zeroes are one value, whatever their prints.
+        $this->assertSame($five->valueKey(), $fiveFloat->valueKey());
+        $this->assertSame('n:0', $zero->valueKey());
+        $this->assertSame($zero->valueKey(), $negativeZero->valueKey());
+    }
+
+    #[Test]
     public function option_nesting_collapses_on_construction(): void
     {
         $nested = new OptionShape(new OptionShape(new NumberShape()));
