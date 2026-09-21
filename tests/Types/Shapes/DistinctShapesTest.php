@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Operators\ValueEquality;
 use Superscript\Axiom\Types\Shapes\DistinctShapes;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\Shape;
@@ -25,6 +26,7 @@ use Superscript\Axiom\Types\Shapes\StringShape;
 #[CoversClass(DistinctShapes::class)]
 #[UsesClass(LiteralShape::class)]
 #[UsesClass(StringShape::class)]
+#[UsesClass(ValueEquality::class)]
 final class DistinctShapesTest extends TestCase
 {
     #[Test]
