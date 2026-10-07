@@ -89,6 +89,18 @@ final class TypeDescriberTest extends TestCase
         ];
 
         yield [UnionShape::of(new LiteralShape('shop'), new LiteralShape('office')), "'shop' | 'office'"];
+        yield [
+            UnionShape::of(...array_map(static fn(int $n): Shape => new LiteralShape("k{$n}"), range(1, 11))),
+            "'k1' | 'k2' | 'k3' | 'k4' | 'k5' | 'k6' | 'k7' | 'k8' | 'k9' | 'k10' | 'k11'",
+        ];
+        yield [
+            UnionShape::of(...array_map(static fn(int $n): Shape => new LiteralShape("k{$n}"), range(1, 2000))),
+            "'k1' | 'k2' | 'k3' | 'k4' | 'k5' | 'k6' | 'k7' | 'k8' | 'k9' | 'k10' | … 1990 more",
+        ];
+        yield [
+            new OpaqueShape('code', ['value' => UnionShape::of(...array_map(static fn(int $n): Shape => new LiteralShape("k{$n}"), range(1, 12)))]),
+            "code<value: 'k1' | 'k2' | 'k3' | 'k4' | 'k5' | 'k6' | 'k7' | 'k8' | 'k9' | 'k10' | … 2 more>",
+        ];
 
         yield [new ListShape(new NumberShape()), 'List<Number>'];
         yield [new ListShape(new NumberShape(), 2, 2), 'List<Number, 2>'];

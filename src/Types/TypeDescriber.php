@@ -27,6 +27,14 @@ use function Psl\Vec\map;
  */
 final class TypeDescriber
 {
+    /**
+     * The most union members a description spells out. A closed set loaded from
+     * data can run to thousands of literals, and spelled in full it turns every
+     * diagnostic naming it into a page of them; past this many, the rest are
+     * counted rather than listed.
+     */
+    public const int UnionMembersSpelled = 10;
+
     /** @param class-string<Type> $type */
     public static function describeClass(string $type): string
     {
@@ -49,7 +57,7 @@ final class TypeDescriber
             $shape instanceof OpaqueShape => self::opaque($shape),
             $shape instanceof LiteralShape => self::literal($shape->value),
             $shape instanceof OptionShape => self::option($shape),
-            $shape instanceof UnionShape => implode(' | ', map($shape->members, self::describeShape(...))),
+            $shape instanceof UnionShape => self::union($shape),
             $shape instanceof ListShape => self::list($shape),
             $shape instanceof DictShape => sprintf('Dict<%s>', self::describeShape($shape->value)),
             $shape instanceof RecordShape => self::record($shape),
@@ -68,6 +76,19 @@ final class TypeDescriber
         }
 
         return (string) $value;
+    }
+
+    /**
+     * Hiding a single member saves nothing over spelling it, so the count only
+     * replaces two or more.
+     */
+    private static function union(UnionShape $shape): string
+    {
+        $hidden = count($shape->members) - self::UnionMembersSpelled;
+        $spelled = $hidden > 1 ? array_slice($shape->members, 0, self::UnionMembersSpelled) : $shape->members;
+        $members = map($spelled, self::describeShape(...));
+
+        return implode(' | ', $hidden > 1 ? [...$members, sprintf('… %d more', $hidden)] : $members);
     }
 
     private static function option(OptionShape $shape): string
