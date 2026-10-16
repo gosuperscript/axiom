@@ -16,6 +16,11 @@ use Closure;
  * is class-strict, and a literal's only two-way assignability is an equal
  * literal, so both judgments in use agree the groups are disjoint.
  *
+ * Two spellings of one number — 3 and 3.0 — are the same literal, and the
+ * set keeps the decimal one whichever arrives first: the merged member
+ * stands for both values, and the int spelling would let it pass for an
+ * Integer while it can hold a float.
+ *
  * @internal
  */
 final class DistinctShapes
@@ -42,13 +47,24 @@ final class DistinctShapes
         private readonly Closure $same,
     ) {}
 
-    /** Enters the shape unless one the judgment calls the same is already in; answers whether it entered. */
+    /**
+     * Enters the shape unless one the judgment calls the same is already in,
+     * in which case a decimal literal displaces it in place; answers whether
+     * the shape entered as a new member.
+     */
     public function add(Shape $shape): bool
     {
         $key = $shape instanceof LiteralShape ? $shape->valueKey() : null;
         $candidates = $key === null ? $this->others : $this->literals[$key] ?? [];
+        $same = array_find($candidates, fn(int $index) => ($this->same)($this->shapes[$index], $shape));
 
-        if (array_any($candidates, fn(int $index) => ($this->same)($this->shapes[$index], $shape))) {
+        if ($same !== null) {
+            if ($shape instanceof LiteralShape && is_float($shape->value)) {
+                /** @var list<Shape> $displaced the index is one of this list's own */
+                $displaced = array_replace($this->shapes, [$same => $shape]);
+                $this->shapes = $displaced;
+            }
+
             return false;
         }
 

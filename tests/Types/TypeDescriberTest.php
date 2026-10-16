@@ -62,6 +62,9 @@ final class TypeDescriberTest extends TestCase
     {
         yield [new BooleanShape(), 'Boolean'];
         yield [new NumberShape(), 'Number'];
+        yield [new NumberShape(integer: true), 'Integer'];
+        yield [new OptionShape(new NumberShape(integer: true)), 'Integer?'];
+        yield [UnionShape::of(new NumberShape(integer: true), new NumberShape()), 'Integer | Number'];
         yield [new StringShape(), 'String'];
         yield [new UnknownShape(), 'Unknown'];
         yield [new NeverShape(), 'Never'];
@@ -81,6 +84,10 @@ final class TypeDescriberTest extends TestCase
         yield [new LiteralShape(false), 'false'];
         yield [new LiteralShape(5), '5'];
         yield [new LiteralShape(5.5), '5.5'];
+        yield 'a whole float keeps its decimal point' => [new LiteralShape(3.0), '3.0'];
+        yield 'a negative whole float keeps its decimal point' => [new LiteralShape(-2.0), '-2.0'];
+        yield 'a negative int has none' => [new LiteralShape(-2), '-2'];
+        yield 'an exponent float is printed as PHP prints it' => [new LiteralShape(1e20), '1.0E+20'];
 
         yield [new OptionShape(new NumberShape()), 'Number?'];
         yield [

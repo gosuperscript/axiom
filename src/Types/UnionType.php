@@ -38,22 +38,27 @@ final readonly class UnionType implements Type
     /**
      * The union join, deduplicated by equivalence: agreeing alternatives
      * collapse to the single type, so `join(Number, Number)` is Number and
-     * `join('a', 'b')` keeps its literal precision as 'a' | 'b'. The join
-     * of nothing is Never, the union identity. Each type's shape is judged
-     * once ({@see DistinctShapes}), so an enum-sized join stays linear.
+     * `join('a', 'b')` keeps its literal precision as 'a' | 'b'. Of two
+     * spellings of one number the decimal survives — `join(3, 3.0)` is 3.0,
+     * never an Integer-passing 3. The join of nothing is Never, the union
+     * identity. Each type's shape is judged once ({@see DistinctShapes}), so
+     * an enum-sized join stays linear.
      */
     public static function join(Type ...$types): Type
     {
-        $unique = [];
+        $byShape = [];
         $distinct = new DistinctShapes(static fn(Shape $a, Shape $b) => TypeRelations::shapesEquivalent($a, $b)->isOk());
 
         foreach ($types as $type) {
             $shape = $type->shape();
 
-            if (!$shape instanceof NeverShape && $distinct->add($shape)) {
-                $unique[] = $type;
+            if (!$shape instanceof NeverShape) {
+                $byShape[spl_object_id($shape)] = $type;
+                $distinct->add($shape);
             }
         }
+
+        $unique = map($distinct->all(), static fn(Shape $shape) => $byShape[spl_object_id($shape)]);
 
         return match (count($unique)) {
             0 => new NeverType(),

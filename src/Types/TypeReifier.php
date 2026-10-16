@@ -34,7 +34,7 @@ final class TypeReifier
     {
         return match (true) {
             $shape instanceof BooleanShape => new BooleanType(),
-            $shape instanceof NumberShape => new NumberType(),
+            $shape instanceof NumberShape => $shape->integer ? new IntegerType() : new NumberType(),
             $shape instanceof StringShape => new StringType(),
             $shape instanceof LiteralShape => new LiteralType($shape->value),
             $shape instanceof OptionShape => new OptionType(self::reify($shape->inner)),

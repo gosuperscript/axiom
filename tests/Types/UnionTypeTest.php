@@ -116,10 +116,22 @@ final class UnionTypeTest extends TestCase
     }
 
     #[Test]
+    public function joining_two_spellings_of_one_number_keeps_the_decimal_spelling_in_either_order(): void
+    {
+        foreach ([[new LiteralType(5), new LiteralType(5.0)], [new LiteralType(5.0), new LiteralType(5)]] as $spellings) {
+            $joined = UnionType::join(...$spellings, ...[new LiteralType('5')]);
+
+            $this->assertInstanceOf(UnionType::class, $joined);
+            $this->assertCount(2, $joined->members);
+            $this->assertInstanceOf(LiteralType::class, $joined->members[0]);
+            $this->assertSame(5.0, $joined->members[0]->value);
+        }
+    }
+
+    #[Test]
     public function join_collapses_by_value_equality_and_keeps_the_first_agreeing_type(): void
     {
-        // 5 and 5.0 denote the same Number: the join keeps the first spelling.
-        $numeric = UnionType::join(new LiteralType(5), new LiteralType(5.0), new LiteralType('5'));
+        $numeric = UnionType::join(new LiteralType(5), new LiteralType('5'), new LiteralType(5));
         $this->assertInstanceOf(UnionType::class, $numeric);
         $this->assertCount(2, $numeric->members);
         $this->assertInstanceOf(LiteralType::class, $numeric->members[0]);

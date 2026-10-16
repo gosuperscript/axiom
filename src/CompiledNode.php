@@ -13,6 +13,8 @@ use Superscript\Monads\Option\Option;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
+use function Superscript\Monads\Result\Ok;
+
 /**
  * A compiled {@see Source} node: its type and its evaluation, one value —
  * the source-level twin of {@see Operators\ResolvedOperation}. The compiler
@@ -150,26 +152,37 @@ final class CompiledNode
     }
 
     /**
-     * The same node under a narrower type claim. Everything else — the
-     * evaluation, the source identity, the recorded compilation, the
-     * references, and with them the observed lifecycle — stays the node's
-     * own: a retyped node is one node, one Entered/Exited pair, so
-     * narrowing is invisible to tracing. The claim is the caller's
-     * obligation; match-arm narrowing makes it sound by guarding the arm
-     * with a pattern that admits exactly the values the narrower type
-     * certifies.
+     * The same node under a narrower type claim, delivering each value as
+     * that type's assert() admits it. Everything else — the source identity,
+     * the recorded compilation, the references, and with them the observed
+     * lifecycle — stays the node's own: a narrowed node is one node, one
+     * Entered/Exited pair, so narrowing is invisible to tracing. The claim
+     * is the caller's obligation; match-arm narrowing makes it sound by
+     * guarding the arm with that same assert(). Reading the admitted value
+     * rather than the raw one keeps the claim honest where assert()
+     * normalizes: 3.0 admitted by the literal type 3 is read as the int 3.
      *
      * A node that failed has no type to re-claim and answers with itself.
      *
      * @internal
      */
-    public function retyped(Type $returns): self
+    public function narrowed(Type $returns): self
     {
-        if ($this->failed) {
+        $evaluation = $this->evaluation;
+
+        if ($evaluation === null) {
             return $this;
         }
 
-        return new self($returns, $this->evaluation, $this->sourceType, $this->compilation, $this->references);
+        return new self(
+            $returns,
+            static fn(Runtime $runtime): Result => $evaluation($runtime)->andThen(
+                static fn(Option $value): Result => $value->mapOr(Ok($value), $returns->assert(...)),
+            ),
+            $this->sourceType,
+            $this->compilation,
+            $this->references,
+        );
     }
 
     /** @internal Compilation infrastructure and Program consume this metadata. */

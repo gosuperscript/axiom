@@ -32,9 +32,12 @@ use Superscript\Axiom\Sources\MatchExpression;
 use Superscript\Axiom\Sources\MemberAccessSource;
 use Superscript\Axiom\Sources\StaticSource;
 use Superscript\Axiom\Sources\SymbolSource;
+use Superscript\Axiom\Sources\TypePattern;
 use Superscript\Axiom\Sources\UnaryExpression;
 use Superscript\Axiom\Sources\WildcardPattern;
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\IntegerType;
+use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\Optional;
 use Superscript\Axiom\Types\OptionType;
@@ -42,6 +45,7 @@ use Superscript\Axiom\Types\RecordType;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
+use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeMismatch;
 use Superscript\Axiom\Types\UnionType;
 
@@ -122,6 +126,11 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\Types\TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(IntegerType::class)]
+#[UsesClass(TypePattern::class)]
+#[UsesClass(\Superscript\Axiom\Types\Narrowing::class)]
+#[UsesClass(\Superscript\Axiom\Operators\DeadOperation::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\ShapeDomain::class)]
 #[CoversClass(\Superscript\Axiom\Types\DictType::class)]
 #[CoversClass(\Superscript\Axiom\Types\ListType::class)]
 #[UsesClass(OptionType::class)]
@@ -900,5 +909,208 @@ final class TypedExpressionTest extends TestCase
         ))->compile()->unwrap();
 
         $this->assertSame(5, $program(['root' => ['deep' => ['key' => '5']]])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_integer_input_flows_into_number_arithmetic_and_yields_a_number(): void
+    {
+        // employees * 70.5
+        $expression = new Expression(
+            source: new InfixExpression(new ReferencePath('employees'), '*', new StaticSource(70.5)),
+            declarations: ['employees' => new IntegerType()],
+        );
+
+        $this->assertSame('Number', TypeDescriber::describe($expression->infer()->unwrap()));
+        $this->assertSame(211.5, $expression->compile()->unwrap()(['employees' => '3'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function integer_arithmetic_yields_a_number(): void
+    {
+        // storeys + premises, storeys * rate
+        $declarations = ['storeys' => new IntegerType(), 'premises' => new IntegerType(), 'rate' => new NumberType()];
+        $sum = new Expression(new InfixExpression(new ReferencePath('storeys'), '+', new ReferencePath('premises')), declarations: $declarations);
+        $product = new Expression(new InfixExpression(new ReferencePath('storeys'), '*', new ReferencePath('rate')), declarations: $declarations);
+
+        $this->assertSame('Number', TypeDescriber::describe($sum->infer()->unwrap()));
+        $this->assertSame('Number', TypeDescriber::describe($product->infer()->unwrap()));
+        $this->assertSame(5, $sum->compile()->unwrap()(['storeys' => 2, 'premises' => 3])->unwrap()->unwrap());
+        $this->assertSame(3.0, $product->compile()->unwrap()(['storeys' => 2, 'rate' => 1.5])->unwrap()->unwrap());
+
+        $refused = $sum->check(new IntegerType());
+
+        $this->assertStringContainsString('Number is not assignable to Integer: a Number may be fractional', $refused->unwrapErr()->describe());
+    }
+
+    #[Test]
+    public function an_integer_compares_with_number_literals(): void
+    {
+        $declarations = ['people' => new IntegerType()];
+        $atLeastFour = (new Expression(new InfixExpression(new ReferencePath('people'), '>=', new StaticSource(4)), declarations: $declarations))->compile()->unwrap();
+        $two = (new Expression(new InfixExpression(new ReferencePath('people'), '==', new StaticSource(2)), declarations: $declarations))->compile()->unwrap();
+
+        $this->assertTrue($atLeastFour(['people' => 4])->unwrap()->unwrap());
+        $this->assertFalse($atLeastFour(['people' => 3])->unwrap()->unwrap());
+        $this->assertTrue($two(['people' => 2])->unwrap()->unwrap());
+        $this->assertFalse($two(['people' => 3])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function comparing_an_integer_with_a_decimal_for_equality_can_never_hold(): void
+    {
+        foreach (['2.5' => 2.5, '3.0' => 3.0] as $described => $decimal) {
+            $result = (new Expression(
+                new InfixExpression(new ReferencePath('people'), '==', new StaticSource($decimal)),
+                declarations: ['people' => new IntegerType()],
+            ))->compile();
+
+            $this->assertStringContainsString(
+                "[==] between Integer and {$described} is constant: it can never hold.",
+                $result->unwrapErr()->describe(),
+            );
+        }
+    }
+
+    #[Test]
+    public function a_match_over_an_integer_selects_by_literal(): void
+    {
+        $program = (new Expression(
+            new MatchExpression(new ReferencePath('people'), [
+                new MatchArm(new LiteralPattern(1), new StaticSource('one')),
+                new MatchArm(new WildcardPattern(), new StaticSource('many')),
+            ]),
+            declarations: ['people' => new IntegerType()],
+        ))->compile()->unwrap();
+
+        $this->assertSame('one', $program(['people' => 1])->unwrap()->unwrap());
+        $this->assertSame('many', $program(['people' => '4'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function the_boundary_admits_integer_spellings_and_refuses_decimals_for_an_integer_input(): void
+    {
+        $program = (new Expression(new ReferencePath('people'), declarations: ['people' => new IntegerType()]))->compile()->unwrap();
+
+        $this->assertSame(3, $program(['people' => '3'])->unwrap()->unwrap());
+
+        foreach (['2.5', '3.0', 3.0] as $decimal) {
+            $failure = $program(['people' => $decimal])->unwrapErr();
+
+            $this->assertInstanceOf(InadmissibleBinding::class, $failure);
+            $this->assertStringContainsString('Unable to transform into [integer]', $failure->getMessage());
+        }
+    }
+
+    #[Test]
+    public function a_match_joining_an_int_and_its_decimal_spelling_is_typed_by_the_decimal_and_is_not_an_integer(): void
+    {
+        $expression = new Expression(
+            new MatchExpression(new ReferencePath('x'), [
+                new MatchArm(new LiteralPattern(1), new StaticSource(3)),
+                new MatchArm(new WildcardPattern(), new StaticSource(3.0)),
+            ]),
+            declarations: ['x' => new NumberType()],
+        );
+
+        $this->assertSame('3.0', TypeDescriber::describe($expression->infer()->unwrap()));
+        $this->assertStringContainsString(
+            '3.0 is not assignable to Integer: an Integer slot admits only numbers written as integers',
+            $expression->check(new IntegerType())->unwrapErr()->describe(),
+        );
+    }
+
+    #[Test]
+    public function an_input_typed_by_int_literals_delivers_the_int_whatever_spelling_is_bound(): void
+    {
+        $expression = new Expression(
+            new ReferencePath('storeys'),
+            declarations: ['storeys' => new UnionType(new LiteralType(1), new LiteralType(3))],
+        );
+
+        $this->assertTrue($expression->check(new IntegerType())->isOk());
+        $this->assertSame(3, $expression->compile()->unwrap()(['storeys' => '3.0'])->unwrap()->unwrap());
+        $this->assertSame(3, $expression->compile()->unwrap()(['storeys' => 3.0])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_reference_narrowed_by_an_int_literal_pattern_reads_the_int_the_pattern_admitted(): void
+    {
+        $expression = new Expression(
+            new MatchExpression(new ReferencePath('x'), [
+                new MatchArm(new TypePattern(new LiteralType(3)), new ReferencePath('x')),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ]),
+            declarations: ['x' => new NumberType()],
+        );
+
+        $this->assertSame('3 | 0', TypeDescriber::describe($expression->infer()->unwrap()));
+        $this->assertTrue($expression->check(new IntegerType())->isOk());
+        $this->assertSame(3, $expression->compile()->unwrap()(['x' => 3.0])->unwrap()->unwrap());
+        $this->assertSame(0, $expression->compile()->unwrap()(['x' => 2.0])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_structural_path_narrowed_by_an_int_literal_pattern_reads_the_int_the_pattern_admitted(): void
+    {
+        $storeys = new ReferencePath('building', 'storeys');
+        $expression = new Expression(
+            new MatchExpression($storeys, [
+                new MatchArm(new TypePattern(new LiteralType(4)), $storeys),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ]),
+            declarations: ['building' => new RecordType(['storeys' => new NumberType()])],
+        );
+
+        $this->assertSame(4, $expression->compile()->unwrap()(['building' => ['storeys' => 4.0]])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_nested_arm_reads_the_int_its_enclosing_int_literal_pattern_admitted(): void
+    {
+        $x = new ReferencePath('x');
+        $expression = new Expression(
+            new MatchExpression($x, [
+                new MatchArm(new TypePattern(new LiteralType(3)), new MatchExpression($x, [
+                    new MatchArm(new LiteralPattern(3), $x),
+                    new MatchArm(new WildcardPattern(), new StaticSource(0)),
+                ])),
+                new MatchArm(new WildcardPattern(), new StaticSource(0)),
+            ]),
+            declarations: ['x' => new NumberType()],
+        );
+
+        $this->assertSame(3, $expression->compile()->unwrap()(['x' => 3.0])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function a_reference_narrowed_by_an_integer_pattern_reads_its_int_and_leaves_decimals_to_the_wildcard(): void
+    {
+        $expression = new Expression(
+            new MatchExpression(new ReferencePath('x'), [
+                new MatchArm(new TypePattern(new IntegerType()), new ReferencePath('x')),
+                new MatchArm(new WildcardPattern(), new StaticSource(-1)),
+            ]),
+            declarations: ['x' => new NumberType()],
+        );
+
+        $program = $expression->compile()->unwrap();
+
+        $this->assertTrue($expression->check(new IntegerType())->isOk());
+        $this->assertSame(3, $program(['x' => 3])->unwrap()->unwrap());
+        $this->assertSame(-1, $program(['x' => 3.0])->unwrap()->unwrap());
+        $this->assertSame(-1, $program(['x' => 2.5])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_int_literal_satisfies_an_integer_and_a_decimal_does_not(): void
+    {
+        $this->assertTrue((new Expression(new StaticSource(3)))->check(new IntegerType())->isOk());
+
+        foreach (['3.0' => 3.0, '2.5' => 2.5] as $described => $decimal) {
+            $this->assertStringContainsString(
+                "{$described} is not assignable to Integer: an Integer slot admits only numbers written as integers",
+                (new Expression(new StaticSource($decimal)))->check(new IntegerType())->unwrapErr()->describe(),
+            );
+        }
     }
 }

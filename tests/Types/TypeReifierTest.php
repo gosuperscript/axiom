@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\DictType;
+use Superscript\Axiom\Types\IntegerType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NeverType;
@@ -40,6 +41,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[CoversClass(TypeReifier::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(DictType::class)]
+#[UsesClass(IntegerType::class)]
 #[UsesClass(ListType::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NeverType::class)]
@@ -83,6 +85,8 @@ final class TypeReifierTest extends TestCase
     {
         yield 'Boolean' => [new BooleanShape()];
         yield 'Number' => [new NumberShape()];
+        yield 'Integer' => [new NumberShape(integer: true)];
+        yield 'option of Integer' => [new OptionShape(new NumberShape(integer: true))];
         yield 'String' => [new StringShape()];
         yield 'literal' => [new LiteralShape('shop')];
         yield 'option' => [new OptionShape(new NumberShape())];
@@ -95,6 +99,14 @@ final class TypeReifierTest extends TestCase
         yield 'never' => [new NeverShape()];
         yield 'opaque' => [new OpaqueShape('ClaimId')];
         yield 'parameterized opaque' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')])];
+    }
+
+    #[Test]
+    public function the_integer_refinement_reifies_as_integer_and_the_unrefined_shape_as_number(): void
+    {
+        $this->assertInstanceOf(IntegerType::class, TypeReifier::reify(new NumberShape(integer: true)));
+        $this->assertNotInstanceOf(IntegerType::class, TypeReifier::reify(new NumberShape()));
+        $this->assertInstanceOf(NumberType::class, TypeReifier::reify(new NumberShape()));
     }
 
     #[Test]
