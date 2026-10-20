@@ -8,6 +8,7 @@ use Superscript\Axiom\Types\Shapes\DictShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
+use Superscript\Axiom\Types\Shapes\NumberShape;
 use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\RecordShape;
@@ -33,6 +34,9 @@ use function Superscript\Monads\Result\Ok;
  *   overlaps everything — an unknown value can never be ruled out.
  * - A base type accepts its literals ('shop' fits a String slot) and
  *   unions of them; a literal never accepts its base.
+ * - Integer is a Number: it fits a Number slot, a Number never fits an
+ *   Integer slot, and a number literal fits an Integer slot exactly when
+ *   it is written as an integer (3 does; 3.0 and 2.5 do not).
  * - Option<T> holds null or a T. So T fits an Option<T> slot,
  *   Option<Option<T>> collapses to Option<T>, and the null literal
  *   (Option<Never>) fits every option slot.
@@ -188,9 +192,17 @@ final class TypeRelations
         }
 
         if ($source instanceof LiteralShape) {
-            return $source->base->equals($target)
-                ? Ok(true)
-                : self::mismatch($source, $target, 'a literal is substitutable only for its own base');
+            return match (true) {
+                self::literalInhabits($source, $target) => Ok(true),
+                $target instanceof NumberShape && $source->base instanceof NumberShape => self::mismatch($source, $target, 'an Integer slot admits only numbers written as integers'),
+                default => self::mismatch($source, $target, 'a literal is substitutable only for its own base'),
+            };
+        }
+
+        if ($source instanceof NumberShape && $target instanceof NumberShape) {
+            return $target->integer
+                ? self::mismatch($source, $target, 'a Number may be fractional, and an Integer slot admits only integers')
+                : Ok(true);
         }
 
         if ($source instanceof ListShape && $target instanceof ListShape) {
@@ -323,7 +335,13 @@ final class TypeRelations
         if ($a instanceof LiteralShape || $b instanceof LiteralShape) {
             [$literal, $other] = $a instanceof LiteralShape ? [$a, $b] : [$b, $a];
 
-            return $literal->base->equals($other) ? Ok(true) : Err(self::unsatisfiable($a, $b, $dispatch));
+            return self::literalInhabits($literal, $other) ? Ok(true) : Err(self::unsatisfiable($a, $b, $dispatch));
+        }
+
+        // Every Integer is a Number, so the two share values and an
+        // Integer-typed operand reaches both slots.
+        if ($a instanceof NumberShape && $b instanceof NumberShape) {
+            return Ok(true);
         }
 
         if ($a instanceof ListShape && $b instanceof ListShape) {
@@ -367,6 +385,23 @@ final class TypeRelations
         }
 
         return Err(self::unsatisfiable($a, $b, $dispatch));
+    }
+
+    /**
+     * Is the literal's value one of $base's values? A literal inhabits its
+     * own base, and an int literal inhabits Integer too. The decision reads
+     * the value the literal carries, never its identity: 3.0 equals 3 as a
+     * literal, yet it is written as a decimal and inhabits only Number.
+     */
+    private static function literalInhabits(LiteralShape $literal, Shape $base): bool
+    {
+        if ($literal->base->equals($base)) {
+            return true;
+        }
+
+        $value = $literal->value;
+
+        return $base instanceof NumberShape && is_int($value);
     }
 
     private static function noCommonOperandType(Shape $a, Shape $b): TypeMismatch

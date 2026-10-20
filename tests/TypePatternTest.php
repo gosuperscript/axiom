@@ -30,6 +30,7 @@ use Superscript\Axiom\Tests\Fixtures\MoneyExtension;
 use Superscript\Axiom\Tests\Fixtures\MoneyType;
 use Superscript\Axiom\Tests\Fixtures\SpyObserver;
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\IntegerType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\NumberType;
@@ -123,6 +124,7 @@ use Superscript\Axiom\Types\UnionType;
 #[UsesClass(\Superscript\Axiom\SourceCompilers\FieldAccess::class)]
 #[UsesClass(\Superscript\Axiom\Types\NeverType::class)]
 #[UsesClass(\Superscript\Axiom\Types\NumberType::class)]
+#[UsesClass(IntegerType::class)]
 #[UsesClass(\Superscript\Axiom\Types\OptionType::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NeverShape::class)]
 #[UsesClass(\Superscript\Axiom\Types\Shapes\OptionShape::class)]
@@ -181,6 +183,26 @@ final class TypePatternTest extends TestCase
         $this->assertFalse($program(['limit' => 50_000])->unwrap()->unwrap());
         $this->assertFalse($program(['limit' => 'unanswered'])->unwrap()->unwrap());
         $this->assertFalse($program(['limit' => 'novalue'])->unwrap()->unwrap());
+    }
+
+    #[Test]
+    public function an_integer_pattern_narrows_a_number_and_needs_a_wildcard_for_the_fractions(): void
+    {
+        $match = static fn(array $arms): MatchExpression => new MatchExpression(new ReferencePath('limit'), $arms);
+        $narrowed = new MatchArm(new TypePattern(new IntegerType()), new ReferencePath('limit'));
+
+        $expression = new Expression(
+            $match([$narrowed, new MatchArm(new WildcardPattern(), new StaticSource(0))]),
+            declarations: ['limit' => new NumberType()],
+        );
+
+        $this->assertSame('Integer | 0', TypeDescriber::describe($expression->infer()->unwrap()));
+        $this->assertSame(3, $expression->compile()->unwrap()(['limit' => 3])->unwrap()->unwrap());
+        $this->assertSame(0, $expression->compile()->unwrap()(['limit' => 3.5])->unwrap()->unwrap());
+
+        $partial = (new Expression($match([$narrowed]), declarations: ['limit' => new NumberType()]))->compile();
+
+        $this->assertStringContainsString('This match over Number may not be exhaustive', $partial->unwrapErr()->describe());
     }
 
     #[Test]
@@ -600,12 +622,12 @@ final class TypePatternTest extends TestCase
     #[Test]
     public function a_failed_node_has_no_type_to_reclaim(): void
     {
-        // Retyping is a claim over an evaluation, and a failed node has
+        // Narrowing is a claim over an evaluation, and a failed node has
         // neither half to claim over; it answers with itself, like
         // evaluatedBy(), so failure can never grow a type.
         $failed = CompiledNode::failed();
 
-        $this->assertSame($failed, $failed->retyped(new NumberType()));
+        $this->assertSame($failed, $failed->narrowed(new NumberType()));
     }
 
     #[Test]

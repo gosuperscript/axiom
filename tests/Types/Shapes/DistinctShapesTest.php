@@ -25,6 +25,7 @@ use Superscript\Axiom\Types\Shapes\StringShape;
  */
 #[CoversClass(DistinctShapes::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(StringShape::class)]
 #[UsesClass(ValueEquality::class)]
 final class DistinctShapesTest extends TestCase

@@ -386,6 +386,7 @@ Plugin code can use these as declarations, return types, fields, operands, and s
 | --- | --- | --- |
 | `BooleanType` | `new BooleanType()` | `bool` |
 | `NumberType` | `new NumberType()` | `int|float` |
+| `IntegerType` | `new IntegerType()` | `int`; fits every `Number` slot, while a `Number` never fits an `Integer` slot |
 | `StringType` | `new StringType()` | `string` |
 | `LiteralType` | `new LiteralType(bool|int|float|string $value)` | One scalar value |
 | `OptionType` | `new OptionType(Type $inner)` | `null` or an inner value |
@@ -406,7 +407,7 @@ Shapes are value-set descriptions, not runtime validators. Custom types project 
 | Shape | Construction | Meaning |
 | --- | --- | --- |
 | `BooleanShape` | `new BooleanShape()` | Boolean values |
-| `NumberShape` | `new NumberShape()` | Numeric values |
+| `NumberShape` | `new NumberShape(integer: false)` | Numeric values; `integer: true` refines them to PHP ints |
 | `StringShape` | `new StringShape()` | String values |
 | `LiteralShape` | `new LiteralShape($value)` | One scalar value |
 | `OptionShape` | `new OptionShape($inner)` | `null` plus the inner domain; nesting collapses |

@@ -14,6 +14,7 @@ use Superscript\Axiom\Extension;
 use Superscript\Axiom\Operators\Operator;
 use Superscript\Axiom\Types\BooleanType;
 use Superscript\Axiom\Types\DictType;
+use Superscript\Axiom\Types\IntegerType;
 use Superscript\Axiom\Types\ListType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NumberType;
@@ -58,6 +59,7 @@ use Superscript\Axiom\Tests\Fixtures\HostValueSource;
 #[UsesClass(\Superscript\Axiom\Fields\OpaqueField::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(DictType::class)]
+#[UsesClass(IntegerType::class)]
 #[UsesClass(ListType::class)]
 #[UsesClass(LiteralType::class)]
 #[UsesClass(NumberType::class)]
@@ -247,6 +249,41 @@ final class DialectTest extends TestCase
 
         $dicts = $dialect->operators()->resolve('++', new DictType(new NumberType()), new DictType(new NumberType()))->unwrap();
         $this->assertSame(['a' => 1, 'b' => 2], $dicts->evaluate(['a' => 1], ['b' => 2])->unwrap());
+    }
+
+    #[Test]
+    public function an_integer_specialization_of_a_number_row_is_refused(): void
+    {
+        // An Integer operand reaches both an Integer slot and a Number slot,
+        // so Integer arithmetic is the Number rows' to own.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The dialect is ambiguous: two [+] rows collide — (Integer, Integer) and (Number, Number)');
+
+        Dialect::core()->with(new class extends Extension {
+            public function operators(): array
+            {
+                return [
+                    Operator::infix('+')
+                        ->takes(new IntegerType(), new IntegerType())
+                        ->returns(new IntegerType())
+                        ->evaluatesWith(fn(int $a, int $b) => $a + $b),
+                ];
+            }
+        });
+    }
+
+    #[Test]
+    public function the_core_number_rows_resolve_integer_operands_to_number(): void
+    {
+        $operators = Dialect::core()->operators();
+
+        $sum = $operators->resolve('+', new IntegerType(), new IntegerType())->unwrap();
+        $negated = Dialect::core()->unaryOperators()->resolve('-', new IntegerType())->unwrap();
+
+        $this->assertInstanceOf(NumberType::class, $sum->returns);
+        $this->assertSame(5, $sum->evaluate(2, 3)->unwrap());
+        $this->assertInstanceOf(NumberType::class, $negated->returns);
+        $this->assertInstanceOf(BooleanType::class, $operators->resolve('<', new IntegerType(), new NumberType())->unwrap()->returns);
     }
 
     #[Test]

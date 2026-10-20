@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Types\IntegerType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
@@ -36,6 +37,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(TypeMismatch::class)]
 #[UsesClass(TypeDescriber::class)]
 #[UsesClass(NumberType::class)]
+#[UsesClass(IntegerType::class)]
 #[UsesClass(StringType::class)]
 #[UsesClass(OptionType::class)]
 #[UsesClass(UnionType::class)]
@@ -100,6 +102,19 @@ final class TypeRelationsTest extends TestCase
             UnionShape::of(new LiteralShape('a'), new LiteralShape(1)),
             UnionShape::of(new StringShape(), new NumberShape()),
         ];
+
+        yield 'integer to Number: every whole number is a number' => [new NumberShape(integer: true), new NumberShape()];
+        yield 'integer to itself' => [new NumberShape(integer: true), new NumberShape(integer: true)];
+        yield 'integer to an option of Number' => [new NumberShape(integer: true), new OptionShape(new NumberShape())];
+        yield 'integer to a union holding Number' => [new NumberShape(integer: true), UnionShape::of(new StringShape(), new NumberShape())];
+        yield 'int literal to Integer' => [new LiteralShape(3), new NumberShape(integer: true)];
+        yield 'union of int literals to Integer' => [
+            UnionShape::of(new LiteralShape(1), new LiteralShape(2)),
+            new NumberShape(integer: true),
+        ];
+        yield 'Integer | Number to Number' => [UnionShape::of(new NumberShape(integer: true), new NumberShape()), new NumberShape()];
+        yield 'Number to Integer | Number' => [new NumberShape(), UnionShape::of(new NumberShape(integer: true), new NumberShape())];
+        yield 'list of integers to list of numbers' => [new ListShape(new NumberShape(integer: true)), new ListShape(new NumberShape())];
 
         yield 'present value fills an option slot' => [new NumberShape(), new OptionShape(new NumberShape())];
         yield 'option to option with wider inner' => [
@@ -194,7 +209,42 @@ final class TypeRelationsTest extends TestCase
             new NumberShape(),
             'a literal is substitutable only for its own base',
         ];
-        yield 'literal of a different base' => [new LiteralShape(5), new StringShape()];
+        yield 'literal of a different base' => [new LiteralShape(5), new StringShape(), 'a literal is substitutable only for its own base'];
+
+        yield 'Number to Integer: a number may be fractional' => [
+            new NumberShape(),
+            new NumberShape(integer: true),
+            'Number is not assignable to Integer: a Number may be fractional, and an Integer slot admits only integers',
+        ];
+        yield 'fractional literal to Integer' => [
+            new LiteralShape(2.5),
+            new NumberShape(integer: true),
+            '2.5 is not assignable to Integer: an Integer slot admits only numbers written as integers',
+        ];
+        yield 'whole float literal to Integer: written as a decimal' => [
+            new LiteralShape(3.0),
+            new NumberShape(integer: true),
+            '3.0 is not assignable to Integer: an Integer slot admits only numbers written as integers',
+        ];
+        yield 'a union holding a float literal to Integer' => [
+            UnionShape::of(new LiteralShape(1), new LiteralShape(2.0)),
+            new NumberShape(integer: true),
+            'every union member must be assignable',
+        ];
+        yield 'string literal to Integer' => [
+            new LiteralShape('3'),
+            new NumberShape(integer: true),
+            'a literal is substitutable only for its own base',
+        ];
+        yield 'option of Integer to Integer' => [new OptionShape(new NumberShape(integer: true)), new NumberShape(integer: true), 'the value may be absent'];
+        yield 'Integer | Number to Integer' => [
+            UnionShape::of(new NumberShape(integer: true), new NumberShape()),
+            new NumberShape(integer: true),
+            'every union member must be assignable',
+        ];
+        yield 'integer to String' => [new NumberShape(integer: true), new StringShape(), 'Integer is not assignable to String.'];
+        yield 'integer to a literal' => [new NumberShape(integer: true), new LiteralShape(3)];
+        yield 'list of numbers to list of integers' => [new ListShape(new NumberShape()), new ListShape(new NumberShape(integer: true))];
         yield 'distinct literals' => [new LiteralShape('shop'), new LiteralShape('office')];
         yield 'union with a failing member' => [
             UnionShape::of(new NumberShape(), new StringShape()),
@@ -376,6 +426,21 @@ final class TypeRelationsTest extends TestCase
 
         yield 'a shape overlaps itself' => [new NumberShape(), new NumberShape(), true];
         yield 'distinct primitives do not overlap' => [new NumberShape(), new StringShape(), false];
+        yield 'integer overlaps Number' => [new NumberShape(integer: true), new NumberShape(), true];
+        yield 'integer overlaps itself' => [new NumberShape(integer: true), new NumberShape(integer: true), true];
+        yield 'integer does not overlap String' => [new NumberShape(integer: true), new StringShape(), false];
+        yield 'an int literal overlaps Integer' => [new LiteralShape(2), new NumberShape(integer: true), true];
+        yield 'a whole float literal does not overlap Integer' => [new LiteralShape(2.0), new NumberShape(integer: true), false];
+        yield 'a whole float literal overlaps Number' => [new LiteralShape(2.0), new NumberShape(), true];
+        yield 'a fractional literal does not overlap Integer' => [new LiteralShape(2.5), new NumberShape(integer: true), false];
+        yield 'a fractional literal overlaps Number' => [new LiteralShape(2.5), new NumberShape(), true];
+        yield 'a string literal does not overlap Integer' => [new LiteralShape('2'), new NumberShape(integer: true), false];
+        yield 'optional Integer overlaps Number' => [new OptionShape(new NumberShape(integer: true)), new NumberShape(), true];
+        yield 'non-empty lists of integers and numbers overlap' => [
+            new ListShape(new NumberShape(integer: true), 1),
+            new ListShape(new NumberShape(), 1),
+            true,
+        ];
 
         yield 'options always overlap (shared null)' => [
             new OptionShape(new NumberShape()),
@@ -663,6 +728,13 @@ final class TypeRelationsTest extends TestCase
 
         $this->assertTrue(TypeRelations::shapesEquivalent($enum, $reordered)->isOk());
 
+        // Integer adds nothing to Number that Number lacks.
+        $this->assertTrue(TypeRelations::shapesEquivalent(
+            UnionShape::of(new NumberShape(integer: true), new NumberShape()),
+            new NumberShape(),
+        )->isOk());
+        $this->assertTrue(TypeRelations::shapesEquivalent(new NumberShape(integer: true), new NumberShape())->isErr());
+
         $oneWay = TypeRelations::shapesEquivalent(new LiteralShape('a'), new StringShape());
 
         $this->assertTrue($oneWay->isErr());
@@ -711,6 +783,11 @@ final class TypeRelationsTest extends TestCase
     {
         // Where dispatch truth and value truth agree.
         yield 'same base' => [new NumberShape(), new NumberShape(), true];
+        yield 'integer against Number: an Integer operand reaches both slots' => [new NumberShape(integer: true), new NumberShape(), true];
+        yield 'an int literal against Integer' => [new LiteralShape(5), new NumberShape(integer: true), true];
+        yield 'a whole float literal against Integer: no operand reaches both' => [new LiteralShape(5.0), new NumberShape(integer: true), false];
+        yield 'a fractional literal against Integer: no operand reaches both' => [new LiteralShape(5.5), new NumberShape(integer: true), false];
+        yield 'integer against String' => [new NumberShape(integer: true), new StringShape(), false];
         yield 'literal against its base: a 5-typed operand reaches both slots' => [new LiteralShape(5), new NumberShape(), true];
         yield 'two literals of one value' => [new LiteralShape(5), new LiteralShape(5), true];
         yield 'two literals of different values' => [new LiteralShape(5), new LiteralShape(6), false];
@@ -800,5 +877,21 @@ final class TypeRelationsTest extends TestCase
     {
         $this->assertTrue(TypeRelations::jointlyAdmissible(new NumberType(), new NumberType())->isOk());
         $this->assertTrue(TypeRelations::jointlyAdmissible(new NumberType(), new StringType())->isErr());
+        $this->assertTrue(TypeRelations::jointlyAdmissible(new IntegerType(), new NumberType())->isOk());
+    }
+
+    #[Test]
+    public function integer_reaches_number_operand_slots_and_number_does_not_reach_integer_slots(): void
+    {
+        $this->assertTrue(TypeRelations::admits(new IntegerType(), new NumberType())->isOk());
+        $this->assertTrue(TypeRelations::admits(new OptionType(new IntegerType()), new OptionType(new NumberType()))->isOk());
+
+        $refused = TypeRelations::admits(new NumberType(), new IntegerType());
+
+        $this->assertTrue($refused->isErr());
+        $this->assertSame(
+            'Number is not assignable to Integer: a Number may be fractional, and an Integer slot admits only integers.',
+            $refused->unwrapErr()->message,
+        );
     }
 }

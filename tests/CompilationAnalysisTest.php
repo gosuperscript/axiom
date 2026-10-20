@@ -55,6 +55,7 @@ use Superscript\Axiom\Types\UnionType;
 #[CoversClass(OperatorRuleProvenance::class)]
 #[CoversClass(OperatorSelection::class)]
 #[CoversClass(AnalysisTypeDescriber::class)]
+#[\PHPUnit\Framework\Attributes\UsesClass(\Superscript\Axiom\Types\IntegerType::class)]
 #[\PHPUnit\Framework\Attributes\UsesNamespace('Superscript\\Axiom')]
 #[CoversClass(Expression::class)]
 #[UsesClass(Program::class)]
@@ -211,6 +212,7 @@ final class CompilationAnalysisTest extends TestCase
                 'boolean' => new LiteralType(true),
                 'integer' => new LiteralType(7),
                 'float' => new LiteralType(2.5),
+                'count' => new \Superscript\Axiom\Types\IntegerType(),
                 'string' => new LiteralType('private'),
                 'option' => new OptionType(new LiteralType('private')),
                 'union' => new UnionType(new LiteralType('private'), new LiteralType(7)),
@@ -230,6 +232,7 @@ final class CompilationAnalysisTest extends TestCase
             'boolean' => ['type' => 'Boolean', 'optional' => false],
             'integer' => ['type' => 'Number', 'optional' => false],
             'float' => ['type' => 'Number', 'optional' => false],
+            'count' => ['type' => 'Integer', 'optional' => false],
             'string' => ['type' => 'String', 'optional' => false],
             'option' => ['type' => 'String?', 'optional' => false],
             'union' => ['type' => 'String | Number', 'optional' => false],
@@ -242,6 +245,7 @@ final class CompilationAnalysisTest extends TestCase
             'boolean' => ['type' => 'true', 'optional' => false],
             'integer' => ['type' => '7', 'optional' => false],
             'float' => ['type' => '2.5', 'optional' => false],
+            'count' => ['type' => 'Integer', 'optional' => false],
             'string' => ['type' => "'private'", 'optional' => false],
             'option' => ['type' => "'private'?", 'optional' => false],
             'union' => ['type' => "'private' | 7", 'optional' => false],

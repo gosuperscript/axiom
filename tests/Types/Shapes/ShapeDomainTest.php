@@ -26,6 +26,7 @@ use Superscript\Axiom\Types\Shapes\UnknownShape;
 #[CoversClass(ShapeDomain::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(OptionShape::class)]
 #[UsesClass(UnionShape::class)]
 #[UsesClass(\Superscript\Axiom\Operators\ValueEquality::class)]

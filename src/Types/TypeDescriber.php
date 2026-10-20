@@ -50,7 +50,7 @@ final class TypeDescriber
     {
         return match (true) {
             $shape instanceof BooleanShape => 'Boolean',
-            $shape instanceof NumberShape => 'Number',
+            $shape instanceof NumberShape => $shape->integer ? 'Integer' : 'Number',
             $shape instanceof StringShape => 'String',
             $shape instanceof UnknownShape => 'Unknown',
             $shape instanceof NeverShape => 'Never',
@@ -75,7 +75,10 @@ final class TypeDescriber
             return $value ? 'true' : 'false';
         }
 
-        return (string) $value;
+        $number = (string) $value;
+
+        // A float keeps its decimal point, so 3.0 never reads as the integer 3.
+        return is_float($value) && ctype_digit(ltrim($number, '-')) ? $number . '.0' : $number;
     }
 
     /**

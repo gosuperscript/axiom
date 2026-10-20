@@ -63,10 +63,10 @@ final class TypeEnvironment
      * This environment with one reference retyped, for compiling a scope
      * that proved the narrower type — a match arm whose type pattern
      * guarantees the subject inhabits one union member. The reference keeps
-     * its own evaluation (same binding read, same recorded reads); only its
-     * certified type changes, and only for the exact spelled path — a root
-     * reference or a structural input path — never for other paths through
-     * the same root.
+     * its own binding read and recorded reads, while its certified type
+     * changes and its value is read as the narrower type admits it. Only the
+     * exact spelled path is narrowed — a root reference or a structural
+     * input path — never other paths through the same root.
      *
      * @internal Match compilation owns narrowing; the runtime guard that
      *           makes the claim sound lives with the pattern that asks for it.
@@ -99,7 +99,7 @@ final class TypeEnvironment
             assert($this->parent !== null);
 
             return $this->parent->nodeOfReference($reference, $compiler, $path, $reads)
-                ->map(fn(CompiledNode $node) => $node->retyped($narrowing->type));
+                ->map(fn(CompiledNode $node) => $node->narrowed($narrowing->type));
         }
 
         $name = $reference->root();
@@ -222,7 +222,7 @@ final class TypeEnvironment
         if ($narrowing !== null && $narrowing->narrows($reference)) {
             assert($this->parent !== null);
 
-            return $this->parent->nodeOfInputPath($reference)?->map(fn(CompiledNode $node) => $node->retyped($narrowing->type));
+            return $this->parent->nodeOfInputPath($reference)?->map(fn(CompiledNode $node) => $node->narrowed($narrowing->type));
         }
 
         if ($reference->isRoot() || $this->definitionKeyOf($reference) !== null) {

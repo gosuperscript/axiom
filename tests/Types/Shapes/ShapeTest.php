@@ -53,6 +53,8 @@ final class ShapeTest extends TestCase
     {
         yield 'boolean = boolean' => [new BooleanShape(), new BooleanShape(), true];
         yield 'number = number' => [new NumberShape(), new NumberShape(), true];
+        yield 'integer = integer' => [new NumberShape(integer: true), new NumberShape(integer: true), true];
+        yield 'integer != number' => [new NumberShape(integer: true), new NumberShape(), false];
         yield 'string = string' => [new StringShape(), new StringShape(), true];
         yield 'unknown = unknown' => [new UnknownShape(), new UnknownShape(), true];
         yield 'never = never' => [new NeverShape(), new NeverShape(), true];
@@ -291,6 +293,8 @@ final class ShapeTest extends TestCase
         // boolean true and the number 1 all stay distinct from one another.
         $numbers = UnionShape::of(new LiteralShape(5), new LiteralShape(5.0), new LiteralShape('5'));
         $this->assertTrue($numbers->equals(UnionShape::of(new LiteralShape(5), new LiteralShape('5'))));
+        $this->assertInstanceOf(UnionShape::class, $numbers);
+        $this->assertCount(2, $numbers->members);
 
         $mixed = UnionShape::of(new LiteralShape(true), new LiteralShape(1), new LiteralShape(false));
         $this->assertInstanceOf(UnionShape::class, $mixed);
@@ -326,8 +330,12 @@ final class ShapeTest extends TestCase
         $oracle = [];
 
         foreach ($shapes as $shape) {
-            if (!array_any($oracle, static fn(LiteralShape $kept): bool => $kept->equals($shape))) {
+            $same = array_find_key($oracle, static fn(LiteralShape $kept): bool => $kept->equals($shape));
+
+            if ($same === null) {
                 $oracle[] = $shape;
+            } elseif (is_float($shape->value)) {
+                $oracle[$same] = $shape;
             }
         }
 
@@ -457,6 +465,40 @@ final class ShapeTest extends TestCase
         $this->expectExceptionMessage('max 1 is below min 2');
 
         new ListShape(new NumberShape(), min: 2, max: 1);
+    }
+
+    #[Test]
+    #[DataProvider('spellingsOfOneNumber')]
+    public function merging_two_spellings_of_one_number_keeps_the_decimal_spelling(Shape ...$spellings): void
+    {
+        $merged = UnionShape::of(...$spellings);
+
+        $this->assertInstanceOf(LiteralShape::class, $merged);
+        $this->assertSame(3.0, $merged->value);
+    }
+
+    public static function spellingsOfOneNumber(): \Generator
+    {
+        yield 'int first' => [new LiteralShape(3), new LiteralShape(3.0)];
+        yield 'decimal first' => [new LiteralShape(3.0), new LiteralShape(3)];
+        yield 'decimal between ints' => [new LiteralShape(3), new LiteralShape(3.0), new LiteralShape(3)];
+    }
+
+    #[Test]
+    public function deduplication_keeps_integer_and_number_apart(): void
+    {
+        // Integer is substitutable for Number but never equal to it.
+        $shape = UnionShape::of(new NumberShape(integer: true), new NumberShape(), new NumberShape(integer: true));
+
+        $this->assertInstanceOf(UnionShape::class, $shape);
+        $this->assertCount(2, $shape->members);
+    }
+
+    #[Test]
+    public function a_number_shape_is_unrefined_unless_it_says_integer(): void
+    {
+        $this->assertFalse((new NumberShape())->integer);
+        $this->assertTrue((new NumberShape(integer: true))->integer);
     }
 
     #[Test]

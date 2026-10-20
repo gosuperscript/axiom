@@ -8,9 +8,10 @@ use Superscript\Axiom\Operators\ValueEquality;
 
 /**
  * A singleton of a scalar base. Substitutable for its base, never the
- * reverse. Literal identity is value equality — the same definition the
- * runtime matcher and the comparison operators consume (5 and 5.0 denote
- * the same Number; boolean and string identity is strict).
+ * reverse; an int is also substitutable for Integer, though its base stays
+ * Number. Literal identity is value equality — the same
+ * definition the runtime matcher and the comparison operators consume (5
+ * and 5.0 denote the same Number; boolean and string identity is strict).
  */
 final class LiteralShape extends Shape
 {

@@ -56,7 +56,9 @@ final class LiteralTypeTest extends TestCase
         $five = new LiteralType(5);
 
         $this->assertSame(5, $five->assert(5)->unwrap()->unwrap());
-        $this->assertSame(5.0, $five->assert(5.0)->unwrap()->unwrap());
+        $this->assertSame(5, $five->assert(5.0)->unwrap()->unwrap());
+        $this->assertSame(5, $five->coerce('5.0')->unwrap()->unwrap());
+        $this->assertSame(5.0, (new LiteralType(5.0))->assert(5)->unwrap()->unwrap());
         $this->assertTrue($five->assert(6)->isErr());
     }
 

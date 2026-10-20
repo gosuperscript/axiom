@@ -13,9 +13,13 @@ use Superscript\Monads\Result\Ok;
 use Superscript\Monads\Result\Result;
 use Throwable;
 
+use function Superscript\Monads\Option\Some;
+
 /**
  * A singleton of a scalar base. Numeric identity is loose (5 inhabits
- * LiteralType(5.0)); boolean and string identity is strict.
+ * LiteralType(5.0)); boolean and string identity is strict. An admitted
+ * value is delivered as the literal itself, so a value of LiteralType(3) is
+ * the int 3 even when 3.0 was supplied.
  *
  * @implements Type<bool|int|float|string>
  */
@@ -52,7 +56,7 @@ final readonly class LiteralType implements Type
         return $option->mapOr(
             default: new Ok($option),
             f: fn(mixed $value) => $this->matches($value)
-                ? new Ok($option)
+                ? new Ok(Some($this->value))
                 : new Err(new TransformValueException(type: TypeDescriber::describe($this), value: $value)),
         );
     }

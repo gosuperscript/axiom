@@ -41,6 +41,7 @@ use Superscript\Axiom\Types\UnknownType;
  */
 #[CoversClass(BooleanType::class)]
 #[CoversClass(NumberType::class)]
+#[UsesClass(\Superscript\Axiom\Types\IntegerType::class)]
 #[CoversClass(StringType::class)]
 #[CoversClass(ListType::class)]
 #[CoversClass(DictType::class)]
@@ -87,6 +88,7 @@ final class ShapeProjectionCensusTest extends TestCase
     {
         yield [new BooleanType(), BooleanShape::class];
         yield [new NumberType(), NumberShape::class];
+        yield [new \Superscript\Axiom\Types\IntegerType(), NumberShape::class];
         yield [new StringType(), StringShape::class];
         yield [new ListType(new NumberType()), ListShape::class];
         yield [new DictType(new StringType()), DictShape::class];
@@ -189,6 +191,9 @@ final class ShapeProjectionCensusTest extends TestCase
             'false' => false,
             'int' => 5,
             'float' => 2.5,
+            'whole float' => 3.0,
+            'whole decimal string' => '3.0',
+            'signed integer string' => '+3',
             'numeric string' => '5',
             'empty string' => '',
             'the string null' => 'null',
