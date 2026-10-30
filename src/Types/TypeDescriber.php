@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use ReflectionClass;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
@@ -56,6 +57,7 @@ final class TypeDescriber
             $shape instanceof NeverShape => 'Never',
             $shape instanceof OpaqueShape => self::opaque($shape),
             $shape instanceof LiteralShape => self::literal($shape->value),
+            $shape instanceof IdentityLiteralShape => $shape->type->format($shape->value),
             $shape instanceof OptionShape => self::option($shape),
             $shape instanceof UnionShape => self::union($shape),
             $shape instanceof ListShape => self::list($shape),

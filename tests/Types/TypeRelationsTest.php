@@ -9,11 +9,14 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Superscript\Axiom\Tests\Fixtures\Band;
+use Superscript\Axiom\Tests\Fixtures\BandType;
 use Superscript\Axiom\Types\IntegerType;
 use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
@@ -46,6 +49,7 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(DictShape::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(OpaqueShape::class)]
@@ -893,5 +897,77 @@ final class TypeRelationsTest extends TestCase
             'Number is not assignable to Integer: a Number may be fractional, and an Integer slot admits only integers.',
             $refused->unwrapErr()->message,
         );
+    }
+
+    #[Test]
+    #[DataProvider('identityLiteralAssignments')]
+    public function an_identity_literal_fits_wherever_its_base_fits(Shape $source, Shape $target, bool $expected): void
+    {
+        $this->assertSame($expected, TypeRelations::assignable($source, $target)->isOk());
+    }
+
+    public static function identityLiteralAssignments(): \Generator
+    {
+        $band = new OpaqueShape('band');
+
+        yield 'literal to its base' => [self::band(1, 5), $band, true];
+        yield 'base to its literal' => [$band, self::band(1, 5), false];
+        yield 'literal to an equal literal' => [self::band(1, 5), self::band(1.0, 5), true];
+        yield 'literal to a distinct literal' => [self::band(1, 5), self::band(1, 6), false];
+        yield 'literal to an optional base' => [self::band(1, 5), new OptionShape($band), true];
+        yield 'literal to a union holding it' => [self::band(1, 5), UnionShape::of(self::band(1, 5), self::band(5, 10)), true];
+        yield 'literal to a union without it' => [self::band(1, 5), UnionShape::of(self::band(5, 10), self::band(10, 20)), false];
+        yield 'union of literals to their base' => [UnionShape::of(self::band(1, 5), self::band(5, 10)), $band, true];
+        yield 'literal to a nominally distinct base' => [self::band(1, 5), new OpaqueShape('age-band'), false];
+        yield 'literal to a scalar literal of its key' => [self::band(1, 5), new LiteralShape('1.0..5.0'), false];
+        yield 'scalar literal to an identity literal' => [new LiteralShape('1.0..5.0'), self::band(1, 5), false];
+    }
+
+    #[Test]
+    public function an_identity_literal_refusal_names_the_literal_and_carries_the_base_cause(): void
+    {
+        $refusal = TypeRelations::assignable(self::band(1, 5), new StringShape())->unwrapErr();
+
+        $this->assertSame('1..5 is not assignable to String.', $refusal->message);
+        $this->assertSame('band is not assignable to String.', $refusal->causes[0]->message);
+    }
+
+    #[Test]
+    #[DataProvider('identityLiteralOverlaps')]
+    public function identity_literals_overlap_their_base_and_equal_literals_only(Shape $a, Shape $b, bool $expected): void
+    {
+        $this->assertSame($expected, TypeRelations::shapesOverlap($a, $b)->isOk());
+        $this->assertSame($expected, TypeRelations::shapesOverlap($b, $a)->isOk());
+        $this->assertSame($expected, TypeRelations::shapesJointlyAdmissible($a, $b)->isOk());
+        $this->assertSame($expected, TypeRelations::shapesJointlyAdmissible($b, $a)->isOk());
+    }
+
+    public static function identityLiteralOverlaps(): \Generator
+    {
+        $offered = UnionShape::of(self::band(1, 5), self::band(5, 10));
+
+        yield 'literal and its base' => [self::band(1, 5), new OpaqueShape('band'), true];
+        yield 'equal literals' => [self::band(1, 5), self::band(1.0, 5.0), true];
+        yield 'disjoint literals' => [self::band(1, 5), self::band(5, 10), false];
+        yield 'a union of literals and a member' => [$offered, self::band(5.0, 10), true];
+        yield 'a union of literals and a non-member literal' => [$offered, self::band(10, 20), false];
+        yield 'literals under nominally distinct bases' => [self::band(1, 5), new IdentityLiteralShape(new Band(1, 5), new BandType('age-band')), false];
+        yield 'literal and a foreign base' => [self::band(1, 5), new StringShape(), false];
+        yield 'literal and a scalar literal' => [self::band(1, 5), new LiteralShape('1.0..5.0'), false];
+    }
+
+    #[Test]
+    public function identity_literal_overlap_failures_carry_the_base_cause(): void
+    {
+        $refusal = TypeRelations::shapesOverlap(self::band(1, 5), new StringShape())->unwrapErr();
+
+        $this->assertSame('1..5 and String share no values.', $refusal->message);
+        $this->assertSame('band and String share no values.', $refusal->causes[0]->message);
+        $this->assertSame([], TypeRelations::shapesOverlap(self::band(1, 5), self::band(5, 10))->unwrapErr()->causes);
+    }
+
+    private static function band(int|float $lower, int|float $upper): IdentityLiteralShape
+    {
+        return new IdentityLiteralShape(new Band($lower, $upper), new BandType());
     }
 }

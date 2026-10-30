@@ -59,6 +59,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(DictShape::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\IdentityLiteralType::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(OptionShape::class)]
@@ -98,6 +100,7 @@ final class ShapeProjectionCensusTest extends TestCase
         yield [new RecordType(['a' => new NumberType()]), RecordShape::class];
         yield [new UnknownType(), UnknownShape::class];
         yield [new NeverType(), NeverShape::class];
+        yield [new \Superscript\Axiom\Types\IdentityLiteralType(new \Superscript\Axiom\Tests\Fixtures\Band(1, 5), new \Superscript\Axiom\Tests\Fixtures\BandType()), \Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class];
         yield [new \Superscript\Axiom\Types\OpaqueType('ClaimId'), \Superscript\Axiom\Types\Shapes\OpaqueShape::class];
     }
 

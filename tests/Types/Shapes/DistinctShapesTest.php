@@ -9,7 +9,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Superscript\Axiom\Operators\ValueEquality;
+use Superscript\Axiom\Tests\Fixtures\Band;
+use Superscript\Axiom\Tests\Fixtures\BandType;
 use Superscript\Axiom\Types\Shapes\DistinctShapes;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
+use Superscript\Axiom\Types\Shapes\OpaqueShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\Shape;
 use Superscript\Axiom\Types\Shapes\StringShape;
@@ -28,6 +32,8 @@ use Superscript\Axiom\Types\Shapes\StringShape;
 #[UsesClass(\Superscript\Axiom\Types\Shapes\NumberShape::class)]
 #[UsesClass(StringShape::class)]
 #[UsesClass(ValueEquality::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 final class DistinctShapesTest extends TestCase
 {
     #[Test]
@@ -71,5 +77,27 @@ final class DistinctShapesTest extends TestCase
         }
 
         $this->assertSame(0, $comparisons);
+    }
+
+    #[Test]
+    public function identity_literals_are_indexed_by_their_identity_key(): void
+    {
+        $comparisons = 0;
+        $counting = function (Shape $a, Shape $b) use (&$comparisons): bool {
+            $comparisons++;
+
+            return $a->equals($b);
+        };
+        $distinct = new DistinctShapes($counting);
+        $first = new IdentityLiteralShape(new Band(1, 5), new BandType());
+
+        $this->assertTrue($distinct->add($first));
+        $this->assertTrue($distinct->add(new IdentityLiteralShape(new Band(5, 10), new BandType())));
+        $this->assertTrue($distinct->add(new OpaqueShape('band')));
+        $this->assertSame(0, $comparisons);
+
+        $this->assertFalse($distinct->add(new IdentityLiteralShape(new Band(1.0, 5.0), new BandType())));
+        $this->assertSame(1, $comparisons);
+        $this->assertSame($first, $distinct->all()[0]);
     }
 }

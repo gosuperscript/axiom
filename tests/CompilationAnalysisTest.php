@@ -220,6 +220,7 @@ final class CompilationAnalysisTest extends TestCase
                 'dict' => new DictType(new LiteralType('private')),
                 'record' => new RecordType(['field' => new LiteralType('private')]),
                 'opaque' => new OpaqueType('Example', ['parameter' => new LiteralType('private')]),
+                'identity' => new \Superscript\Axiom\Types\IdentityLiteralType(new \Superscript\Axiom\Tests\Fixtures\Band(1, 5), new \Superscript\Axiom\Tests\Fixtures\BandType(unit: 'private')),
             ]),
             \Superscript\Axiom\Boundary::Assert,
         );
@@ -240,6 +241,7 @@ final class CompilationAnalysisTest extends TestCase
             'dict' => ['type' => 'Dict<String>', 'optional' => false],
             'record' => ['type' => '{field: String}', 'optional' => false],
             'opaque' => ['type' => 'Example<parameter: String>', 'optional' => false],
+            'identity' => ['type' => 'band<unit: String>', 'optional' => false],
         ], $analysis->toArray()['declarations']);
         $this->assertSame([
             'boolean' => ['type' => 'true', 'optional' => false],
@@ -253,6 +255,7 @@ final class CompilationAnalysisTest extends TestCase
             'dict' => ['type' => "Dict<'private'>", 'optional' => false],
             'record' => ['type' => "{field: 'private'}", 'optional' => false],
             'opaque' => ['type' => "Example<parameter: 'private'>", 'optional' => false],
+            'identity' => ['type' => '1..5', 'optional' => false],
         ], $revealedExport['declarations']);
         $this->assertStringNotContainsString('private value', $redacted);
         $this->assertStringNotContainsString('private', $redacted);

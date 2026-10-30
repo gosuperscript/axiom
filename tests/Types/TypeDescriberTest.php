@@ -35,6 +35,7 @@ use Superscript\Axiom\Types\TypeDescriber;
 #[UsesClass(DictShape::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(OpaqueShape::class)]
@@ -125,6 +126,9 @@ final class TypeDescriberTest extends TestCase
             '{answer: Optional<Number?>}',
         ];
         yield [new RecordShape([]), '{}'];
+
+        // An identity literal is spelled by its base's own formatting.
+        yield [new \Superscript\Axiom\Types\Shapes\IdentityLiteralShape(new \Superscript\Axiom\Tests\Fixtures\Band(1.5, 5), new \Superscript\Axiom\Tests\Fixtures\BandType()), '1.5..5'];
     }
 
     #[Test]
