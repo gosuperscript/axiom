@@ -174,7 +174,7 @@ final readonly class MoneyType implements Type
 }
 ```
 
-- **Every operator must be yours.** Core refuses opaques everywhere — including `==`, because object equality belongs to you. Every operation on your type is a rule you ship ([Custom Operators](#custom-operators)).
+- **Every operator must be yours, except equality by identity.** Core refuses opaques everywhere, and every operation on your type is a rule you ship ([Custom Operators](#custom-operators)). The one exception is a type that implements `HasValueIdentity`: core `==` compares its values by identity key ([Value Identity](#value-identity)).
 
 #### Fields on Opaque Types
 
@@ -369,16 +369,38 @@ This works because currency is part of the type's *value set*, so the rows are d
 
 What enumeration cannot express is a return type that is a *function* of operand types over an unbounded space, like `List<T> ++ List<U> → List<T|U>`. That is escape-hatch territory ([Writing a Rule by Hand](#writing-a-rule-by-hand)).
 
-Your package owns value equality for its opaque values in exactly the same way. For a Brick Money-backed type, a same-currency row can bind Brick's domain comparison rather than PHP object identity:
+### Value Identity
+
+Equality on your values is not a row you write. Implement `HasValueIdentity` on the type instead, returning one string key per value, and core equality (`=`, `==`, `===`, `!=`, `!==`) compares two values by their keys:
 
 ```php
-Operator::infix('==')
-    ->takes(new MoneyType($currency), new MoneyType($currency))
-    ->returns(new BooleanType())
-    ->evaluatesWith(fn (Money $left, Money $right) => $left->isSameValueAs($right));
+final readonly class IntervalType implements Type, HasValueIdentity
+{
+    // assert, coerce, format, shape as before
+
+    public function identityKey(mixed $value): string
+    {
+        assert($value instanceof Interval);
+
+        return (string) $value;
+    }
+}
 ```
 
-Core's equality rule refuses these opaque operands, so your row is the lone successful resolution. Register the negated aliases as separate rows with the negation captured in their evaluation, just as core does for its own aliases.
+Every spelling of one value must give one key: an interval written `[1, 5]` and one written `[1.0, 5]` key alike when they denote the same interval. Both operands must be the same type (equal shapes), so `Money<'GBP'> == Money<'USD'>` stays unsupported.
+
+The key also makes your values literals. Return an `IdentityLiteralType` from your extension's `literals()` factory and every value typed through it is typed as exactly that value:
+
+```php
+public function literals(): array
+{
+    return [Interval::class => fn (Interval $value) => new IdentityLiteralType($value, new IntervalType())];
+}
+```
+
+A select offering `[1, 5]` and `[5, 10]` is then typed `[1, 5] | [5, 10]`, and core equality reports comparing it to `[10, 20]` as a dead operation, as it does for scalar literals.
+
+Do not also register equality rows for a type with identity: core's rule already resolves those operands, so the two would be ambiguous. A type without `HasValueIdentity` keeps its equality in rows you ship, and core refuses its operands.
 
 ### Computed Rules
 
