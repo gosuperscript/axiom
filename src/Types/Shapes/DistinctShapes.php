@@ -9,9 +9,10 @@ use Closure;
 /**
  * An insert-only set of shapes under a caller-chosen sameness judgment,
  * kept linear for enum-sized memberships: literal members are found through
- * a {@see LiteralShape::valueKey()} index — the key only nominates a bucket,
- * the judgment still decides — while every other member is scanned pairwise,
- * which stays cheap because only literals arrive in bulk. The two groups are
+ * an index by {@see LiteralShape::valueKey()} or {@see IdentityLiteralShape::$key}
+ * — the key only nominates a bucket, the judgment still decides — while
+ * every other member is scanned pairwise, which stays cheap because only
+ * literals arrive in bulk. The two groups are
  * judged apart because they can never be the same shape: every Shape::equals
  * is class-strict, and a literal's only two-way assignability is an equal
  * literal, so both judgments in use agree the groups are disjoint.
@@ -54,7 +55,11 @@ final class DistinctShapes
      */
     public function add(Shape $shape): bool
     {
-        $key = $shape instanceof LiteralShape ? $shape->valueKey() : null;
+        $key = match (true) {
+            $shape instanceof LiteralShape => $shape->valueKey(),
+            $shape instanceof IdentityLiteralShape => $shape->key,
+            default => null,
+        };
         $candidates = $key === null ? $this->others : $this->literals[$key] ?? [];
         $same = array_find($candidates, fn(int $index) => ($this->same)($this->shapes[$index], $shape));
 

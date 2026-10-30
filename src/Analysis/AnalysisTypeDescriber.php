@@ -6,6 +6,7 @@ namespace Superscript\Axiom\Analysis;
 
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\NumberShape;
@@ -38,6 +39,7 @@ final readonly class AnalysisTypeDescriber
             $shape instanceof LiteralShape && is_bool($shape->value) => new BooleanShape(),
             $shape instanceof LiteralShape && (is_int($shape->value) || is_float($shape->value)) => new NumberShape(),
             $shape instanceof LiteralShape && is_string($shape->value) => new StringShape(),
+            $shape instanceof IdentityLiteralShape => self::redact($shape->base),
             $shape instanceof OptionShape => new OptionShape(self::redact($shape->inner)),
             $shape instanceof UnionShape => UnionShape::of(...array_map(self::redact(...), $shape->members)),
             $shape instanceof ListShape => new ListShape(self::redact($shape->element), $shape->min, $shape->max),

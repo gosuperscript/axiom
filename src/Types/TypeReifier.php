@@ -7,6 +7,7 @@ namespace Superscript\Axiom\Types;
 use InvalidArgumentException;
 use Superscript\Axiom\Types\Shapes\BooleanShape;
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
@@ -37,6 +38,7 @@ final class TypeReifier
             $shape instanceof NumberShape => $shape->integer ? new IntegerType() : new NumberType(),
             $shape instanceof StringShape => new StringType(),
             $shape instanceof LiteralShape => new LiteralType($shape->value),
+            $shape instanceof IdentityLiteralShape => new IdentityLiteralType($shape->value, $shape->type),
             $shape instanceof OptionShape => new OptionType(self::reify($shape->inner)),
             $shape instanceof UnionShape => new UnionType(...map($shape->members, self::reify(...))),
             $shape instanceof ListShape => new ListType(self::reify($shape->element), $shape->min, $shape->max),

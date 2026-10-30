@@ -56,6 +56,8 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(DictShape::class)]
 #[UsesClass(ListShape::class)]
 #[UsesClass(LiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\IdentityLiteralType::class)]
 #[UsesClass(NeverShape::class)]
 #[UsesClass(NumberShape::class)]
 #[UsesClass(OpaqueShape::class)]
@@ -98,6 +100,7 @@ final class TypeReifierTest extends TestCase
         yield 'unknown' => [new UnknownShape()];
         yield 'never' => [new NeverShape()];
         yield 'opaque' => [new OpaqueShape('ClaimId')];
+        yield 'identity literal' => [new \Superscript\Axiom\Types\Shapes\IdentityLiteralShape(new \Superscript\Axiom\Tests\Fixtures\Band(1, 5), new \Superscript\Axiom\Tests\Fixtures\BandType())];
         yield 'parameterized opaque' => [new OpaqueShape('money', ['currency' => new LiteralShape('GBP')])];
     }
 

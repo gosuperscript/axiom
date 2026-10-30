@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Superscript\Axiom\Types;
 
 use Superscript\Axiom\Types\Shapes\DictShape;
+use Superscript\Axiom\Types\Shapes\IdentityLiteralShape;
 use Superscript\Axiom\Types\Shapes\ListShape;
 use Superscript\Axiom\Types\Shapes\LiteralShape;
 use Superscript\Axiom\Types\Shapes\NeverShape;
@@ -34,6 +35,10 @@ use function Superscript\Monads\Result\Ok;
  *   overlaps everything — an unknown value can never be ruled out.
  * - A base type accepts its literals ('shop' fits a String slot) and
  *   unions of them; a literal never accepts its base.
+ * - A literal of an identity-bearing type (one band, one amount) fits
+ *   wherever its base fits, and overlaps another such literal only when
+ *   their identity keys are equal: a union of bands never overlaps a band
+ *   outside it.
  * - Integer is a Number: it fits a Number slot, a Number never fits an
  *   Integer slot, and a number literal fits an Integer slot exactly when
  *   it is written as an integer (3 does; 3.0 and 2.5 do not).
@@ -191,6 +196,11 @@ final class TypeRelations
             return self::mismatch($source, $target, 'no union member accepts it', $causes);
         }
 
+        if ($source instanceof IdentityLiteralShape) {
+            return self::assignable($source->base, $target)
+                ->mapErr(fn(TypeMismatch $cause) => self::mismatchWith($source, $target, [$cause]));
+        }
+
         if ($source instanceof LiteralShape) {
             return match (true) {
                 self::literalInhabits($source, $target) => Ok(true),
@@ -330,6 +340,16 @@ final class TypeRelations
             }
 
             return Err(self::unsatisfiable($a, $b, $dispatch, $causes));
+        }
+
+        // Unequal identity literals are distinct values, so they share none.
+        if ($a instanceof IdentityLiteralShape || $b instanceof IdentityLiteralShape) {
+            [$literal, $other] = $a instanceof IdentityLiteralShape ? [$a, $b] : [$b, $a];
+
+            return $other instanceof IdentityLiteralShape
+                ? Err(self::unsatisfiable($a, $b, $dispatch))
+                : self::satisfiable($literal->base, $other, $dispatch)
+                    ->mapErr(fn(TypeMismatch $cause) => self::unsatisfiable($a, $b, $dispatch, [$cause]));
         }
 
         if ($a instanceof LiteralShape || $b instanceof LiteralShape) {
