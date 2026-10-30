@@ -15,10 +15,4 @@ final readonly class Band
         public int|float $lower,
         public int|float $upper,
     ) {}
-
-    public function isEqualTo(self $other): bool
-    {
-        return (float) $this->lower === (float) $other->lower
-            && (float) $this->upper === (float) $other->upper;
-    }
 }
