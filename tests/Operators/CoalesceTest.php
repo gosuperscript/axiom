@@ -227,6 +227,15 @@ final class CoalesceTest extends TestCase
     }
 
     #[Test]
+    public function a_boolean_literal_left_widens_to_the_other_boolean(): void
+    {
+        $resolution = (new Coalesce())->resolve(new OptionType(new LiteralType(true)), new LiteralType(false));
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertSame('true | false', TypeDescriber::describe($resolution->returns));
+    }
+
+    #[Test]
     public function a_fallback_of_another_kind_than_a_literal_left_is_refused(): void
     {
         $resolution = (new Coalesce())->resolve(
