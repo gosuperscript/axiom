@@ -15,6 +15,9 @@ use Superscript\Axiom\Operators\DeadOperation;
 use Superscript\Axiom\Operators\ResolvedOperation;
 use Superscript\Axiom\Operators\UnsupportedOperation;
 use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Tests\Fixtures\Band;
+use Superscript\Axiom\Tests\Fixtures\BandType;
+use Superscript\Axiom\Types\IdentityLiteralType;
 use Superscript\Axiom\Types\LiteralType;
 use Superscript\Axiom\Types\NeverType;
 use Superscript\Axiom\Types\NumberType;
@@ -22,6 +25,7 @@ use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeRelations;
+use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\UnionType;
 use Superscript\Axiom\Types\UnknownType;
 
@@ -36,6 +40,9 @@ use Superscript\Axiom\Types\UnknownType;
 #[UsesClass(UnsupportedOperation::class)]
 #[UsesClass(BooleanType::class)]
 #[UsesClass(LiteralType::class)]
+#[UsesClass(IdentityLiteralType::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\IdentityLiteralShape::class)]
+#[UsesClass(\Superscript\Axiom\Types\Shapes\OpaqueShape::class)]
 #[UsesClass(NeverType::class)]
 #[UsesClass(NumberType::class)]
 #[UsesClass(OptionType::class)]
@@ -179,21 +186,65 @@ final class CoalesceTest extends TestCase
         );
     }
 
-    /**
-     * A wider fallback is refused rather than widening the result: a union
-     * return would make `??` the only operator whose result type nothing in
-     * the expression declares.
-     */
     #[Test]
-    public function a_fallback_outside_the_present_type_is_refused(): void
+    public function a_fallback_of_the_same_kind_outside_the_present_type_widens_the_result(): void
     {
         $resolution = (new Coalesce())->resolve(
             new OptionType(new UnionType(new LiteralType('micro'), new LiteralType('small'))),
             new LiteralType('other'),
         );
 
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertSame("'micro' | 'small' | 'other'", TypeDescriber::describe($resolution->returns));
+    }
+
+    #[Test]
+    public function an_optional_fallback_outside_the_present_type_widens_and_stays_optional(): void
+    {
+        $resolution = (new Coalesce())->resolve(
+            new OptionType(new UnionType(new LiteralType(1), new LiteralType(2))),
+            new OptionType(new LiteralType(0)),
+        );
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertSame('(1 | 2 | 0)?', TypeDescriber::describe($resolution->returns));
+    }
+
+    #[Test]
+    public function an_identity_literal_left_takes_a_default_of_its_base(): void
+    {
+        $offered = new UnionType(
+            new IdentityLiteralType(new Band(1, 5), new BandType()),
+            new IdentityLiteralType(new Band(5, 10), new BandType()),
+        );
+        $resolution = (new Coalesce())->resolve(
+            new OptionType($offered),
+            new IdentityLiteralType(new Band(0, 1), new BandType()),
+        );
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertSame('1..5 | 5..10 | 0..1', TypeDescriber::describe($resolution->returns));
+    }
+
+    #[Test]
+    public function a_boolean_literal_left_widens_to_the_other_boolean(): void
+    {
+        $resolution = (new Coalesce())->resolve(new OptionType(new LiteralType(true)), new LiteralType(false));
+
+        $this->assertInstanceOf(ResolvedOperation::class, $resolution);
+        $this->assertSame('true | false', TypeDescriber::describe($resolution->returns));
+    }
+
+    #[Test]
+    public function a_fallback_of_another_kind_than_a_literal_left_is_refused(): void
+    {
+        $resolution = (new Coalesce())->resolve(
+            new OptionType(new UnionType(new LiteralType('micro'), new LiteralType('small'))),
+            new LiteralType(0),
+        );
+
         $this->assertInstanceOf(UnsupportedOperation::class, $resolution);
-        $this->assertSame("[??] expects a fallback assignable to 'micro' | 'small'; got 'other'.", $resolution->message);
+        $this->assertSame('[??] expects a fallback assignable to String; got 0.', $resolution->message);
     }
 
     #[Test]

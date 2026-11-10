@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace Superscript\Axiom\Operators;
 
+use Superscript\Axiom\Types\BooleanType;
+use Superscript\Axiom\Types\IdentityLiteralType;
+use Superscript\Axiom\Types\LiteralType;
+use Superscript\Axiom\Types\NumberType;
 use Superscript\Axiom\Types\OptionType;
 use Superscript\Axiom\Types\PresentType;
 use Superscript\Axiom\Types\Shapes\NeverShape;
 use Superscript\Axiom\Types\Shapes\OptionShape;
 use Superscript\Axiom\Types\Shapes\UnknownShape;
+use Superscript\Axiom\Types\StringType;
 use Superscript\Axiom\Types\Type;
 use Superscript\Axiom\Types\TypeDescriber;
 use Superscript\Axiom\Types\TypeRelations;
+use Superscript\Axiom\Types\UnionType;
 
 /**
  * `??` — the authored default for an absent value: the left operand when it
@@ -30,9 +36,14 @@ use Superscript\Axiom\Types\TypeRelations;
  * - `T? ?? T → T` — a definite result; the fallback covers absence.
  * - `T? ?? T? → T?` — still optional, so chains collapse left to right and
  *   `a ?? b ?? 0` ends definite exactly when its last arm is.
- * - The fallback must be assignable to `T`. A wider fallback is refused
- *   rather than widening the result: `Option<'micro'|'small'> ?? 'other'`
- *   does not compile.
+ * - A fallback outside `T` but of the same kind widens the result to
+ *   `T | F`: over a select offering £1,000 and £10,000, `@excess ?? £0`
+ *   types `£1,000 | £10,000 | £0`. Narrowing a value to the literals it can
+ *   hold must not refuse the default an author gives it; a mistaken
+ *   fallback (`@size ?? 'oter'`) is refused where the result is used, by
+ *   the comparison or slot that cannot accept it.
+ * - The kind is `T` with each literal read as its base type, so a fallback
+ *   of another kind is refused: `Option<Number> ?? 'none'` does not compile.
  *
  * Two constant cases are refused as {@see DeadOperation} — the operator is
  * writable only where it does something:
@@ -97,23 +108,46 @@ final readonly class Coalesce implements BinaryOperatorRule, IdentifiedOperatorR
         }
 
         $present = PresentType::of($left);
-        $admitted = TypeRelations::admits($right, new OptionType($present));
+        $kind = self::kind($present);
+        $admitted = TypeRelations::admits($right, new OptionType($kind));
 
         if ($admitted->isErr()) {
             return new UnsupportedOperation(
                 sprintf(
                     '[??] expects a fallback assignable to %s; got %s.',
-                    TypeDescriber::describe($present),
+                    TypeDescriber::describe($kind),
                     TypeDescriber::describe($right),
                 ),
                 [$admitted->unwrapErr()],
             );
         }
 
+        $result = TypeRelations::admits($right, new OptionType($present))->isOk()
+            ? $present
+            : UnionType::join($present, PresentType::of($right));
+
         return new ResolvedOperation(
-            $rightShape instanceof OptionShape ? new OptionType($present) : $present,
+            $rightShape instanceof OptionShape ? new OptionType($result) : $result,
             static fn(mixed $left, mixed $right) => $left ?? $right,
         );
+    }
+
+    /**
+     * The kind of value a type holds: each literal read as its base type, so
+     * `'micro' | 'small'` is String and `£1,000 | £10,000` is GBP money.
+     */
+    private static function kind(Type $type): Type
+    {
+        return match (true) {
+            $type instanceof IdentityLiteralType => $type->base,
+            $type instanceof LiteralType => match (true) {
+                is_string($type->value) => new StringType(),
+                is_bool($type->value) => new BooleanType(),
+                default => new NumberType(),
+            },
+            $type instanceof UnionType => UnionType::join(...array_map(self::kind(...), $type->members)),
+            default => $type,
+        };
     }
 
     private function constant(Type $left, Type $right, string $reason): string
